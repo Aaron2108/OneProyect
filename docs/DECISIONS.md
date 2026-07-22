@@ -76,6 +76,13 @@
 **Motivo**: la hexagonal completa añade boilerplate que no ayuda a validar el negocio en el MVP (mismo criterio anti-sobre-ingeniería que llevó a diferir `pgvector`). La modularidad por feature ya satisface el requisito de "arquitectura modular" de la visión. Se puede refactorizar hacia hexagonal si la complejidad futura lo justifica.
 **Estado**: propuesta del arquitecto, revisable. Corrige la descripción de "Capas de negocio" que tenía `ARCHITECTURE.md` §2.
 
+## 2026-07-22 — Modelo de IA por defecto: Haiku (fase de pruebas)
+
+**Decisión**: el motor de IA usa **`claude-haiku-4-5`** por defecto (el modelo más económico de Anthropic, $1/$5 por millón de tokens), configurable con `ANTHROPIC_MODEL`.
+**Motivo**: solicitado por el propietario para minimizar el costo durante las pruebas del MVP. El diseño no depende del modelo: subir a `claude-sonnet-5` (o superior) en producción es solo cambiar la variable de entorno, sin tocar código.
+**Estado**: propuesta del arquitecto para la fase de pruebas, revisable antes de producción según la calidad de respuesta observada con clientes piloto.
+**Nota**: el motor de IA del producto llama a la API de Anthropic con su propia `ANTHROPIC_API_KEY` — es independiente del modelo que se use en Claude Code para desarrollar.
+
 ---
 
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

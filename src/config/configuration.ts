@@ -51,7 +51,8 @@ export default (): AppConfig => ({
   },
   ai: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
-    model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5',
+    // Modelo más económico de Anthropic por defecto (pruebas). Ver DECISIONS.md.
+    model: process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5',
     maxCallsPerConversationPerHour: parseInt(
       process.env.AI_MAX_CALLS_PER_CONVERSATION_PER_HOUR ?? '20',
       10,
