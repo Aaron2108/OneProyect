@@ -109,4 +109,38 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
+
+  describe('changePassword', () => {
+    it('actualiza el hash si la contraseña actual es correcta', async () => {
+      const passwordHash = await hashPassword('actual123');
+      const update = jest.fn().mockResolvedValue({});
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', passwordHash }), update },
+      });
+      const service = new AuthService(prisma, jwt);
+
+      const res = await service.changePassword('u1', {
+        currentPassword: 'actual123',
+        newPassword: 'nueva12345',
+      });
+      expect(res).toEqual({ ok: true });
+      const data = update.mock.calls[0][0].data;
+      expect(data.passwordHash).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+      expect(data.passwordHash).not.toBe(passwordHash); // hash distinto (nueva contraseña)
+    });
+
+    it('rechaza si la contraseña actual es incorrecta', async () => {
+      const passwordHash = await hashPassword('actual123');
+      const update = jest.fn();
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', passwordHash }), update },
+      });
+      const service = new AuthService(prisma, jwt);
+
+      await expect(
+        service.changePassword('u1', { currentPassword: 'incorrecta', newPassword: 'nueva12345' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(update).not.toHaveBeenCalled();
+    });
+  });
 });

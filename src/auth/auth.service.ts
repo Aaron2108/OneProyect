@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthResult, JwtPayload } from './auth.types';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { hashPassword, verifyPassword } from './password.util';
@@ -74,6 +75,17 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
     return this.issueToken(user);
+  }
+
+  /** Cambia la contraseña del usuario autenticado, verificando la actual. */
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !(await verifyPassword(dto.currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException('La contraseña actual no es correcta');
+    }
+    const passwordHash = await hashPassword(dto.newPassword);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    return { ok: true };
   }
 
   private async issueToken(user: User): Promise<AuthResult> {

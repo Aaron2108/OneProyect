@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { AuthContext, AuthResult } from './auth.types';
 import { CurrentUser } from './current-user.decorator';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -34,5 +35,16 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   me(@CurrentUser() user: AuthContext): AuthContext {
     return user;
+  }
+
+  /** Cambiar la propia contraseña (verifica la actual). */
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @HttpCode(200)
+  changePassword(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ ok: true }> {
+    return this.auth.changePassword(user.userId, dto);
   }
 }

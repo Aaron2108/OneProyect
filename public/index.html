@@ -134,7 +134,8 @@
     .tabs button:hover { background: #f2f5f1; color: var(--ink); }
     .tabs button.active { background: var(--brand-tint); color: var(--brand-700); }
     .topbar__spacer { flex: 1; }
-    .who { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+    .who { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; cursor: pointer; border-radius: 8px; padding: 4px 8px; transition: background .12s; }
+    .who:hover { background: #f2f5f1; }
     .who b { font-size: 13.5px; font-weight: 650; }
     .who span { font-size: 11.5px; color: var(--ink-faint); }
     .logout { background: transparent; border: 1.5px solid var(--line-strong); color: var(--ink-soft); padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; transition: border-color .15s, color .15s; }
@@ -403,7 +404,7 @@
         <button data-tab="team">Equipo</button>
       </nav>
       <div class="topbar__spacer"></div>
-      <div class="who" id="who"></div>
+      <div class="who" id="who" role="button" tabindex="0" title="Mi cuenta"></div>
       <button class="logout" id="logout">Salir</button>
     </header>
 
@@ -505,6 +506,31 @@
       <div class="modal__actions">
         <button class="btn sec" id="cmCancel" type="button">Cancelar</button>
         <button class="btn" id="cmSave" type="button">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: mi cuenta / cambiar contraseña -->
+  <div id="profileModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pmTitle">
+    <div class="modal__card">
+      <h3 id="pmTitle">Mi cuenta</h3>
+      <p class="sub" id="pmWho"></p>
+      <div id="pmErr" class="notice notice--err hidden" role="alert"></div>
+      <div class="field">
+        <label for="pm_cur">Contraseña actual</label>
+        <input id="pm_cur" type="password" autocomplete="current-password" />
+      </div>
+      <div class="field">
+        <label for="pm_new">Nueva contraseña</label>
+        <input id="pm_new" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" />
+      </div>
+      <div class="field">
+        <label for="pm_new2">Repite la nueva</label>
+        <input id="pm_new2" type="password" autocomplete="new-password" />
+      </div>
+      <div class="modal__actions">
+        <button class="btn sec" id="pmCancel" type="button">Cancelar</button>
+        <button class="btn" id="pmSave" type="button">Cambiar contraseña</button>
       </div>
     </div>
   </div>
@@ -936,6 +962,34 @@
         loadContacts();
       } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
       btn.disabled = false; btn.textContent = 'Guardar cambios';
+    };
+
+    // ---- Mi cuenta / cambiar contraseña ----
+    function openProfile() {
+      $('pmWho').textContent = me ? (me.name + ' · ' + me.email) : '';
+      $('pm_cur').value = ''; $('pm_new').value = ''; $('pm_new2').value = '';
+      $('pmErr').classList.add('hidden');
+      $('profileModal').classList.remove('hidden');
+      $('pm_cur').focus();
+    }
+    function closeProfile() { $('profileModal').classList.add('hidden'); }
+    $('who').onclick = openProfile;
+    $('who').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProfile(); } };
+    $('pmCancel').onclick = closeProfile;
+    $('profileModal').addEventListener('click', (e) => { if (e.target === $('profileModal')) closeProfile(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('profileModal').classList.contains('hidden')) closeProfile(); });
+    $('pmSave').onclick = async () => {
+      const err = $('pmErr'); err.classList.add('hidden');
+      const cur = $('pm_cur').value, nw = $('pm_new').value, nw2 = $('pm_new2').value;
+      if (nw.length < 8) { err.textContent = 'La nueva contraseña debe tener al menos 8 caracteres.'; err.classList.remove('hidden'); return; }
+      if (nw !== nw2) { err.textContent = 'Las contraseñas nuevas no coinciden.'; err.classList.remove('hidden'); return; }
+      const btn = $('pmSave'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword: cur, newPassword: nw }) });
+        closeProfile();
+        toast('Contraseña actualizada');
+      } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
+      btn.disabled = false; btn.textContent = 'Cambiar contraseña';
     };
     $('newcForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();
