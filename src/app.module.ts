@@ -14,6 +14,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { QuickRepliesModule } from './quick-replies/quick-replies.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -45,6 +46,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     AppointmentsModule,
     RemindersModule,
     MetricsModule,
+    QuickRepliesModule,
     WhatsappModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -234,6 +234,15 @@
     .composer button:active { transform: translateY(1px); }
     .composer button[disabled] { opacity: .65; cursor: default; }
     .composer--locked { justify-content: center; color: var(--ink-faint); font-size: 13.5px; padding: 16px; }
+    .qr-btn { flex-shrink: 0; padding: 0 15px; border: 1.5px solid var(--line-strong); background: var(--surface); border-radius: 24px; font-size: 17px; transition: border-color .15s, background .12s; }
+    .qr-btn:hover { border-color: var(--ai); background: var(--ai-tint); }
+    .qr-item { display: flex; align-items: flex-start; gap: 8px; background: #f7faf6; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .qr-item__main { flex: 1; min-width: 0; cursor: pointer; }
+    .qr-item:hover { background: var(--brand-tint); }
+    .qr-item__title { font-weight: 650; font-size: 13.5px; }
+    .qr-item__body { font-size: 13px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qr-del { border: none; background: none; color: var(--ink-faint); font-size: 17px; line-height: 1; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+    .qr-del:hover { color: var(--danger); }
     .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
 
     /* ===== Contactos ===== */
@@ -532,6 +541,26 @@
       <div class="modal__actions">
         <button class="btn sec" id="cmCancel" type="button">Cancelar</button>
         <button class="btn" id="cmSave" type="button">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: respuestas rápidas -->
+  <div id="qrModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+    <div class="modal__card">
+      <h3 id="qrTitle">Respuestas rápidas</h3>
+      <p class="sub">Toca una para insertarla en el mensaje. Son compartidas por tu equipo.</p>
+      <div id="qrList" class="notes-list"></div>
+      <div id="qrErr" class="notice notice--err hidden" role="alert"></div>
+      <div class="field">
+        <input id="qr_title" placeholder="Título (ej. Saludo)" />
+      </div>
+      <div class="field">
+        <textarea id="qr_body" rows="2" placeholder="Texto de la respuesta…"></textarea>
+      </div>
+      <div class="modal__actions">
+        <button class="btn sec" id="qrClose" type="button">Cerrar</button>
+        <button class="btn" id="qrAdd" type="button">Guardar respuesta</button>
       </div>
     </div>
   </div>
@@ -913,7 +942,8 @@
 
       const composer = closed
         ? '<div class="composer composer--locked">Esta conversación está cerrada. Reábrela para responder.</div>'
-        : '<div class="composer"><input id="msgInput" placeholder="Escribe tu respuesta..." autocomplete="off" aria-label="Mensaje" />'
+        : '<div class="composer"><button class="qr-btn" id="qrBtn" type="button" title="Respuestas rápidas" aria-label="Respuestas rápidas">⚡</button>'
+          + '<input id="msgInput" placeholder="Escribe tu respuesta..." autocomplete="off" aria-label="Mensaje" />'
           + '<button id="sendBtn">Enviar</button></div>';
 
       $('thread').innerHTML =
@@ -940,6 +970,7 @@
         await openConversation(c.id); await loadConversations();
       };
       if ($('sendBtn')) $('sendBtn').onclick = send;
+      if ($('qrBtn')) $('qrBtn').onclick = openQuickReplies;
       if ($('msgInput')) { $('msgInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); }); $('msgInput').focus(); }
       if ($('btnBack')) $('btnBack').onclick = () => { $('tab-inbox').classList.remove('viewing'); currentConv = null; };
 
@@ -1056,6 +1087,53 @@
         toast('Nota añadida');
       } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
       btn.disabled = false; btn.textContent = 'Añadir nota';
+    };
+
+    // ---- Respuestas rápidas ----
+    let qrItems = [];
+    function openQuickReplies() {
+      $('qr_title').value = ''; $('qr_body').value = ''; $('qrErr').classList.add('hidden');
+      $('qrModal').classList.remove('hidden');
+      loadQuickReplies();
+    }
+    function closeQuickReplies() { $('qrModal').classList.add('hidden'); }
+    async function loadQuickReplies() {
+      try {
+        qrItems = await api('/quick-replies');
+        $('qrList').innerHTML = qrItems.length
+          ? qrItems.map((q) => '<div class="qr-item" data-id="' + q.id + '"><div class="qr-item__main"><div class="qr-item__title">' + esc(q.title) + '</div><div class="qr-item__body">' + esc(q.body) + '</div></div><button class="qr-del" title="Eliminar" aria-label="Eliminar">×</button></div>').join('')
+          : '<div class="notes-empty">Aún no tienes respuestas rápidas. Crea la primera abajo.</div>';
+        $('qrList').querySelectorAll('.qr-item').forEach((el) => {
+          const id = el.dataset.id;
+          el.querySelector('.qr-item__main').onclick = () => { const it = qrItems.find((x) => x.id === id); if (it) insertReply(it.body); };
+          el.querySelector('.qr-del').onclick = (e) => { e.stopPropagation(); deleteReply(id); };
+        });
+      } catch (e) {}
+    }
+    function insertReply(body) {
+      const input = $('msgInput');
+      if (input) { input.value = input.value.trim() ? (input.value.trim() + ' ' + body) : body; }
+      closeQuickReplies();
+      if (input) input.focus();
+    }
+    async function deleteReply(id) {
+      try { await api('/quick-replies/' + id, { method: 'DELETE' }); loadQuickReplies(); } catch (e) {}
+    }
+    $('qrClose').onclick = closeQuickReplies;
+    $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) closeQuickReplies(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('qrModal').classList.contains('hidden')) closeQuickReplies(); });
+    $('qrAdd').onclick = async () => {
+      const title = $('qr_title').value.trim(), body = $('qr_body').value.trim();
+      const err = $('qrErr'); err.classList.add('hidden');
+      if (!title || !body) { err.textContent = 'Pon un título y un texto.'; err.classList.remove('hidden'); return; }
+      const btn = $('qrAdd'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api('/quick-replies', { method:'POST', body: JSON.stringify({ title, body }) });
+        $('qr_title').value = ''; $('qr_body').value = '';
+        await loadQuickReplies();
+        toast('Respuesta guardada');
+      } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
+      btn.disabled = false; btn.textContent = 'Guardar respuesta';
     };
 
     // ---- Mi cuenta / cambiar contraseña ----

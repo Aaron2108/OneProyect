@@ -79,8 +79,24 @@ model Tenant {
   conversations Conversation[]
   appointments  Appointment[]
   reminders     Reminder[]
+  quickReplies  QuickReply[]
 
   @@map("tenants")
+}
+
+// Respuestas rápidas: plantillas de mensaje reutilizables del equipo.
+model QuickReply {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  title     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("quick_replies")
 }
 
 model User {
