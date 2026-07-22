@@ -265,6 +265,12 @@
     .modal__actions .btn { width: auto; padding: 10px 18px; }
     .btn.sec { background: #eceff1; color: var(--ink); box-shadow: none; }
     .btn.sec:hover { background: #e2e6e4; }
+    .notes-list { max-height: 260px; overflow-y: auto; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .note { background: #f7faf6; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; animation: pop .25s var(--ease-out); }
+    .note__head { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--ink-faint); margin-bottom: 4px; }
+    .note__head b { color: var(--ink); font-weight: 650; }
+    .note__body { font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
+    .notes-empty { color: var(--ink-faint); font-size: 13.5px; padding: 10px 0; text-align: center; }
     .empty-line { padding: 26px; text-align: center; color: var(--ink-faint); font-size: 14px; }
 
     /* ===== Toasts ===== */
@@ -506,6 +512,23 @@
       <div class="modal__actions">
         <button class="btn sec" id="cmCancel" type="button">Cancelar</button>
         <button class="btn" id="cmSave" type="button">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: notas internas -->
+  <div id="notesModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nmTitle">
+    <div class="modal__card">
+      <h3 id="nmTitle">Notas internas</h3>
+      <p class="sub">Privadas para tu equipo — el cliente nunca las ve.</p>
+      <div id="nmList" class="notes-list"></div>
+      <div id="nmErr" class="notice notice--err hidden" role="alert"></div>
+      <div class="field">
+        <textarea id="nm_body" rows="2" placeholder="Escribe una nota para tu equipo…"></textarea>
+      </div>
+      <div class="modal__actions">
+        <button class="btn sec" id="nmClose" type="button">Cerrar</button>
+        <button class="btn" id="nmAdd" type="button">Añadir nota</button>
       </div>
     </div>
   </div>
@@ -855,6 +878,8 @@
         ? '<button class="tbtn" id="btnReopen">Reabrir</button>'
         : '<button class="tbtn" id="btnClose">Cerrar</button>';
       const stream = (c.messages || []).map((m, i) => turnMarkup(m, c.contact.name, i)).join('');
+      const notesCount = (c._count && c._count.notes) || 0;
+      const notesBtn = '<button class="tbtn" id="btnNotes">Notas' + (notesCount ? ' (' + notesCount + ')' : '') + '</button>';
 
       const composer = closed
         ? '<div class="composer composer--locked">Esta conversación está cerrada. Reábrela para responder.</div>'
@@ -866,8 +891,10 @@
         + '<button class="back-btn" id="btnBack" aria-label="Volver a la lista">‹</button>'
         + '<div><div class="thead__name">' + esc(c.contact.name || c.contact.phone) + '</div>'
         + '<div class="thead__meta mono">' + esc(c.contact.phone) + '</div></div>'
-        + '<div class="thead__spacer"></div>' + handlerPill(c) + handoffBtn + closeBtn + '</div>'
+        + '<div class="thead__spacer"></div>' + handlerPill(c) + notesBtn + handoffBtn + closeBtn + '</div>'
         + '<div class="stream" id="stream" aria-live="polite">' + stream + '</div>' + composer;
+
+      if ($('btnNotes')) $('btnNotes').onclick = () => openNotes(c.id);
 
       const s = $('stream'); if (s) s.scrollTop = s.scrollHeight;
 
@@ -962,6 +989,43 @@
         loadContacts();
       } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
       btn.disabled = false; btn.textContent = 'Guardar cambios';
+    };
+
+    // ---- Notas internas ----
+    let notesConvId = null;
+    function openNotes(id) {
+      notesConvId = id;
+      $('nm_body').value = ''; $('nmErr').classList.add('hidden');
+      $('nmList').innerHTML = '<div class="notes-empty">Cargando…</div>';
+      $('notesModal').classList.remove('hidden');
+      loadNotes();
+      $('nm_body').focus();
+    }
+    function closeNotes() { $('notesModal').classList.add('hidden'); notesConvId = null; }
+    async function loadNotes() {
+      try {
+        const notes = await api('/conversations/' + notesConvId + '/notes');
+        $('nmList').innerHTML = notes.length
+          ? notes.map((n) => '<div class="note"><div class="note__head"><b>' + esc(n.authorName) + '</b><span>' + fmt(n.createdAt) + '</span></div><div class="note__body">' + esc(n.body) + '</div></div>').join('')
+          : '<div class="notes-empty">Aún no hay notas. Deja la primera para tu equipo.</div>';
+        $('nmList').scrollTop = $('nmList').scrollHeight;
+        const bn = $('btnNotes'); if (bn) bn.textContent = notes.length ? 'Notas (' + notes.length + ')' : 'Notas';
+      } catch (e) {}
+    }
+    $('nmClose').onclick = closeNotes;
+    $('notesModal').addEventListener('click', (e) => { if (e.target === $('notesModal')) closeNotes(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('notesModal').classList.contains('hidden')) closeNotes(); });
+    $('nmAdd').onclick = async () => {
+      const body = $('nm_body').value.trim(); if (!body) return;
+      const err = $('nmErr'); err.classList.add('hidden');
+      const btn = $('nmAdd'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api('/conversations/' + notesConvId + '/notes', { method:'POST', body: JSON.stringify({ body }) });
+        $('nm_body').value = '';
+        await loadNotes();
+        toast('Nota añadida');
+      } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
+      btn.disabled = false; btn.textContent = 'Añadir nota';
     };
 
     // ---- Mi cuenta / cambiar contraseña ----

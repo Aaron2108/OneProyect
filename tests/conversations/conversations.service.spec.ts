@@ -109,6 +109,45 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  describe('notas internas', () => {
+    it('addNote crea la nota con el autor del token y scoped por tenant', async () => {
+      const count = jest.fn().mockResolvedValue(1);
+      const userFindFirst = jest.fn().mockResolvedValue({ name: 'Ana' });
+      const noteCreate = jest.fn().mockResolvedValue({ id: 'n1' });
+      const service = makeService({
+        conversation: { count },
+        user: { findFirst: userFindFirst },
+        conversationNote: { create: noteCreate },
+      });
+
+      await service.addNote('t1', 'cv1', { userId: 'u1' }, 'Cliente pidió factura');
+      expect(noteCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tenantId: 't1', conversationId: 'cv1', authorId: 'u1', authorName: 'Ana',
+          body: 'Cliente pidió factura',
+        }),
+      });
+    });
+
+    it('addNote lanza NotFound si la conversación no es del tenant', async () => {
+      const count = jest.fn().mockResolvedValue(0);
+      const noteCreate = jest.fn();
+      const service = makeService({ conversation: { count }, conversationNote: { create: noteCreate } });
+      await expect(
+        service.addNote('t1', 'cv-de-otro', { userId: 'u1' }, 'x'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(noteCreate).not.toHaveBeenCalled();
+    });
+
+    it('listNotes exige que la conversación sea del tenant', async () => {
+      const count = jest.fn().mockResolvedValue(0);
+      const findMany = jest.fn();
+      const service = makeService({ conversation: { count }, conversationNote: { findMany } });
+      await expect(service.listNotes('t1', 'cv-de-otro')).rejects.toBeInstanceOf(NotFoundException);
+      expect(findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sendManualMessage', () => {
     it('persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y NO envía sin credenciales', async () => {
       const findFirst = jest.fn().mockResolvedValue({

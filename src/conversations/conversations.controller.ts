@@ -14,6 +14,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.decorator';
 import { ConversationsService } from './conversations.service';
+import { CreateNoteDto } from './dto/create-note.dto';
 import { ListConversationsDto } from './dto/list-conversations.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
@@ -41,6 +42,22 @@ export class ConversationsController {
     @Body() dto: SendMessageDto,
   ) {
     return this.conversations.sendManualMessage(user.tenantId, id, dto.text);
+  }
+
+  /** Notas internas del equipo sobre la conversación (no se envían al cliente). */
+  @Get(':id/notes')
+  listNotes(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.conversations.listNotes(user.tenantId, id);
+  }
+
+  @Post(':id/notes')
+  @HttpCode(201)
+  addNote(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: CreateNoteDto,
+  ) {
+    return this.conversations.addNote(user.tenantId, id, { userId: user.userId }, dto.body);
   }
 
   /** Marca la conversación como leída (contador de sin leer a 0). */

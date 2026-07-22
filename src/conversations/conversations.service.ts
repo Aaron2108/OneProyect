@@ -63,19 +63,59 @@ export class ConversationsService {
     return { items, nextCursor };
   }
 
-  /** Detalle de una conversación con su hilo de mensajes. */
+  /** Detalle de una conversación con su hilo de mensajes y el contador de notas. */
   async get(tenantId: string, id: string) {
     const conversation = await this.prisma.conversation.findFirst({
       where: { id, tenantId },
       include: {
         contact: true,
         messages: { orderBy: { createdAt: 'asc' } },
+        _count: { select: { notes: true } },
       },
     });
     if (!conversation) {
       throw new NotFoundException('Conversación no encontrada');
     }
     return conversation;
+  }
+
+  /** Notas internas de una conversación (scoped por tenant). */
+  async listNotes(tenantId: string, id: string) {
+    await this.assertExists(tenantId, id);
+    return this.prisma.conversationNote.findMany({
+      where: { conversationId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /** Añade una nota interna. El autor viene del contexto de confianza (token). */
+  async addNote(
+    tenantId: string,
+    id: string,
+    author: { userId: string },
+    body: string,
+  ) {
+    await this.assertExists(tenantId, id);
+    const user = await this.prisma.user.findFirst({
+      where: { id: author.userId, tenantId },
+      select: { name: true },
+    });
+    return this.prisma.conversationNote.create({
+      data: {
+        tenantId,
+        conversationId: id,
+        authorId: author.userId,
+        authorName: user?.name ?? 'Usuario',
+        body,
+      },
+    });
+  }
+
+  private async assertExists(tenantId: string, id: string): Promise<void> {
+    const owned = await this.prisma.conversation.count({ where: { id, tenantId } });
+    if (owned === 0) {
+      throw new NotFoundException('Conversación no encontrada');
+    }
   }
 
   /**
