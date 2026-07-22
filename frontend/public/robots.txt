@@ -1,0 +1,4 @@
+# WhatsFlow AI es una aplicación privada tras autenticación — no hay
+# contenido público que indexar.
+User-agent: *
+Disallow: /

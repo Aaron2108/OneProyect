@@ -20,7 +20,7 @@
 - [x] Mensajes salientes manuales (`POST /conversations/:id/messages`): un humano responde desde la bandeja; persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y la envía por Meta (ventana 24h). Verificado end-to-end.
 - [x] CRUD de citas (`/appointments`) y recordatorios (`/reminders`) con scope de tenant y validación de que el contacto/cita referenciados pertenecen al tenant. Verificado end-to-end + tests.
 - [x] Handoff / escalación a humano (RF-11): `handledBy` por conversación (AI/HUMAN). Disparadores: **manual** (`/handoff`, `/handback`) y **automático por palabra clave** (`requestsHumanAgent`). El disparador por baja confianza queda pendiente (requiere confianza del modelo).
-- [x] Panel web mínimo (`public/index.html`): SPA de un solo archivo servida por Nest. Login/registro, bandeja con filtros, hilo, responder, handoff/close, contactos.
+- [x] Panel web mínimo: SPA servida por Nest. Login/registro, bandeja con filtros, hilo, responder, handoff/close, contactos. *(Superseded — ver migración a React en Fase 2.)*
 - [~] Ventana de 24h + plantillas de Meta (RF-10): la comprobación de la ventana para **texto libre** ya está (`isWithinServiceWindow`). **Falta** el envío con **plantilla pre-aprobada** fuera de la ventana (requiere dar de alta plantillas en Meta).
 - [~] Opt-in del contacto (RF-12): tabla `contact_consent` creada; el worker registra `GRANTED` al primer mensaje entrante. Falta la verificación de consentimiento *antes* de enviar mensajes proactivos (se conecta con recordatorios).
 - [ ] Worker de recordatorios programados: disparar los recordatorios `PENDING` cuando llega `remindAt` (se conecta con el envío por plantilla).
@@ -43,6 +43,7 @@ Features de escalabilidad y colaboración construidas sobre el MVP (todas con sc
 - [x] **Exportar CSV** de contactos y conversaciones.
 - [x] **Respuestas rápidas** (plantillas de mensaje del equipo, insertables en el composer).
 - [x] Endurecimiento del worker de recordatorios (claim atómico + backoff) y correcciones de la auditoría de código.
+- [x] **Migración del panel a React** (`/frontend`: Vite + TypeScript + Tailwind + Radix UI + Framer Motion + Recharts + `@formkit/auto-animate`), sin Next.js ni monorepo (ver `DECISIONS.md`). Sistema de diseño con tokens claro/oscuro (modo oscuro cinematográfico en auth, toggle en la app), glassmorphism en superficies clave, tri-voz reforzada (bubbles con glow, gauge radial de automatización, bento en métricas). Servido por Nest como build estático (`npm run build` en la raíz). Verificado: build de producción, Lighthouse accesibilidad 100 / buenas prácticas 100, responsive sin overflow, funcional end-to-end (login, envío de mensajes, handoff, notas, respuestas rápidas, export).
 - [ ] Migrar a esquema-por-tenant si el volumen lo justifica; versionado de API; cifrado de PII en reposo (ver `ROADMAP.md` Fase 2 y `SECURITY.md`).
 
 ## Backlog no priorizado (fases 3-5)

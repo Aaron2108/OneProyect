@@ -12,10 +12,11 @@ async function bootstrap(): Promise<void> {
     rawBody: true,
   });
 
-  // Panel web mínimo (HTML/JS estático) servido desde /public — sin dependencias
-  // extra (usa el express que ya trae @nestjs/platform-express). __dirname es
-  // dist/ en ejecución, así que ../public apunta a la carpeta del repo.
-  app.useStaticAssets(join(__dirname, '..', 'public'));
+  // Panel web (React + Vite, ver /frontend) servido como build estático — Nest
+  // no compila ni sirve el frontend en dev; `npm run build` (raíz) construye
+  // frontend/dist antes de este paso. __dirname es dist/ en ejecución, así que
+  // ../frontend/dist apunta al build generado por Vite.
+  app.useStaticAssets(join(__dirname, '..', 'frontend', 'dist'));
 
   // Validación global de DTOs en los límites del sistema (REQUIREMENTS.md).
   app.useGlobalPipes(

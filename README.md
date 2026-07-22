@@ -9,6 +9,7 @@ Plataforma SaaS con IA para PyMEs que centraliza la comunicación por WhatsApp: 
 | Capa | Tecnología |
 |---|---|
 | Backend | Node.js + TypeScript + **NestJS** (monolito modular) |
+| Panel web | **React 18 + TypeScript + Vite**, Tailwind, Radix UI, Framer Motion, Recharts (`/frontend`) |
 | Base de datos | PostgreSQL (ORM **Prisma**) |
 | Colas / async | Redis + BullMQ |
 | Canal | WhatsApp vía **Meta Cloud API** oficial |
@@ -21,7 +22,7 @@ Decisiones y su justificación en [`docs/DECISIONS.md`](docs/DECISIONS.md). Arqu
 Requisitos: Node.js ≥ 22, Docker + Docker Compose.
 
 ```bash
-# 1. Instalar dependencias
+# 1. Instalar dependencias del backend
 npm install
 
 # 2. Configurar entorno (rellenar credenciales de Meta/Anthropic cuando las tengas)
@@ -33,17 +34,25 @@ npm run db:up
 # 4. Crear las tablas (migración inicial de Prisma)
 npm run prisma:migrate       # la primera vez: --name init
 
-# 5. Arrancar en modo desarrollo
+# 5. Arrancar el backend en modo desarrollo
 npm run start:dev
 ```
 
 Comprobación: `GET http://localhost:3000/health` responde el estado del servicio y la base de datos.
 
-**Panel web**: abre `http://localhost:3000/` en el navegador. Es una SPA mínima (servida desde `public/`) para el equipo del negocio: registro/login, bandeja de conversaciones, hilo de mensajes, responder manualmente, handoff a humano y gestión de contactos.
+**Panel web** (`/frontend`, React + Vite): para desarrollo con recarga en caliente, en otra terminal:
 
-**Probar la IA sin gastar créditos** (desarrollo local): arranca con `AI_PROVIDER=mock npm run start`. El agente devuelve respuestas simuladas y ejecuta el tool-calling real contra la BD (crear cita, etc.). Para usar Claude real, deja `AI_PROVIDER` sin definir (o `anthropic`) y pon una `ANTHROPIC_API_KEY` con saldo.
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173 — proxya /auth, /conversations, etc. al backend en :3000
+```
 
-Scripts útiles: `npm test` (tests), `npm run build` (compilar), `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores).
+Para producción (o para probar el build real servido por Nest en `:3000`): `npm run build` en la **raíz** compila backend y frontend (`frontend/dist`) y Nest sirve ese build estático — una sola app, sin servidor adicional. Todo el equipo del negocio se maneja ahí: registro/login, bandeja con búsqueda y estado de sin leer, hilo tri-voz (cliente/IA/agente) con notas internas y respuestas rápidas, métricas con filtro de fechas, contactos, equipo y modo claro/oscuro.
+
+**Probar la IA sin gastar créditos** (desarrollo local): arranca el backend con `AI_PROVIDER=mock npm run start`. El agente devuelve respuestas simuladas y ejecuta el tool-calling real contra la BD (crear cita, etc.). Para usar Claude real, deja `AI_PROVIDER` sin definir (o `anthropic`) y pon una `ANTHROPIC_API_KEY` con saldo.
+
+Scripts útiles (raíz): `npm test` (tests del backend), `npm run build` (compila backend + frontend), `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores). Dentro de `frontend/`: `npm run build` (build de producción), `npm run lint`.
 
 ## Documentación
 

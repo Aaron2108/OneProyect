@@ -37,7 +37,7 @@
 | Citas | `GET/POST /appointments`, `GET/PATCH /appointments/:id` | ✅ CRUD con scope de tenant (la IA también las crea vía tool-calling). |
 | Recordatorios | `GET/POST /reminders`, `GET/PATCH /reminders/:id` | ✅ CRUD con scope de tenant. Envío programado (worker por `remindAt`) ⏳. |
 | Métricas | `GET /metrics/overview?from=&to=` | ✅ Resumen agregado por tenant y **período** (conversaciones, mensajes, tasa de automatización IA vs humano, citas, recordatorios, actividad diaria). |
-| Panel web | `GET /` | ✅ SPA (HTML/JS, `public/index.html`) servida por Nest: login/registro, bandeja (búsqueda, sin leer, notas, respuestas rápidas), dashboard de métricas con filtro de fechas, contactos, equipo, mi cuenta, export CSV. |
+| Panel web | `GET /` | ✅ SPA React (`/frontend`, build estático servido por Nest): login/registro, bandeja (búsqueda, sin leer, notas, respuestas rápidas), dashboard de métricas con filtro de fechas, contactos, equipo, mi cuenta, export CSV, modo claro/oscuro. |
 
 **Autenticación/autorización (implementado ✅)**: JWT por sesión de usuario del panel; cada token incluye `tenantId`, `sub` (userId), `email` y `role`. El `JwtAuthGuard` valida el Bearer token y adjunta el contexto a la request; el `tenantId` usado en las consultas viene SIEMPRE del token, nunca del cliente, así ningún endpoint puede leer o tocar datos de otro tenant (ver `DATABASE.md`). Contraseñas con `scrypt` (nativo de Node). Roles vía `@Roles()` + `RolesGuard`. Detalle de amenazas y controles en `SECURITY.md`.
 
