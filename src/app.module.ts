@@ -5,6 +5,9 @@ import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
+import { ContactsModule } from './contacts/contacts.module';
+import { ConversationsModule } from './conversations/conversations.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -25,6 +28,9 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     }),
     PrismaModule,
     HealthModule,
+    AuthModule,
+    ContactsModule,
+    ConversationsModule,
     WhatsappModule,
   ],
 })

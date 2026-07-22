@@ -39,17 +39,26 @@ Esta superficie **ya existe y no requiere desarrollo**; es infraestructura del f
 | `/webhooks/whatsapp` | `GET` | Verificación del webhook exigida por Meta al registrar la integración (challenge token). |
 | `/webhooks/whatsapp` | `POST` | Recepción de eventos entrantes (mensajes, estados de entrega). Responde 200 de inmediato y encola el procesamiento real (ver `ARCHITECTURE.md` §2) — nunca hacer el trabajo de IA de forma síncrona aquí. |
 
-**Endpoints REST de producto (CRUD básico, todos con scope de tenant vía autenticación):**
+**Autenticación (implementado ✅):**
 
-| Recurso | Endpoints | Notas |
+| Endpoint | Método | Propósito |
 |---|---|---|
-| Contactos | `GET/POST /contacts`, `GET/PATCH /contacts/:id` | Búsqueda por nombre/teléfono. |
-| Conversaciones | `GET /conversations`, `GET /conversations/:id`, `GET /conversations/:id/messages` | La creación de conversaciones/mensajes ocurre internamente al recibir webhooks, no vía POST directo del cliente del panel. |
-| Mensajes salientes manuales | `POST /conversations/:id/messages` | Para cuando el equipo humano responde directamente, sin pasar por el agente de IA. |
-| Citas | `GET/POST /appointments`, `PATCH /appointments/:id` | |
-| Recordatorios | `GET/POST /reminders`, `PATCH /reminders/:id` | |
+| `/auth/register` | `POST` | Alta de empresa (tenant) + usuario propietario (OWNER). Devuelve JWT. |
+| `/auth/login` | `POST` | Inicio de sesión con email + contraseña. Devuelve JWT. |
+| `/auth/me` | `GET` | Datos del usuario autenticado (requiere Bearer token). |
 
-**Autenticación/autorización**: JWT por sesión de usuario del panel; cada token incluye `tenant_id` y se valida en cada request que ese `tenant_id` coincide con los recursos solicitados (ver `DATABASE.md` §2 sobre aislamiento multi-tenant). Detalle de amenazas y controles en `SECURITY.md`.
+**Endpoints REST de producto (todos con scope de tenant; ✅ implementado / ⏳ planificado):**
+
+| Recurso | Endpoints | Estado · Notas |
+|---|---|---|
+| Contactos | `GET/POST /contacts`, `GET/PATCH /contacts/:id` | ✅ CRUD con aislamiento por tenant (teléfono único por tenant). |
+| Conversaciones (bandeja) | `GET /conversations`, `GET /conversations/:id` | ✅ Lista ordenada por actividad, filtros `status`/`handledBy`; detalle con hilo de mensajes. Creación interna vía webhooks, no por POST del panel. |
+| Handoff humano (RF-11) | `POST /conversations/:id/handoff` · `/handback` · `/close` · `/reopen` | ✅ `handoff`→HUMAN (silencia la IA), `handback`→AI. |
+| Mensajes salientes manuales | `POST /conversations/:id/messages` | ⏳ Para cuando el equipo humano responde directo (sin IA). |
+| Citas | `GET/POST /appointments`, `PATCH /appointments/:id` | ⏳ (la IA ya crea citas vía tool-calling internamente). |
+| Recordatorios | `GET/POST /reminders`, `PATCH /reminders/:id` | ⏳ |
+
+**Autenticación/autorización (implementado ✅)**: JWT por sesión de usuario del panel; cada token incluye `tenantId`, `sub` (userId), `email` y `role`. El `JwtAuthGuard` valida el Bearer token y adjunta el contexto a la request; el `tenantId` usado en las consultas viene SIEMPRE del token, nunca del cliente, así ningún endpoint puede leer o tocar datos de otro tenant (ver `DATABASE.md` §2). Contraseñas con `scrypt` (nativo de Node). Roles vía `@Roles()` + `RolesGuard`. Detalle de amenazas y controles en `SECURITY.md`.
 
 **Integración interna con el motor de IA**: el motor de IA (Claude + tool-calling, ver `ARCHITECTURE.md` §2) invoca internamente las mismas operaciones de dominio que exponen los endpoints de contactos/citas/recordatorios (a través de la capa `application/`, no llamando a la API HTTP de sí mismo) — así una acción decidida por la IA dentro de una conversación (p. ej. "crear una cita") queda sujeta a las mismas reglas de negocio y persistencia que si la creara un humano desde el panel.
 

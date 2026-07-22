@@ -95,6 +95,12 @@
 **Motivo**: enviar plantillas exige darlas de alta y aprobarlas en Meta —un paso de configuración externa aún no disponible—; el texto libre cubre el caso central del MVP (responder a quien acaba de escribir, siempre dentro de la ventana). El token por tenant (onboarding multi-número vía Embedded Signup, con almacenamiento cifrado) se difiere hasta tener más de un número real en producción.
 **Estado**: propuesta del arquitecto, revisable. La respuesta siempre queda persistida aunque el envío falle, para que sea visible en la bandeja; al enviarse con éxito se guarda el `wamid` devuelto por Meta (futuro seguimiento de entregas/lecturas).
 
+## 2026-07-21 — Autenticación: JWT sin passport, scrypt para contraseñas, email único global en el MVP
+
+**Decisión**: (a) autenticación con **JWT** verificado por un `JwtAuthGuard` propio (usando `@nestjs/jwt`), **sin passport/passport-jwt** —una dependencia menos, el guard es ~30 líneas—; (b) hashing de contraseñas con **`scrypt` del módulo `crypto` nativo de Node** (formato `salt:hash`, comparación en tiempo constante), **sin `bcrypt`** —evita compilación nativa en Windows y no añade dependencias—; (c) el **email se exige único a nivel global** en el registro, aunque el esquema lo restringe por tenant (`@@unique([tenantId, email])`).
+**Motivo**: passport añade abstracción e indirecta que no aporta en un MVP con una sola estrategia (JWT). `scrypt` es un KDF recomendado y suficiente, sin el dolor de instalar `bcrypt` en Windows. El email único global evita que el login por email (que no pide tenant) sea ambiguo entre tenants; es una restricción más estricta a propósito, revisable si en el futuro un mismo email debe pertenecer a varias empresas (entonces el login pediría identificar el tenant).
+**Estado**: propuesta del arquitecto, revisable. El `tenantId` viaja en el token y es la única fuente del scope de tenant en las consultas (nunca el cliente) — mismo principio de aislamiento que las herramientas de la IA.
+
 ---
 
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { HistoryTurn } from '../ai/ai.types';
 import { WHATSAPP_INBOUND_QUEUE } from './whatsapp.constants';
+import { requestsHumanAgent } from './whatsapp-handoff.util';
 import { WhatsappSenderService } from './whatsapp-sender.service';
 import { isWithinServiceWindow } from './whatsapp-window.util';
 import { InboundMessageJob } from './whatsapp.types';
@@ -122,7 +123,24 @@ export class InboundMessageProcessor extends WorkerHost {
       `Mensaje ${data.waMessageId} de ${data.from} persistido (tenant ${tenantId})`,
     );
 
-    // 8. Respuesta de IA (solo si la conversación la maneja la IA — RF-11 handoff).
+    // 8. Handoff automático (RF-11): si el cliente pide una persona, pasar la
+    //    conversación a un humano y NO responder con IA (un agente la retoma en
+    //    la bandeja). Solo aplica si aún la maneja la IA.
+    if (
+      conversation.handledBy === ConversationHandler.AI &&
+      requestsHumanAgent(data.text)
+    ) {
+      await this.prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { handledBy: ConversationHandler.HUMAN },
+      });
+      this.logger.log(
+        `Conversación ${conversation.id} escalada a humano (solicitud del cliente)`,
+      );
+      return;
+    }
+
+    // 9. Respuesta de IA (solo si la conversación la maneja la IA — RF-11 handoff).
     if (conversation.handledBy === ConversationHandler.AI && this.ai.isEnabled()) {
       await this.respondWithAi(tenant, contact, conversation.id, sentAt);
     }
