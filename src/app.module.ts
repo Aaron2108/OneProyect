@@ -12,6 +12,7 @@ import { ContactsModule } from './contacts/contacts.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -41,6 +42,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     ConversationsModule,
     AppointmentsModule,
     RemindersModule,
+    MetricsModule,
     WhatsappModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

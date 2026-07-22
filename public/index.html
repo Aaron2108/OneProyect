@@ -246,6 +246,41 @@
     .toast .tick { width: 18px; height: 18px; border-radius: 50%; background: #37d69b; color: #06231a; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
     .toast--ai .tick { background: var(--ai); color: #fff; }
 
+    /* ===== Métricas (dashboard) ===== */
+    .metrics { height: 100%; overflow-y: auto; padding: clamp(20px, 4vw, 40px); }
+    .metrics__wrap { max-width: 960px; margin: 0 auto; }
+    .metrics h2 { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: -.02em; margin: 0 0 4px; }
+    .metrics .lede { margin: 0 0 22px; color: var(--ink-soft); font-size: 14px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+    .kpi { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 16px; animation: riseIn .5s var(--ease-out) both; }
+    .kpi__label { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; display: flex; align-items: center; gap: 7px; }
+    .kpi__dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+    .kpi__value { font-family: var(--display); font-weight: 700; font-size: 31px; letter-spacing: -.02em; margin-top: 7px; line-height: 1; }
+    .kpi__sub { font-size: 12px; color: var(--ink-faint); margin-top: 5px; }
+    .pcard { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 18px; margin-bottom: 16px; animation: riseIn .5s var(--ease-out) both; }
+    .pcard h3 { font-family: var(--display); font-weight: 700; font-size: 16px; margin: 0 0 14px; letter-spacing: -.01em; }
+    .autorow { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+    .autorow b { font-family: var(--display); font-weight: 800; font-size: 34px; letter-spacing: -.03em; color: var(--ai-700); }
+    .autorow span { font-size: 13px; color: var(--ink-soft); }
+    .meter { height: 15px; border-radius: 8px; overflow: hidden; display: flex; background: #eef1ee; }
+    .meter i { display: block; height: 100%; }
+    .meter i + i { margin-left: 2px; }               /* separación de 2px entre segmentos (guía dataviz) */
+    .legend { display: flex; gap: 16px; margin-top: 11px; font-size: 12.5px; color: var(--ink-soft); flex-wrap: wrap; }
+    .legend b { color: var(--ink); font-weight: 650; }
+    .legend em { font-style: normal; display: inline-flex; align-items: center; }
+    .legend em::before { content: ""; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; background: var(--sw); }
+    .chart svg { width: 100%; height: auto; display: block; }
+    .chart .grid line { stroke: var(--line); stroke-width: 1; }
+    .chart .axis { fill: var(--ink-faint); font-size: 10px; }
+    .chart rect, .chart path.bar { transition: opacity .12s; }
+    .chart .bar:hover { opacity: .78; }
+    .tbl-toggle { margin-top: 12px; background: none; border: none; color: var(--brand); font-weight: 600; font-size: 13px; cursor: pointer; padding: 0; }
+    table.mtbl { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    table.mtbl th, table.mtbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    table.mtbl th { color: var(--ink-soft); font-weight: 600; }
+    table.mtbl td.num, table.mtbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    @media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+
     /* ===== Responsive ===== */
     html, body { overflow-x: hidden; }
     @media (max-width: 860px) {
@@ -337,6 +372,7 @@
       <div class="topbar__brand"><span class="glyph">W</span> WhatsFlow&nbsp;AI</div>
       <nav class="tabs" aria-label="Secciones">
         <button data-tab="inbox" class="active">Bandeja</button>
+        <button data-tab="metrics">Métricas</button>
         <button data-tab="contacts">Contactos</button>
       </nav>
       <div class="topbar__spacer"></div>
@@ -370,6 +406,14 @@
             <h4>Elige una conversación</h4>
             <p>Selecciona un chat de la izquierda para ver el hilo y responder.</p>
           </div>
+        </div>
+      </section>
+
+      <section id="tab-metrics" class="metrics hidden">
+        <div class="metrics__wrap">
+          <h2>Métricas</h2>
+          <p class="lede">Cómo está trabajando tu empleado digital.</p>
+          <div id="metricsBody"></div>
         </div>
       </section>
 
@@ -496,10 +540,88 @@
         b.classList.add('active');
         const tab = b.dataset.tab;
         $('tab-inbox').classList.toggle('hidden', tab !== 'inbox');
+        $('tab-metrics').classList.toggle('hidden', tab !== 'metrics');
         $('tab-contacts').classList.toggle('hidden', tab !== 'contacts');
-        if (tab === 'contacts') loadContacts(); else loadConversations();
+        if (tab === 'contacts') loadContacts();
+        else if (tab === 'metrics') loadMetrics();
+        else loadConversations();
       };
     });
+
+    // ---- Métricas (dashboard) ----
+    // Colores de dato validados con el script de dataviz (CVD-safe, chroma OK):
+    const CHART = { sent: '#0ca678', recv: '#b26a00', ai: '#6b5ce6', human: '#0ca678' };
+
+    async function loadMetrics() {
+      const el = $('metricsBody');
+      el.innerHTML = '<div class="empty-line">Cargando métricas…</div>';
+      try { renderMetrics(await api('/metrics/overview')); } catch (e) { el.innerHTML = '<div class="notice notice--err">' + esc(e.message) + '</div>'; }
+    }
+
+    function kpi(label, dot, value, sub) {
+      return '<div class="kpi"><div class="kpi__label"><span class="kpi__dot" style="background:' + dot + '"></span>' + esc(label) + '</div>'
+        + '<div class="kpi__value">' + esc(String(value)) + '</div><div class="kpi__sub">' + esc(sub) + '</div></div>';
+    }
+
+    function renderMetrics(m) {
+      const autoPct = Math.round(m.automationRate * 100);
+      const humanPct = 100 - autoPct;
+      const kpis = '<div class="kpis">'
+        + kpi('Conversaciones', 'var(--brand)', m.conversations.total, m.conversations.open + ' abiertas · ' + m.conversations.closed + ' cerradas')
+        + kpi('Mensajes', CHART.sent, m.messages.total, m.messages.inbound + ' recibidos · ' + m.messages.outbound + ' enviados')
+        + kpi('Citas', 'var(--warn)', m.appointments.total, m.appointments.scheduled + ' agendadas · ' + m.appointments.confirmed + ' confirmadas')
+        + kpi('Contactos', 'var(--ink-soft)', m.contacts.total, 'personas en tu WhatsApp')
+        + '</div>';
+
+      const auto = '<div class="pcard"><h3>Automatización</h3>'
+        + '<div class="autorow"><b>' + autoPct + '%</b><span>de las respuestas las resolvió la IA sin intervención humana</span></div>'
+        + '<div class="meter" role="img" aria-label="' + autoPct + '% IA, ' + humanPct + '% humano">'
+        + '<i style="width:' + autoPct + '%;background:' + CHART.ai + '"></i>'
+        + '<i style="width:' + humanPct + '%;background:' + CHART.human + '"></i></div>'
+        + '<div class="legend"><em style="--sw:' + CHART.ai + '">IA <b>&nbsp;' + m.messages.fromAi + '</b></em>'
+        + '<em style="--sw:' + CHART.human + '">Agente humano <b>&nbsp;' + m.messages.fromHuman + '</b></em></div></div>';
+
+      const chart = '<div class="pcard"><h3>Actividad · últimos 7 días</h3>'
+        + '<div class="chart">' + activityChart(m.activity) + '</div>'
+        + '<div class="legend"><em style="--sw:' + CHART.recv + '">Recibidos</em><em style="--sw:' + CHART.sent + '">Enviados</em></div>'
+        + '<button class="tbl-toggle" id="tblToggle" aria-expanded="false">Ver datos</button>'
+        + '<div id="mtblWrap" class="hidden">' + activityTable(m.activity) + '</div></div>';
+
+      $('metricsBody').innerHTML = kpis + auto + chart;
+      const t = $('tblToggle');
+      t.onclick = () => { const w = $('mtblWrap'); const open = w.classList.toggle('hidden') === false; t.setAttribute('aria-expanded', String(open)); t.textContent = open ? 'Ocultar datos' : 'Ver datos'; };
+    }
+
+    // Gráfico de barras agrupadas (SVG): 7 días × 2 series (recibidos/enviados).
+    function activityChart(days) {
+      const W = 720, H = 210, padL = 28, padR = 8, padT = 10, padB = 26;
+      const iw = W - padL - padR, ih = H - padT - padB;
+      const max = Math.max(1, ...days.flatMap(d => [d.inbound, d.outbound]));
+      const niceMax = Math.ceil(max / 4) * 4 || 4;
+      const groupW = iw / days.length, barW = Math.min(16, (groupW - 10) / 2);
+      const y = (v) => padT + ih - (v / niceMax) * ih;
+      const barPath = (x, val, color, label) => {
+        const h = ih - (y(val) - padT), yy = y(val), r = Math.min(4, barW / 2, h);
+        if (h <= 0.5) return '';
+        const p = `M${x},${padT + ih} L${x},${yy + r} Q${x},${yy} ${x + r},${yy} L${x + barW - r},${yy} Q${x + barW},${yy} ${x + barW},${yy + r} L${x + barW},${padT + ih} Z`;
+        return `<path class="bar" d="${p}" fill="${color}"><title>${label}</title></path>`;
+      };
+      let grid = '', bars = '', xlabels = '';
+      for (let g = 0; g <= 4; g++) { const v = (niceMax / 4) * g, yy = y(v); grid += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}"/>`; grid += `<text class="axis" x="${padL - 6}" y="${yy + 3}" text-anchor="end">${v}</text>`; }
+      days.forEach((d, i) => {
+        const gx = padL + i * groupW + (groupW - (barW * 2 + 2)) / 2;
+        const dm = d.date.slice(8) + '/' + d.date.slice(5, 7);
+        bars += barPath(gx, d.inbound, CHART.recv, dm + ' · recibidos: ' + d.inbound);
+        bars += barPath(gx + barW + 2, d.outbound, CHART.sent, dm + ' · enviados: ' + d.outbound);
+        xlabels += `<text class="axis" x="${gx + barW + 1}" y="${H - 8}" text-anchor="middle">${dm}</text>`;
+      });
+      return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Actividad de mensajes de los últimos 7 días"><g class="grid">${grid}</g>${bars}${xlabels}</svg>`;
+    }
+
+    function activityTable(days) {
+      const rows = days.map(d => '<tr><td>' + d.date + '</td><td class="num">' + d.inbound + '</td><td class="num">' + d.outbound + '</td></tr>').join('');
+      return '<table class="mtbl"><thead><tr><th>Día</th><th class="num">Recibidos</th><th class="num">Enviados</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
 
     // ---- Bandeja ----
     $('fStatus').onchange = loadConversations;

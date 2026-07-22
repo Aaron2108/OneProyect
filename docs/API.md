@@ -31,7 +31,8 @@
 | Mensajes salientes manuales | `POST /conversations/:id/messages` | ✅ El humano responde directo; persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y envía por Meta (ventana 24h). |
 | Citas | `GET/POST /appointments`, `GET/PATCH /appointments/:id` | ✅ CRUD con scope de tenant (la IA también las crea vía tool-calling). |
 | Recordatorios | `GET/POST /reminders`, `GET/PATCH /reminders/:id` | ✅ CRUD con scope de tenant. Envío programado (worker por `remindAt`) ⏳. |
-| Panel web | `GET /` | ✅ SPA mínima (HTML/JS, `public/index.html`) servida por Nest: login, bandeja, hilo, responder, handoff, contactos. |
+| Métricas | `GET /metrics/overview` | ✅ Resumen agregado por tenant (conversaciones, mensajes, tasa de automatización IA vs humano, citas, recordatorios, actividad de 7 días). |
+| Panel web | `GET /` | ✅ SPA mínima (HTML/JS, `public/index.html`) servida por Nest: login, bandeja, hilo, responder, handoff, contactos, **dashboard de métricas**. |
 
 **Autenticación/autorización (implementado ✅)**: JWT por sesión de usuario del panel; cada token incluye `tenantId`, `sub` (userId), `email` y `role`. El `JwtAuthGuard` valida el Bearer token y adjunta el contexto a la request; el `tenantId` usado en las consultas viene SIEMPRE del token, nunca del cliente, así ningún endpoint puede leer o tocar datos de otro tenant (ver `DATABASE.md`). Contraseñas con `scrypt` (nativo de Node). Roles vía `@Roles()` + `RolesGuard`. Detalle de amenazas y controles en `SECURITY.md`.
 
