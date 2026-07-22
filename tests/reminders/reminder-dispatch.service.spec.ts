@@ -118,4 +118,19 @@ describe('ReminderDispatchService', () => {
     expect(await service.dispatchOne(makeReminder(), NOW)).toBe('deferred-send-failed');
     expect(update).not.toHaveBeenCalled(); // no cambia de estado
   });
+
+  it('cancela un recordatorio expirado cuyo envío falla siempre (no reintenta para siempre)', async () => {
+    const recentInbound = new Date(NOW.getTime() - 60 * 60 * 1000); // en ventana
+    const sendImpl = jest.fn().mockRejectedValue(new Error('teléfono inválido'));
+    const { service, update } = setup({ lastInboundAt: recentInbound, sendImpl });
+    const reminder = makeReminder({
+      remindAt: new Date(NOW.getTime() - 96 * 60 * 60 * 1000), // hace 96h (> 72h)
+    });
+
+    expect(await service.dispatchOne(reminder, NOW)).toBe('expired-cancelled');
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      data: { status: ReminderStatus.CANCELLED },
+    });
+  });
 });

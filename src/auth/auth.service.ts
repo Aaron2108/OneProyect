@@ -11,6 +11,14 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { hashPassword, verifyPassword } from './password.util';
 
+/**
+ * Hash señuelo (formato válido `salt:hash`) para verificar contra él cuando el
+ * email no existe: así el login siempre ejecuta scrypt y no revela por
+ * temporización qué emails están registrados.
+ */
+const DUMMY_HASH =
+  'be64cd065b4515f0b97e6bca060295a1:43af604d15d3183b9f7250bd583a2d8fb1acc6eab2cf34d19f461449b023a8fa038458a4a36d9902346a25935d6b75ae4260457cc69726a11181db984b3f1c2d';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -56,11 +64,13 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { email: dto.email },
     });
-    // Verifica siempre (aunque no exista el usuario) para no filtrar por timing
-    // cuál email está registrado.
-    const ok =
-      user !== null && (await verifyPassword(dto.password, user.passwordHash));
-    if (!user || !ok) {
+    // Ejecuta scrypt SIEMPRE (contra el hash real o el señuelo) para no filtrar
+    // por temporización cuál email está registrado.
+    const passwordOk = await verifyPassword(
+      dto.password,
+      user ? user.passwordHash : DUMMY_HASH,
+    );
+    if (!user || !passwordOk) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
     return this.issueToken(user);

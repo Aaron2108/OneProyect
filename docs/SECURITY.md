@@ -23,8 +23,8 @@ modificar datos de otro**. Se garantiza así:
   firmado con `JWT_SECRET`. Guard propio sin passport.
 - Contraseñas hasheadas con **`scrypt`** (KDF nativo de Node), formato `salt:hash`,
   comparación en tiempo constante. Nunca se almacenan en claro.
-- Login que no revela por temporización si un email existe (se verifica siempre).
-- Autorización por rol vía `@Roles()` + `RolesGuard` (OWNER/AGENT).
+- Login en tiempo constante: siempre ejecuta scrypt (contra un hash señuelo si el email no existe), para no revelar por temporización qué emails están registrados.
+- Autorización por rol **disponible** vía `@Roles()` + `RolesGuard` (OWNER/AGENT). Aún ningún endpoint la usa; cuando se use, debe aplicarse con ambos guards juntos: `@UseGuards(JwtAuthGuard, RolesGuard)` (el orden importa: primero autentica y adjunta el usuario, luego valida el rol).
 
 ## 3. Webhook de WhatsApp (Meta Cloud API)
 

@@ -85,7 +85,7 @@ export class ReminderDispatchService {
     // RF-10: fuera de la ventana de 24h se requiere plantilla pre-aprobada.
     const lastInboundAt = await this.latestInboundAt(reminder.tenantId, reminder.contactId);
     if (!isWithinServiceWindow(lastInboundAt, now)) {
-      if (now.getTime() - reminder.remindAt.getTime() > REMINDER_EXPIRY_MS) {
+      if (this.isExpired(reminder, now)) {
         await this.setStatus(reminder.id, ReminderStatus.CANCELLED);
         this.logger.warn(
           `Recordatorio ${reminder.id} cancelado (expirado): fuera de la ventana de 24h y sin plantilla`,
@@ -109,14 +109,29 @@ export class ReminderDispatchService {
       this.logger.error(
         `Fallo enviando recordatorio ${reminder.id}: ${(err as Error).message}`,
       );
-      return 'deferred-send-failed'; // se queda PENDING y se reintenta en el próximo tick
+      // Acota el reintento: un fallo persistente (p. ej. teléfono inválido que
+      // Meta siempre rechaza) se cancela al expirar en vez de reintentar por
+      // siempre cada tick.
+      if (this.isExpired(reminder, now)) {
+        await this.setStatus(reminder.id, ReminderStatus.CANCELLED);
+        this.logger.warn(`Recordatorio ${reminder.id} cancelado (expirado): fallo de envío persistente`);
+        return 'expired-cancelled';
+      }
+      return 'deferred-send-failed'; // sigue PENDING y se reintenta en el próximo tick
     }
+  }
+
+  /** Un recordatorio proactivo que lleva más de `REMINDER_EXPIRY_MS` sin poder enviarse. */
+  private isExpired(reminder: DueReminder, now: Date): boolean {
+    return now.getTime() - reminder.remindAt.getTime() > REMINDER_EXPIRY_MS;
   }
 
   /** Última hora de mensaje entrante del contacto (para evaluar la ventana de 24h). */
   private async latestInboundAt(tenantId: string, contactId: string): Promise<Date | null> {
+    // `lastInboundAt: { not: null }` evita que una conversación sin entrante
+    // (NULLS FIRST en Postgres con DESC) tape a otra con timestamp real.
     const conversation = await this.prisma.conversation.findFirst({
-      where: { tenantId, contactId },
+      where: { tenantId, contactId, lastInboundAt: { not: null } },
       orderBy: { lastInboundAt: 'desc' },
       select: { lastInboundAt: true },
     });
