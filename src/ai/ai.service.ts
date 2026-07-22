@@ -111,6 +111,17 @@ export class AiService {
       messages.push({ role: 'user', content: toolResults });
     }
 
+    // Si el bucle se agota (o el modelo no devuelve texto), el cliente igual
+    // recibe una respuesta de cierre. Al garantizar texto no vacío, el mensaje
+    // se persiste y la guarda de costo cuenta esta llamada (corrige que una
+    // respuesta vacía se pagara sin contar).
+    if (!replyText) {
+      replyText =
+        actions.length > 0
+          ? 'Listo, ya lo registré. ¿Necesitas algo más?'
+          : '¿Podrías darme un poco más de detalle para ayudarte mejor?';
+    }
+
     return { text: replyText, actions };
   }
 

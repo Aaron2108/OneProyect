@@ -63,4 +63,25 @@ describe('AiService', () => {
       ).rejects.toThrow('IA deshabilitada');
     });
   });
+
+  it('devuelve un texto de cierre si el bucle de tools se agota sin texto (RF-NFR)', async () => {
+    const prisma = {} as PrismaService;
+    const toolsMock = { execute: jest.fn().mockResolvedValue('ok') } as unknown as AiToolExecutorService;
+    const service = new AiService(makeConfig('sk-ant-test'), prisma, toolsMock);
+    // El modelo siempre pide tool_use y nunca devuelve texto → agota el bucle.
+    const create = jest.fn().mockResolvedValue({
+      stop_reason: 'tool_use',
+      content: [{ type: 'tool_use', id: 'tu1', name: 'create_appointment', input: {} }],
+    });
+    (service as unknown as { client: unknown }).client = { messages: { create } };
+
+    const reply = await service.respond(
+      { tenantId: 't', tenantName: 'E', contactId: 'c', contactName: null, contactPhone: '1', conversationId: 'cv' },
+      [{ role: 'user', text: 'agenda una cita' }],
+    );
+
+    expect(reply.text).not.toBe(''); // el cliente siempre recibe respuesta
+    expect(reply.text).toContain('registré');
+    expect(reply.actions.length).toBeGreaterThan(0);
+  });
 });
