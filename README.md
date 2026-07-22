@@ -39,6 +39,8 @@ npm run start:dev
 
 Comprobación: `GET http://localhost:3000/health` responde el estado del servicio y la base de datos.
 
+**Probar la IA sin gastar créditos** (desarrollo local): arranca con `AI_PROVIDER=mock npm run start`. El agente devuelve respuestas simuladas y ejecuta el tool-calling real contra la BD (crear cita, etc.). Para usar Claude real, deja `AI_PROVIDER` sin definir (o `anthropic`) y pon una `ANTHROPIC_API_KEY` con saldo.
+
 Scripts útiles: `npm test` (tests), `npm run build` (compilar), `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores).
 
 ## Documentación

@@ -23,6 +23,7 @@ export interface AppConfig {
     appSecret: string;
   };
   ai: {
+    provider: string;
     apiKey: string;
     model: string;
     maxCallsPerConversationPerHour: number;
@@ -50,6 +51,8 @@ export default (): AppConfig => ({
     appSecret: process.env.WHATSAPP_APP_SECRET ?? '',
   },
   ai: {
+    // 'anthropic' (real) | 'mock' (pruebas locales sin gastar créditos)
+    provider: process.env.AI_PROVIDER ?? 'anthropic',
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
     // Modelo más económico de Anthropic por defecto (pruebas). Ver DECISIONS.md.
     model: process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5',

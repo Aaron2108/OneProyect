@@ -83,6 +83,12 @@
 **Estado**: propuesta del arquitecto para la fase de pruebas, revisable antes de producción según la calidad de respuesta observada con clientes piloto.
 **Nota**: el motor de IA del producto llama a la API de Anthropic con su propia `ANTHROPIC_API_KEY` — es independiente del modelo que se use en Claude Code para desarrollar.
 
+## 2026-07-22 — No usar la suscripción Pro para la API del producto; modo mock para pruebas
+
+**Decisión**: el motor de IA del producto **no** se autentica con las credenciales de la suscripción Claude Pro/Claude Code. Para probar el pipeline sin créditos de API se añadió un proveedor **`AI_PROVIDER=mock`** que devuelve respuestas simuladas y ejecuta el tool-calling real contra la BD.
+**Motivo**: el plan Pro es para uso interactivo, no para acceso programático a la API (Anthropic factura la API aparte, con créditos del Console); enrutar el backend de un SaaS por el token de login sería un mal uso de la suscripción y de su ToS. El modo mock permite validar toda la cadena (webhook → cola → worker → respuesta → persistencia → acciones) sin gastar créditos, y es además una práctica sana de desarrollo local.
+**Estado**: confirmada. En producción/pruebas reales se usa `AI_PROVIDER=anthropic` (por defecto) con una `ANTHROPIC_API_KEY` con saldo.
+
 ---
 
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

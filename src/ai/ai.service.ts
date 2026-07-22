@@ -11,6 +11,7 @@ import { AgentReply, ConversationContext, HistoryTurn } from './ai.types';
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly client: Anthropic | null;
+  private readonly provider: string;
   private readonly model: string;
   private readonly maxCallsPerHour: number;
 
@@ -20,6 +21,7 @@ export class AiService {
     private readonly tools: AiToolExecutorService,
   ) {
     const apiKey = this.config.get<string>('ai.apiKey') ?? '';
+    this.provider = this.config.get<string>('ai.provider') ?? 'anthropic';
     this.model = this.config.get<string>('ai.model') ?? 'claude-haiku-4-5';
     this.maxCallsPerHour =
       this.config.get<number>('ai.maxCallsPerConversationPerHour') ?? 20;
@@ -27,9 +29,9 @@ export class AiService {
     this.client = apiKey ? new Anthropic({ apiKey }) : null;
   }
 
-  /** La IA solo opera si hay API key configurada. */
+  /** La IA opera si es modo mock, o si hay API key configurada. */
   isEnabled(): boolean {
-    return this.client !== null;
+    return this.provider === 'mock' || this.client !== null;
   }
 
   /**
@@ -53,6 +55,9 @@ export class AiService {
    * ejecutando herramientas (citas/recordatorios/contacto) cuando corresponda.
    */
   async respond(ctx: ConversationContext, history: HistoryTurn[]): Promise<AgentReply> {
+    if (this.provider === 'mock') {
+      return this.mockRespond(ctx, history);
+    }
     if (!this.client) {
       throw new Error('IA deshabilitada: falta ANTHROPIC_API_KEY');
     }
@@ -107,6 +112,40 @@ export class AiService {
     }
 
     return { text: replyText, actions };
+  }
+
+  /**
+   * Proveedor simulado para pruebas locales sin gastar créditos de API.
+   * Devuelve una respuesta contextual y, si el cliente menciona una cita,
+   * ejecuta el tool-calling real contra la BD (valida toda la cadena).
+   */
+  private async mockRespond(
+    ctx: ConversationContext,
+    history: HistoryTurn[],
+  ): Promise<AgentReply> {
+    const lastUser =
+      [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
+    const nombre = ctx.contactName ?? '';
+    const actions: string[] = [];
+
+    if (/\b(cita|agendar|agenda|turno|reservar)\b/i.test(lastUser)) {
+      const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const result = await this.tools.execute(
+        'create_appointment',
+        { title: 'Consulta (simulada)', scheduled_at: scheduledAt },
+        ctx,
+      );
+      actions.push('create_appointment');
+      return {
+        text: `¡Claro, ${nombre}! Te dejé agendada una cita de ejemplo. ${result} [respuesta simulada — modo pruebas sin créditos]`.trim(),
+        actions,
+      };
+    }
+
+    return {
+      text: `Hola ${nombre}, gracias por escribir. ¿En qué puedo ayudarte? [respuesta simulada — modo pruebas sin créditos]`.trim(),
+      actions,
+    };
   }
 
   private buildSystemPrompt(ctx: ConversationContext): string {
