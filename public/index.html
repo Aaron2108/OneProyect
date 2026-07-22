@@ -283,7 +283,10 @@
     .metrics { height: 100%; overflow-y: auto; padding: clamp(20px, 4vw, 40px); }
     .metrics__wrap { max-width: 960px; margin: 0 auto; }
     .metrics h2 { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: -.02em; margin: 0 0 4px; }
-    .metrics .lede { margin: 0 0 22px; color: var(--ink-soft); font-size: 14px; }
+    .metrics .lede { margin: 0; color: var(--ink-soft); font-size: 14px; }
+    .metrics__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
+    .mrange { padding: 8px 12px; border: 1.5px solid var(--line-strong); border-radius: 9px; background: #fcfdfc; font-size: 13.5px; color: var(--ink); flex-shrink: 0; }
+    .mrange:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
     .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
     .kpi { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-soft); padding: 16px; animation: riseIn .5s var(--ease-out) both; }
     .kpi__label { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; display: flex; align-items: center; gap: 7px; }
@@ -446,8 +449,17 @@
 
       <section id="tab-metrics" class="metrics hidden">
         <div class="metrics__wrap">
-          <h2>Métricas</h2>
-          <p class="lede">Cómo está trabajando tu empleado digital.</p>
+          <div class="metrics__head">
+            <div>
+              <h2>Métricas</h2>
+              <p class="lede">Cómo está trabajando tu empleado digital, en el período elegido.</p>
+            </div>
+            <select id="mRange" class="mrange" aria-label="Período">
+              <option value="7">Últimos 7 días</option>
+              <option value="30">Últimos 30 días</option>
+              <option value="90">Últimos 90 días</option>
+            </select>
+          </div>
           <div id="metricsBody"></div>
         </div>
       </section>
@@ -709,10 +721,16 @@
     // Colores de dato validados con el script de dataviz (CVD-safe, chroma OK):
     const CHART = { sent: '#0ca678', recv: '#b26a00', ai: '#6b5ce6', human: '#0ca678' };
 
+    $('mRange').onchange = loadMetrics;
     async function loadMetrics() {
       const el = $('metricsBody');
       el.innerHTML = '<div class="empty-line">Cargando métricas…</div>';
-      try { renderMetrics(await api('/metrics/overview')); } catch (e) { el.innerHTML = '<div class="notice notice--err">' + esc(e.message) + '</div>'; }
+      const days = parseInt($('mRange').value, 10) || 7;
+      const to = new Date();
+      const from = new Date(to.getTime() - (days - 1) * 86400000);
+      from.setHours(0, 0, 0, 0);
+      const qs = 'from=' + encodeURIComponent(from.toISOString()) + '&to=' + encodeURIComponent(to.toISOString());
+      try { renderMetrics(await api('/metrics/overview?' + qs)); } catch (e) { el.innerHTML = '<div class="notice notice--err">' + esc(e.message) + '</div>'; }
     }
 
     function kpi(label, dot, value, sub) {
@@ -738,7 +756,7 @@
         + '<div class="legend"><em style="--sw:' + CHART.ai + '">IA <b>&nbsp;' + m.messages.fromAi + '</b></em>'
         + '<em style="--sw:' + CHART.human + '">Agente humano <b>&nbsp;' + m.messages.fromHuman + '</b></em></div></div>';
 
-      const chart = '<div class="pcard"><h3>Actividad · últimos 7 días</h3>'
+      const chart = '<div class="pcard"><h3>Actividad · últimos ' + m.activity.length + ' días</h3>'
         + '<div class="chart">' + activityChart(m.activity) + '</div>'
         + '<div class="legend"><em style="--sw:' + CHART.recv + '">Recibidos</em><em style="--sw:' + CHART.sent + '">Enviados</em></div>'
         + '<button class="tbl-toggle" id="tblToggle" aria-expanded="false">Ver datos</button>'
@@ -765,14 +783,18 @@
       };
       let grid = '', bars = '', xlabels = '';
       for (let g = 0; g <= 4; g++) { const v = (niceMax / 4) * g, yy = y(v); grid += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}"/>`; grid += `<text class="axis" x="${padL - 6}" y="${yy + 3}" text-anchor="end">${v}</text>`; }
+      // Con muchos días, mostrar solo ~8 etiquetas para que no se encimen.
+      const labelStep = Math.ceil(days.length / 8);
       days.forEach((d, i) => {
         const gx = padL + i * groupW + (groupW - (barW * 2 + 2)) / 2;
         const dm = d.date.slice(8) + '/' + d.date.slice(5, 7);
         bars += barPath(gx, d.inbound, CHART.recv, dm + ' · recibidos: ' + d.inbound);
         bars += barPath(gx + barW + 2, d.outbound, CHART.sent, dm + ' · enviados: ' + d.outbound);
-        xlabels += `<text class="axis" x="${gx + barW + 1}" y="${H - 8}" text-anchor="middle">${dm}</text>`;
+        if (i % labelStep === 0 || i === days.length - 1) {
+          xlabels += `<text class="axis" x="${gx + barW + 1}" y="${H - 8}" text-anchor="middle">${dm}</text>`;
+        }
       });
-      return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Actividad de mensajes de los últimos 7 días"><g class="grid">${grid}</g>${bars}${xlabels}</svg>`;
+      return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Actividad de mensajes de los últimos ${days.length} días"><g class="grid">${grid}</g>${bars}${xlabels}</svg>`;
     }
 
     function activityTable(days) {

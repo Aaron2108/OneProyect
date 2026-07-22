@@ -17,13 +17,25 @@ describe('MetricsService', () => {
     return { prisma, groupBy, count, queryRaw };
   }
 
-  it('todas las agregaciones se filtran por tenantId', async () => {
+  it('todas las agregaciones se filtran por tenantId y por el período', async () => {
     const { prisma, groupBy, count } = makePrisma();
     await new MetricsService(prisma).overview('t1');
     for (const call of groupBy.mock.calls) {
-      expect(call[0].where).toEqual({ tenantId: 't1' });
+      expect(call[0].where.tenantId).toBe('t1');
+      expect(call[0].where.createdAt).toEqual({ gte: expect.any(Date), lte: expect.any(Date) });
     }
-    expect(count).toHaveBeenCalledWith({ where: { tenantId: 't1' } });
+    expect(count.mock.calls[0][0].where.tenantId).toBe('t1');
+    expect(count.mock.calls[0][0].where.createdAt).toBeDefined();
+  });
+
+  it('respeta el rango de fechas recibido (serie de N días)', async () => {
+    const { prisma, queryRaw } = makePrisma();
+    const to = new Date('2026-07-22T23:59:59.000Z');
+    const from = new Date('2026-07-01T00:00:00.000Z'); // 22 días
+    const res = await new MetricsService(prisma).overview('t1', { from, to });
+    expect(res.activity).toHaveLength(22);
+    // el SQL de actividad recibe since y until
+    expect(queryRaw).toHaveBeenCalled();
   });
 
   it('calcula la tasa de automatización (IA / respuestas salientes)', async () => {

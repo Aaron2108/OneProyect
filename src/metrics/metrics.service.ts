@@ -29,7 +29,9 @@ export interface MetricsOverview {
   activity: ActivityPoint[];
 }
 
-const ACTIVITY_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const ACTIVITY_DAYS = 7; // rango por defecto si no se pide uno
+const MAX_ACTIVITY_DAYS = 92; // tope de la serie diaria (evita series enormes)
 
 /**
  * Agregaciones para el panel de métricas. TODAS las consultas se filtran por
@@ -40,9 +42,19 @@ const ACTIVITY_DAYS = 7;
 export class MetricsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async overview(tenantId: string): Promise<MetricsOverview> {
-    const since = new Date(Date.now() - (ACTIVITY_DAYS - 1) * 24 * 60 * 60 * 1000);
-    since.setHours(0, 0, 0, 0);
+  async overview(
+    tenantId: string,
+    range: { from?: Date; to?: Date } = {},
+  ): Promise<MetricsOverview> {
+    const until = range.to ?? new Date();
+    const since = new Date(range.from ?? new Date(until.getTime() - (ACTIVITY_DAYS - 1) * DAY_MS));
+    since.setUTCHours(0, 0, 0, 0); // límites de día en UTC (coherente con date_trunc y toISOString)
+    // Todas las métricas se calculan en el período seleccionado (createdAt).
+    const where = { tenantId, createdAt: { gte: since, lte: until } };
+    const dayCount = Math.min(
+      MAX_ACTIVITY_DAYS,
+      Math.floor((this.startOfDay(until).getTime() - since.getTime()) / DAY_MS) + 1,
+    );
 
     const [
       convByStatus,
@@ -54,14 +66,14 @@ export class MetricsService {
       remByStatus,
       activityRows,
     ] = await Promise.all([
-      this.prisma.conversation.groupBy({ by: ['status'], where: { tenantId }, _count: { _all: true } }),
-      this.prisma.conversation.groupBy({ by: ['handledBy'], where: { tenantId }, _count: { _all: true } }),
-      this.prisma.message.groupBy({ by: ['direction'], where: { tenantId }, _count: { _all: true } }),
-      this.prisma.message.groupBy({ by: ['sender'], where: { tenantId }, _count: { _all: true } }),
-      this.prisma.contact.count({ where: { tenantId } }),
-      this.prisma.appointment.groupBy({ by: ['status'], where: { tenantId }, _count: { _all: true } }),
-      this.prisma.reminder.groupBy({ by: ['status'], where: { tenantId }, _count: { _all: true } }),
-      this.dailyActivity(tenantId, since),
+      this.prisma.conversation.groupBy({ by: ['status'], where, _count: { _all: true } }),
+      this.prisma.conversation.groupBy({ by: ['handledBy'], where, _count: { _all: true } }),
+      this.prisma.message.groupBy({ by: ['direction'], where, _count: { _all: true } }),
+      this.prisma.message.groupBy({ by: ['sender'], where, _count: { _all: true } }),
+      this.prisma.contact.count({ where }),
+      this.prisma.appointment.groupBy({ by: ['status'], where, _count: { _all: true } }),
+      this.prisma.reminder.groupBy({ by: ['status'], where, _count: { _all: true } }),
+      this.dailyActivity(tenantId, since, until),
     ]);
 
     const convStatus = this.tally(convByStatus, 'status');
@@ -106,7 +118,7 @@ export class MetricsService {
         cancelled: rem[ReminderStatus.CANCELLED] ?? 0,
       },
       automationRate: outboundReplies === 0 ? 0 : fromAi / outboundReplies,
-      activity: this.fillDays(activityRows, since),
+      activity: this.fillDays(activityRows, since, dayCount),
     };
   }
 
@@ -114,29 +126,31 @@ export class MetricsService {
   private async dailyActivity(
     tenantId: string,
     since: Date,
+    until: Date,
   ): Promise<{ day: Date; inbound: number; outbound: number }[]> {
     return this.prisma.$queryRaw<{ day: Date; inbound: number; outbound: number }[]>`
       SELECT date_trunc('day', created_at) AS day,
              count(*) FILTER (WHERE direction = 'INBOUND')::int  AS inbound,
              count(*) FILTER (WHERE direction = 'OUTBOUND')::int AS outbound
       FROM messages
-      WHERE tenant_id = ${tenantId} AND created_at >= ${since}
+      WHERE tenant_id = ${tenantId} AND created_at >= ${since} AND created_at <= ${until}
       GROUP BY 1
       ORDER BY 1`;
   }
 
-  /** Rellena los días sin actividad con ceros para una serie continua de 7 días. */
+  /** Rellena los días sin actividad con ceros para una serie continua de `dayCount` días. */
   private fillDays(
     rows: { day: Date; inbound: number; outbound: number }[],
     since: Date,
+    dayCount: number,
   ): ActivityPoint[] {
     const byDay = new Map<string, { inbound: number; outbound: number }>();
     for (const r of rows) {
       byDay.set(this.isoDay(new Date(r.day)), { inbound: Number(r.inbound), outbound: Number(r.outbound) });
     }
     const out: ActivityPoint[] = [];
-    for (let i = 0; i < ACTIVITY_DAYS; i++) {
-      const d = new Date(since.getTime() + i * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < dayCount; i++) {
+      const d = new Date(since.getTime() + i * DAY_MS);
       const key = this.isoDay(d);
       const v = byDay.get(key) ?? { inbound: 0, outbound: 0 };
       out.push({ date: key, inbound: v.inbound, outbound: v.outbound });
@@ -146,6 +160,12 @@ export class MetricsService {
 
   private isoDay(d: Date): string {
     return d.toISOString().slice(0, 10);
+  }
+
+  private startOfDay(d: Date): Date {
+    const x = new Date(d);
+    x.setUTCHours(0, 0, 0, 0);
+    return x;
   }
 
   private tally<T extends string>(
