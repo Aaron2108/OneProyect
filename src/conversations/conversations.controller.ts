@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -13,6 +14,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ConversationsService } from './conversations.service';
 import { ListConversationsDto } from './dto/list-conversations.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('conversations')
 @UseGuards(JwtAuthGuard)
@@ -27,6 +29,17 @@ export class ConversationsController {
   @Get(':id')
   get(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.conversations.get(user.tenantId, id);
+  }
+
+  /** Un humano responde manualmente al cliente (persiste + envía por Meta). */
+  @Post(':id/messages')
+  @HttpCode(201)
+  sendMessage(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: SendMessageDto,
+  ) {
+    return this.conversations.sendManualMessage(user.tenantId, id, dto.text);
   }
 
   /** RF-11: tomar la conversación como humano (silencia la IA). */

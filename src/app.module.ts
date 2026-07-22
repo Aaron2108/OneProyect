@@ -8,6 +8,8 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { ConversationsModule } from './conversations/conversations.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { RemindersModule } from './reminders/reminders.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -31,6 +33,8 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     AuthModule,
     ContactsModule,
     ConversationsModule,
+    AppointmentsModule,
+    RemindersModule,
     WhatsappModule,
   ],
 })

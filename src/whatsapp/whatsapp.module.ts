@@ -14,6 +14,6 @@ import { WhatsappService } from './whatsapp.service';
   ],
   controllers: [WhatsappController],
   providers: [WhatsappService, WhatsappSenderService, InboundMessageProcessor],
-  exports: [WhatsappService],
+  exports: [WhatsappService, WhatsappSenderService],
 })
 export class WhatsappModule {}

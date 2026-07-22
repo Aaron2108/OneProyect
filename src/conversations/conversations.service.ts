@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   Conversation,
   ConversationHandler,
   ConversationStatus,
+  Message,
+  MessageDirection,
+  MessageSender,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { isWithinServiceWindow } from '../whatsapp/whatsapp-window.util';
 import { ListConversationsDto } from './dto/list-conversations.dto';
 
 /**
@@ -15,7 +20,12 @@ import { ListConversationsDto } from './dto/list-conversations.dto';
  */
 @Injectable()
 export class ConversationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ConversationsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sender: WhatsappSenderService,
+  ) {}
 
   /** Bandeja: conversaciones del tenant ordenadas por actividad reciente. */
   list(tenantId: string, filters: ListConversationsDto) {
@@ -45,6 +55,84 @@ export class ConversationsService {
       throw new NotFoundException('Conversación no encontrada');
     }
     return conversation;
+  }
+
+  /**
+   * Un humano responde manualmente al cliente desde la bandeja. Persiste el
+   * mensaje (OUTBOUND/HUMAN), pasa la conversación a HUMAN (para que la IA no
+   * responda por encima del agente) y lo envía por la Meta Cloud API dentro de
+   * la ventana de 24h (RF-10). El mensaje queda guardado aunque el envío falle.
+   */
+  async sendManualMessage(
+    tenantId: string,
+    id: string,
+    text: string,
+  ): Promise<Message> {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, tenantId },
+      include: { contact: { select: { phone: true } }, tenant: { select: { whatsappPhoneNumberId: true } } },
+    });
+    if (!conversation) {
+      throw new NotFoundException('Conversación no encontrada');
+    }
+
+    const message = await this.prisma.message.create({
+      data: {
+        tenantId,
+        conversationId: id,
+        direction: MessageDirection.OUTBOUND,
+        sender: MessageSender.HUMAN,
+        type: 'text',
+        content: text,
+      },
+    });
+
+    // Al responder un humano, la conversación queda en sus manos (RF-11).
+    await this.prisma.conversation.update({
+      where: { id },
+      data: { handledBy: ConversationHandler.HUMAN, lastMessageAt: new Date() },
+    });
+
+    await this.deliver(conversation.tenant.whatsappPhoneNumberId, conversation.contact.phone, conversation.lastInboundAt, message, id);
+    return message;
+  }
+
+  /** Envía el mensaje ya persistido al cliente por Meta (si es posible). */
+  private async deliver(
+    phoneNumberId: string | null,
+    to: string,
+    lastInboundAt: Date | null,
+    message: Message,
+    conversationId: string,
+  ): Promise<void> {
+    if (!this.sender.isEnabled()) {
+      return; // sin credenciales de Meta (local): mensaje persistido, no enviado
+    }
+    if (!phoneNumberId) {
+      this.logger.warn(`Tenant sin whatsappPhoneNumberId; mensaje ${message.id} no enviado`);
+      return;
+    }
+    if (!isWithinServiceWindow(lastInboundAt)) {
+      this.logger.warn(
+        `Ventana de 24h cerrada (conversación ${conversationId}); se requiere plantilla, envío omitido`,
+      );
+      return;
+    }
+    try {
+      const { messageId: wamid } = await this.sender.sendText({
+        phoneNumberId,
+        to,
+        text: message.content,
+      });
+      if (wamid) {
+        await this.prisma.message.update({
+          where: { id: message.id },
+          data: { whatsappMessageId: wamid },
+        });
+      }
+    } catch (err) {
+      this.logger.error(`Fallo enviando mensaje manual a Meta: ${(err as Error).message}`);
+    }
   }
 
   /** RF-11: pasar la conversación a un humano (silencia la IA). */
