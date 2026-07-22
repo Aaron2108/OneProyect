@@ -1,9 +1,11 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -12,8 +14,18 @@ import { HealthModule } from './health/health.module';
       load: [configuration],
       validate: validateEnv,
     }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('redis.host'),
+          port: config.get<number>('redis.port'),
+        },
+      }),
+    }),
     PrismaModule,
     HealthModule,
+    WhatsappModule,
   ],
 })
 export class AppModule {}

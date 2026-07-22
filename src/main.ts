@@ -4,7 +4,9 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true conserva el cuerpo crudo para verificar la firma HMAC de
+  // los webhooks de Meta (ver WhatsappController).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Validación global de DTOs en los límites del sistema (REQUIREMENTS.md).
   app.useGlobalPipes(

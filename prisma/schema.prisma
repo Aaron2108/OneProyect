@@ -69,6 +69,8 @@ enum ConsentStatus {
 model Tenant {
   id        String   @id @default(uuid())
   name      String
+  // ID del número de WhatsApp en Meta — enruta cada webhook entrante a su tenant
+  whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -123,7 +125,7 @@ model Conversation {
   tenantId  String              @map("tenant_id")
   contactId String              @map("contact_id")
   status    ConversationStatus  @default(OPEN)
-  handledBy ConversationHandler @default(AI) // RF-11: quién responde ahora
+  handledBy ConversationHandler @default(AI) @map("handled_by") // RF-11: quién responde ahora
   // RF-10: la ventana de 24h se calcula desde el último mensaje entrante
   lastInboundAt DateTime?       @map("last_inbound_at")
   lastMessageAt DateTime?       @map("last_message_at")
