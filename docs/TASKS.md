@@ -28,6 +28,23 @@
 - [ ] Registrar la app en Meta for Developers y configurar el número de WhatsApp Business + verificación del webhook. — configuración externa (requiere cuenta/credenciales del propietario).
 - [ ] Prueba en vivo con Claude real (quitar `AI_PROVIDER=mock`) — a la espera de créditos de API de Anthropic.
 
-## Backlog no priorizado (fases 2-5)
+## Fase 2 — Escalabilidad (en curso)
+
+Features de escalabilidad y colaboración construidas sobre el MVP (todas con scope de tenant, tests y verificación en navegador):
+
+- [x] **Rate limiting** global (`@nestjs/throttler`, 100/min por IP) + estricto en `/auth` (10/min); webhook exento.
+- [x] **Búsqueda + paginación keyset** en bandeja y contactos (`q`/`cursor`/`limit`, respuesta `{items, nextCursor}`).
+- [x] **Dashboard de métricas** por tenant con filtro por **rango de fechas** (KPIs, tasa de automatización, actividad diaria). Gráfico SVG con paleta validada (skill `dataviz`).
+- [x] **Gestión de equipo** (usuarios): listar e invitar; invitar es solo OWNER (`@Roles(OWNER)` + `RolesGuard`).
+- [x] **Estado sin leer** en la bandeja (`unreadCount` denormalizado, incrementado por el worker; `POST /:id/read`).
+- [x] **Editar contacto** (nombre + notas) desde el panel.
+- [x] **Cambiar contraseña** (`POST /auth/change-password`).
+- [x] **Notas internas** por conversación (privadas del equipo).
+- [x] **Exportar CSV** de contactos y conversaciones.
+- [x] **Respuestas rápidas** (plantillas de mensaje del equipo, insertables en el composer).
+- [x] Endurecimiento del worker de recordatorios (claim atómico + backoff) y correcciones de la auditoría de código.
+- [ ] Migrar a esquema-por-tenant si el volumen lo justifica; versionado de API; cifrado de PII en reposo (ver `ROADMAP.md` Fase 2 y `SECURITY.md`).
+
+## Backlog no priorizado (fases 3-5)
 
 Ver `docs/ROADMAP.md` para el desglose por fase. No se convierten en tareas concretas hasta que la fase correspondiente esté confirmada con el negocio.
