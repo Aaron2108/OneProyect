@@ -1,0 +1,217 @@
+// WhatsFlow AI — esquema de datos del MVP (Fase 1)
+// Multi-tenancy: esquema compartido, `tenantId` en todas las tablas de negocio.
+// Sin pgvector en el MVP (memoria vectorial diferida a Fase 4, ver docs/DECISIONS.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  OWNER
+  AGENT
+}
+
+enum MessageDirection {
+  INBOUND // del cliente final hacia la empresa
+  OUTBOUND // de la empresa/IA hacia el cliente final
+}
+
+enum MessageSender {
+  CONTACT // lo escribió el cliente final
+  AI // lo generó el agente de IA
+  HUMAN // lo escribió un miembro del equipo
+}
+
+// Quién atiende la conversación (RF-11: handoff humano)
+enum ConversationHandler {
+  AI
+  HUMAN
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  CANCELLED
+}
+
+// RF-12: opt-in del contacto
+enum ConsentStatus {
+  GRANTED
+  DENIED
+  UNKNOWN
+}
+
+// ---------------------------------------------------------------------------
+// Modelos
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users         User[]
+  contacts      Contact[]
+  conversations Conversation[]
+  appointments  Appointment[]
+  reminders     Reminder[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  email        String
+  passwordHash String   @map("password_hash")
+  name         String
+  role         UserRole @default(AGENT)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  phone     String // número de WhatsApp del cliente final (E.164)
+  name      String?
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  appointments  Appointment[]
+  reminders     Reminder[]
+  consent       ContactConsent?
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("contacts")
+}
+
+model Conversation {
+  id        String              @id @default(uuid())
+  tenantId  String              @map("tenant_id")
+  contactId String              @map("contact_id")
+  status    ConversationStatus  @default(OPEN)
+  handledBy ConversationHandler @default(AI) // RF-11: quién responde ahora
+  // RF-10: la ventana de 24h se calcula desde el último mensaje entrante
+  lastInboundAt DateTime?       @map("last_inbound_at")
+  lastMessageAt DateTime?       @map("last_message_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([tenantId])
+  @@index([tenantId, contactId])
+  @@index([tenantId, status, lastMessageAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String           @id @default(uuid())
+  tenantId       String           @map("tenant_id")
+  conversationId String           @map("conversation_id")
+  direction      MessageDirection
+  sender         MessageSender
+  // ID del mensaje en Meta — único por tenant para deduplicar reenvíos (guarda NFR)
+  whatsappMessageId String?       @map("whatsapp_message_id")
+  type           String           @default("text") // text | template | image | ...
+  content        String
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, whatsappMessageId])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model Appointment {
+  id          String            @id @default(uuid())
+  tenantId    String            @map("tenant_id")
+  contactId   String            @map("contact_id")
+  title       String
+  scheduledAt DateTime          @map("scheduled_at")
+  status      AppointmentStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact   Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+
+  @@index([tenantId])
+  @@index([tenantId, scheduledAt])
+  @@map("appointments")
+}
+
+model Reminder {
+  id            String         @id @default(uuid())
+  tenantId      String         @map("tenant_id")
+  contactId     String         @map("contact_id")
+  appointmentId String?        @map("appointment_id")
+  message       String
+  remindAt      DateTime       @map("remind_at")
+  status        ReminderStatus @default(PENDING)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact     Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status, remindAt])
+  @@map("reminders")
+}
+
+// RF-12: consentimiento (opt-in) del contacto para recibir mensajes
+model ContactConsent {
+  id         String        @id @default(uuid())
+  tenantId   String        @map("tenant_id")
+  contactId  String        @unique @map("contact_id")
+  status     ConsentStatus @default(UNKNOWN)
+  source     String? // cómo se obtuvo el opt-in (ej. "primer mensaje entrante")
+  grantedAt  DateTime?     @map("granted_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("contact_consent")
+}

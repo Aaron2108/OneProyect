@@ -46,7 +46,7 @@ Tablas principales:
 
 **Relaciones básicas**: `tenants 1—N users`, `tenants 1—N contacts`, `contacts 1—N conversations`, `conversations 1—N messages`, `contacts 1—N appointments`, `contacts 1—N reminders`, `appointments 1—N reminders` (opcional), `contacts 1—1 contact_consent`.
 
-**Migraciones de aplicación**: gestionadas por el ORM/herramienta que se adopte con NestJS (p. ej. TypeORM o Prisma — a confirmar en Sprint 1, no bloquea el resto del diseño).
+**Migraciones de aplicación**: gestionadas por **Prisma** (ORM adoptado en Sprint 1, ver `DECISIONS.md`). El esquema vive en `prisma/schema.prisma` y las migraciones se generan con `npm run prisma:migrate`. Los nombres de tabla del esquema Prisma coinciden con los de esta sección (`tenants`, `users`, `contacts`, `conversations`, `messages`, `appointments`, `reminders`, `contact_consent`).
 
 **Retención/privacidad**: los datos en `contacts`/`messages` son PII de clientes finales de terceros (las PyMEs), no del propio tenant que opera el software — ver `SECURITY.md` para controles de acceso y retención.
 

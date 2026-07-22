@@ -64,6 +64,18 @@
 **Motivo**: mínima complejidad operativa para el MVP; migrar a esquema-por-tenant más adelante es viable si el volumen lo justifica (ver `ROADMAP.md` Fase 2).
 **Estado**: propuesta del arquitecto, revisable en Fase 2.
 
+## 2026-07-22 — ORM: Prisma (Sprint 1)
+
+**Decisión**: usar **Prisma** como ORM/gestor de migraciones sobre PostgreSQL, descartando TypeORM (que quedaba "a confirmar" en el diseño previo).
+**Motivo**: mejor experiencia de desarrollo y modelo de migraciones para velocidad de MVP, tipado end-to-end derivado del esquema, y un único archivo de esquema (`prisma/schema.prisma`) como fuente de verdad del modelo de datos. Combo NestJS + Prisma bien soportado.
+**Estado**: propuesta del arquitecto, revisable. Trade-off asumido: Prisma es menos "idiomático" con la inyección de dependencias de NestJS que TypeORM, pero se encapsula tras un `PrismaService` global.
+
+## 2026-07-22 — Estructura de código: módulos NestJS por feature (no hexagonal estricto)
+
+**Decisión**: organizar `/src` en módulos de NestJS por feature (controlador → servicio → repositorio Prisma), en lugar de una arquitectura hexagonal estricta con capas domain/application/infrastructure/presentation separadas.
+**Motivo**: la hexagonal completa añade boilerplate que no ayuda a validar el negocio en el MVP (mismo criterio anti-sobre-ingeniería que llevó a diferir `pgvector`). La modularidad por feature ya satisface el requisito de "arquitectura modular" de la visión. Se puede refactorizar hacia hexagonal si la complejidad futura lo justifica.
+**Estado**: propuesta del arquitecto, revisable. Corrige la descripción de "Capas de negocio" que tenía `ARCHITECTURE.md` §2.
+
 ---
 
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

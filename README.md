@@ -1,45 +1,63 @@
-# OneProyect
+# WhatsFlow AI
 
-> Creado: 2026-07-22 · Estado: **bootstrap** (sin código de negocio todavía)
+> Estado: **Sprint 1 — MVP en desarrollo** (rama `sprint-1-mvp`)
 
-## Qué es este repositorio hoy
+Plataforma SaaS con IA para PyMEs que centraliza la comunicación por WhatsApp: un agente inteligente que responde con contexto del negocio, agenda citas, genera recordatorios y colabora con el equipo humano. Ver la visión completa en [`docs/VISION.md`](docs/VISION.md).
 
-Este repositorio es, por ahora, el **andamiaje de orquestación** generado por el framework [`ruflo`](https://www.npmjs.com/package/ruflo) v3.32.9 (internamente "Claude-Flow V3"), instalado vía `ruflo init --full`. Todavía **no tiene nombre de producto ni código de aplicación**: no hay `package.json`, ni `/src`, ni tests. Lo que existe es configuración, agentes, skills y hooks para que Claude Code coordine el desarrollo una vez que el producto esté definido.
+## Stack
 
-El desarrollo real arranca cuando el propietario del proyecto entregue la **descripción completa del producto** (ver `docs/VISION.md`). Hasta entonces, este repo solo contiene documentación de bootstrap.
+| Capa | Tecnología |
+|---|---|
+| Backend | Node.js + TypeScript + **NestJS** (monolito modular) |
+| Base de datos | PostgreSQL (ORM **Prisma**) |
+| Colas / async | Redis + BullMQ |
+| Canal | WhatsApp vía **Meta Cloud API** oficial |
+| IA | Claude (Anthropic) con tool-calling |
 
-## Mapa de la documentación
+Decisiones y su justificación en [`docs/DECISIONS.md`](docs/DECISIONS.md). Arquitectura en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Toda la documentación de negocio y proceso vive en `/docs/` (la raíz solo tiene este README, por convención de `CLAUDE.md`):
+## Puesta en marcha (desarrollo local)
+
+Requisitos: Node.js ≥ 22, Docker + Docker Compose.
+
+```bash
+# 1. Instalar dependencias
+npm install
+
+# 2. Configurar entorno (rellenar credenciales de Meta/Anthropic cuando las tengas)
+cp .env.example .env
+
+# 3. Levantar PostgreSQL + Redis
+npm run db:up
+
+# 4. Crear las tablas (migración inicial de Prisma)
+npm run prisma:migrate       # la primera vez: --name init
+
+# 5. Arrancar en modo desarrollo
+npm run start:dev
+```
+
+Comprobación: `GET http://localhost:3000/health` responde el estado del servicio y la base de datos.
+
+Scripts útiles: `npm test` (tests), `npm run build` (compilar), `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores).
+
+## Documentación
+
+Toda en [`/docs`](docs/). Claves para el desarrollo del MVP:
 
 | Documento | Contenido |
 |---|---|
-| [`docs/REPOSITORY_ANALYSIS.md`](docs/REPOSITORY_ANALYSIS.md) | Auditoría técnica completa del framework `ruflo` ya instalado (arquitectura, agentes, skills, riesgos). |
-| [`docs/PROJECT.md`](docs/PROJECT.md) | Estado del bootstrap, qué falta, cómo se organiza el trabajo. |
-| [`docs/VISION.md`](docs/VISION.md) | **Plantilla pendiente** — se completa con la descripción del producto. |
-| [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Requisitos técnicos transversales (ya definidos) + requisitos de negocio (pendientes). |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Arquitectura del framework (completa) + arquitectura de aplicación (pendiente). |
-| [`docs/DATABASE.md`](docs/DATABASE.md) | Esquema de memoria del framework (completo) + modelo de datos de negocio (pendiente). |
-| [`docs/API.md`](docs/API.md) | Superficie MCP/CLI existente (completa) + API de producto (pendiente). |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Postura de seguridad, riesgos conocidos y mitigaciones. |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | 5 fases: MVP, Escalabilidad, Integraciones, IA/automatización, Expansión. |
-| [`docs/TASKS.md`](docs/TASKS.md) | Tareas concretas del Sprint 0/1 de bootstrap. |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Log de decisiones tomadas hasta ahora. |
-| [`docs/AI_RULES.md`](docs/AI_RULES.md) | Reglas de colaboración con IA para este proyecto (resumen human-readable de `CLAUDE.md`). |
-| [`docs/AGENTS.md`](docs/AGENTS.md) | Catálogo de responsabilidades de los 89 agentes existentes. |
+| [`VISION.md`](docs/VISION.md) | Problema, usuarios, propuesta de valor, métricas. |
+| [`REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Requisitos funcionales (RF-1..RF-12) y no funcionales del MVP. |
+| [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Arquitectura de la aplicación y del framework de desarrollo. |
+| [`DATABASE.md`](docs/DATABASE.md) | Modelo de datos del negocio. |
+| [`API.md`](docs/API.md) | Webhook de WhatsApp y endpoints REST. |
+| [`ROADMAP.md`](docs/ROADMAP.md) | 5 fases: MVP → Escalabilidad → Integraciones → IA → Expansión. |
+| [`TASKS.md`](docs/TASKS.md) | Backlog del Sprint 1. |
+| [`SECURITY.md`](docs/SECURITY.md) | Postura de seguridad y cumplimiento con Meta. |
+| [`DECISIONS.md`](docs/DECISIONS.md) | Log de decisiones de arquitectura. |
+| [`AGENTS.md`](docs/AGENTS.md) · [`AI_RULES.md`](docs/AI_RULES.md) | Agentes de desarrollo y reglas de colaboración con IA. |
 
-## Quickstart del framework
+## Nota sobre el framework de desarrollo
 
-```bash
-# Ya ejecutado en este repo:
-ruflo init --full
-
-# Próximos pasos recomendados (ver docs/TASKS.md):
-ruflo doctor --fix
-ruflo security scan
-ruflo swarm init --topology hierarchical-mesh --max-agents 15
-```
-
-## Próximo paso
-
-Este bootstrap está preparado para iniciar el Sprint 1 del MVP en cuanto se reciba la **descripción completa del proyecto** (problema, usuarios, alcance). Hasta ese momento no se escribe código de negocio, siguiendo las reglas en `docs/AI_RULES.md`.
+Este repo se apoya en el framework [`ruflo`](https://www.npmjs.com/package/ruflo) (carpetas `.claude/`, `.claude-flow/`, `.swarm/`) **solo como herramienta de orquestación del desarrollo** — no forma parte del runtime de producción de WhatsFlow AI. Ver [`docs/REPOSITORY_ANALYSIS.md`](docs/REPOSITORY_ANALYSIS.md) y la aclaración en `ARCHITECTURE.md` §2.
