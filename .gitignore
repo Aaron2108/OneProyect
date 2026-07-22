@@ -1,0 +1,8 @@
+node_modules/
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+.claude-flow/neural/
+*.log
+*.tmp
+.swarm/memory.db
