@@ -12,12 +12,13 @@ import { Reminder } from '@prisma/client';
 import { AuthContext } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.decorator';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { RemindersService } from './reminders.service';
 
 @Controller('reminders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class RemindersController {
   constructor(private readonly reminders: RemindersService) {}
 

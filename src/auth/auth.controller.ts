@@ -1,11 +1,16 @@
 import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { AuthContext, AuthResult } from './auth.types';
 import { CurrentUser } from './current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RolesGuard } from './roles.decorator';
 
+// Límite estricto para las rutas sin autenticar: frena fuerza bruta de
+// contraseñas y abuso de registro (10 intentos/min por IP).
+@Throttle({ default: { limit: 10, ttl: 60_000 } })
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -26,7 +31,7 @@ export class AuthController {
 
   /** Datos del usuario autenticado (comprobación rápida del token). */
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   me(@CurrentUser() user: AuthContext): AuthContext {
     return user;
   }

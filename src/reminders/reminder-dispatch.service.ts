@@ -3,7 +3,15 @@ import { ConsentStatus, Reminder, ReminderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { isWithinServiceWindow } from '../whatsapp/whatsapp-window.util';
-import { DISPATCH_BATCH, REMINDER_EXPIRY_MS } from './reminders.constants';
+import {
+  CLAIM_LEASE_MS,
+  DEFER_RETRY_MS,
+  DISPATCH_BATCH,
+  MAX_SEND_ATTEMPTS,
+  REMINDER_EXPIRY_MS,
+  SEND_BACKOFF_BASE_MS,
+  SEND_BACKOFF_MAX_MS,
+} from './reminders.constants';
 
 /** Recordatorio con las relaciones que necesita el despacho. */
 export type DueReminder = Reminder & {
@@ -16,18 +24,24 @@ export type DispatchOutcome =
   | 'sent'
   | 'cancelled-no-consent'
   | 'expired-cancelled'
+  | 'failed-cancelled'
   | 'deferred-no-config'
   | 'deferred-needs-template'
   | 'deferred-send-failed';
 
 /**
- * Envía los recordatorios vencidos respetando las reglas de WhatsApp:
- * - Consentimiento del contacto (RF-12): sin opt-in GRANTED no se envía.
- * - Ventana de 24h (RF-10): fuera de ella un mensaje proactivo exige plantilla
- *   pre-aprobada (aún no implementada); mientras tanto se aplaza y, si expira,
- *   se cancela para no reintentar indefinidamente.
+ * Envía los recordatorios vencidos respetando las reglas de WhatsApp y de forma
+ * segura a escala:
+ * - **Concurrencia**: cada recordatorio se toma con un *claim atómico*
+ *   (`updateMany` con guarda + lease en `nextAttemptAt`), de modo que ni varios
+ *   ticks ni varias instancias del worker pueden procesar el mismo dos veces.
+ * - **Sin inanición** (RF de escala): los recordatorios diferidos se reprograman
+ *   con `nextAttemptAt` (backoff), así no acaparan el batch de cada tick.
+ * - **Reintentos acotados**: los fallos de envío usan backoff exponencial y se
+ *   cancelan tras `MAX_SEND_ATTEMPTS` o al expirar.
+ * - **Consentimiento (RF-12)** y **ventana de 24h (RF-10)** antes de enviar.
  *
- * El estado del recordatorio solo pasa a SENT cuando Meta acepta el envío.
+ * El estado pasa a SENT solo cuando Meta acepta el envío.
  */
 @Injectable()
 export class ReminderDispatchService {
@@ -38,10 +52,14 @@ export class ReminderDispatchService {
     private readonly sender: WhatsappSenderService,
   ) {}
 
-  /** Procesa los recordatorios PENDING cuya hora ya llegó. */
+  /** Procesa los recordatorios PENDING elegibles cuya hora ya llegó. */
   async dispatchDue(now: Date = new Date()): Promise<Record<DispatchOutcome, number>> {
-    const due = (await this.prisma.reminder.findMany({
-      where: { status: ReminderStatus.PENDING, remindAt: { lte: now } },
+    const candidates = (await this.prisma.reminder.findMany({
+      where: {
+        status: ReminderStatus.PENDING,
+        remindAt: { lte: now },
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+      },
       orderBy: { remindAt: 'asc' },
       take: DISPATCH_BATCH,
       include: {
@@ -51,27 +69,47 @@ export class ReminderDispatchService {
     })) as unknown as DueReminder[];
 
     const tally = this.emptyTally();
-    for (const reminder of due) {
+    let processed = 0;
+    for (const reminder of candidates) {
+      // Claim atómico: solo quien logra el update (count === 1) procesa. Adelanta
+      // `nextAttemptAt` (lease) para que otra instancia/tick no lo tome en paralelo.
+      const claim = await this.prisma.reminder.updateMany({
+        where: {
+          id: reminder.id,
+          status: ReminderStatus.PENDING,
+          OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+        },
+        data: { nextAttemptAt: new Date(now.getTime() + CLAIM_LEASE_MS) },
+      });
+      if (claim.count === 0) {
+        continue; // otra instancia/tick lo tomó primero
+      }
       const outcome = await this.dispatchOne(reminder, now);
       tally[outcome] += 1;
+      processed += 1;
     }
 
-    if (due.length > 0) {
+    if (processed > 0) {
+      const cancelled =
+        tally['cancelled-no-consent'] + tally['expired-cancelled'] + tally['failed-cancelled'];
+      const deferred =
+        tally['deferred-no-config'] + tally['deferred-needs-template'] + tally['deferred-send-failed'];
       this.logger.log(
-        `Recordatorios vencidos: ${due.length} · enviados ${tally.sent}, ` +
-          `cancelados ${tally['cancelled-no-consent'] + tally['expired-cancelled']}, ` +
-          `aplazados ${tally['deferred-no-config'] + tally['deferred-needs-template'] + tally['deferred-send-failed']}`,
+        `Recordatorios procesados: ${processed} · enviados ${tally.sent}, cancelados ${cancelled}, aplazados ${deferred}`,
       );
     }
     return tally;
   }
 
-  /** Intenta despachar un recordatorio y actualiza su estado según el resultado. */
+  /**
+   * Intenta despachar un recordatorio ya reclamado y decide su próxima transición.
+   * Asume que el llamador tomó el claim (lease en `nextAttemptAt`).
+   */
   async dispatchOne(reminder: DueReminder, now: Date = new Date()): Promise<DispatchOutcome> {
     // RF-12: sin consentimiento GRANTED no se envía nada proactivo.
     const consent = reminder.contact.consent;
     if (!consent || consent.status !== ConsentStatus.GRANTED) {
-      await this.setStatus(reminder.id, ReminderStatus.CANCELLED);
+      await this.cancel(reminder.id);
       this.logger.warn(`Recordatorio ${reminder.id} cancelado: contacto sin opt-in (RF-12)`);
       return 'cancelled-no-consent';
     }
@@ -79,20 +117,22 @@ export class ReminderDispatchService {
     // Necesita número del tenant y credenciales de Meta para poder enviar.
     const phoneNumberId = reminder.tenant.whatsappPhoneNumberId;
     if (!phoneNumberId || !this.sender.isEnabled()) {
-      return 'deferred-no-config'; // se queda PENDING hasta que haya configuración
+      await this.deferUntil(reminder.id, now, DEFER_RETRY_MS);
+      return 'deferred-no-config';
     }
 
     // RF-10: fuera de la ventana de 24h se requiere plantilla pre-aprobada.
     const lastInboundAt = await this.latestInboundAt(reminder.tenantId, reminder.contactId);
     if (!isWithinServiceWindow(lastInboundAt, now)) {
       if (this.isExpired(reminder, now)) {
-        await this.setStatus(reminder.id, ReminderStatus.CANCELLED);
+        await this.cancel(reminder.id);
         this.logger.warn(
           `Recordatorio ${reminder.id} cancelado (expirado): fuera de la ventana de 24h y sin plantilla`,
         );
         return 'expired-cancelled';
       }
-      return 'deferred-needs-template'; // se queda PENDING hasta implementar plantillas
+      await this.deferUntil(reminder.id, now, DEFER_RETRY_MS);
+      return 'deferred-needs-template';
     }
 
     // Dentro de la ventana: se puede enviar texto libre.
@@ -102,28 +142,36 @@ export class ReminderDispatchService {
         to: reminder.contact.phone,
         text: reminder.message,
       });
-      await this.setStatus(reminder.id, ReminderStatus.SENT);
+      await this.markSent(reminder.id);
       this.logger.log(`Recordatorio ${reminder.id} enviado a ${reminder.contact.phone}`);
       return 'sent';
     } catch (err) {
       this.logger.error(
         `Fallo enviando recordatorio ${reminder.id}: ${(err as Error).message}`,
       );
-      // Acota el reintento: un fallo persistente (p. ej. teléfono inválido que
-      // Meta siempre rechaza) se cancela al expirar en vez de reintentar por
-      // siempre cada tick.
-      if (this.isExpired(reminder, now)) {
-        await this.setStatus(reminder.id, ReminderStatus.CANCELLED);
-        this.logger.warn(`Recordatorio ${reminder.id} cancelado (expirado): fallo de envío persistente`);
-        return 'expired-cancelled';
-      }
-      return 'deferred-send-failed'; // sigue PENDING y se reintenta en el próximo tick
+      return this.handleSendFailure(reminder, now);
     }
   }
 
-  /** Un recordatorio proactivo que lleva más de `REMINDER_EXPIRY_MS` sin poder enviarse. */
-  private isExpired(reminder: DueReminder, now: Date): boolean {
-    return now.getTime() - reminder.remindAt.getTime() > REMINDER_EXPIRY_MS;
+  /** Backoff exponencial y cancelación tras demasiados intentos o expiración. */
+  private async handleSendFailure(reminder: DueReminder, now: Date): Promise<DispatchOutcome> {
+    const attempts = reminder.attempts + 1;
+    if (attempts >= MAX_SEND_ATTEMPTS || this.isExpired(reminder, now)) {
+      await this.cancel(reminder.id, attempts);
+      this.logger.warn(
+        `Recordatorio ${reminder.id} cancelado tras ${attempts} intento(s) de envío fallidos`,
+      );
+      return 'failed-cancelled';
+    }
+    const backoff = Math.min(
+      SEND_BACKOFF_BASE_MS * 2 ** (attempts - 1),
+      SEND_BACKOFF_MAX_MS,
+    );
+    await this.prisma.reminder.update({
+      where: { id: reminder.id },
+      data: { attempts, nextAttemptAt: new Date(now.getTime() + backoff) },
+    });
+    return 'deferred-send-failed';
   }
 
   /** Última hora de mensaje entrante del contacto (para evaluar la ventana de 24h). */
@@ -138,8 +186,32 @@ export class ReminderDispatchService {
     return conversation?.lastInboundAt ?? null;
   }
 
-  private setStatus(id: string, status: ReminderStatus): Promise<Reminder> {
-    return this.prisma.reminder.update({ where: { id }, data: { status } });
+  private isExpired(reminder: DueReminder, now: Date): boolean {
+    return now.getTime() - reminder.remindAt.getTime() > REMINDER_EXPIRY_MS;
+  }
+
+  private markSent(id: string): Promise<Reminder> {
+    return this.prisma.reminder.update({
+      where: { id },
+      data: { status: ReminderStatus.SENT },
+    });
+  }
+
+  private cancel(id: string, attempts?: number): Promise<Reminder> {
+    return this.prisma.reminder.update({
+      where: { id },
+      data: attempts === undefined
+        ? { status: ReminderStatus.CANCELLED }
+        : { status: ReminderStatus.CANCELLED, attempts },
+    });
+  }
+
+  /** Reprograma el recordatorio (sigue PENDING) para no acaparar el batch. */
+  private deferUntil(id: string, now: Date, delayMs: number): Promise<Reminder> {
+    return this.prisma.reminder.update({
+      where: { id },
+      data: { nextAttemptAt: new Date(now.getTime() + delayMs) },
+    });
   }
 
   private emptyTally(): Record<DispatchOutcome, number> {
@@ -147,6 +219,7 @@ export class ReminderDispatchService {
       sent: 0,
       'cancelled-no-consent': 0,
       'expired-cancelled': 0,
+      'failed-cancelled': 0,
       'deferred-no-config': 0,
       'deferred-needs-template': 0,
       'deferred-send-failed': 0,

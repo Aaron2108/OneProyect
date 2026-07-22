@@ -6,7 +6,10 @@ import {
   PROCESS_INBOUND_MESSAGE,
   WHATSAPP_INBOUND_QUEUE,
 } from './whatsapp.constants';
-import { verifyWhatsAppSignature } from './whatsapp-signature.util';
+import {
+  timingSafeStringEqual,
+  verifyWhatsAppSignature,
+} from './whatsapp-signature.util';
 import { InboundMessageJob, WhatsAppWebhookBody } from './whatsapp.types';
 
 @Injectable()
@@ -27,8 +30,8 @@ export class WhatsappService {
     token: string | undefined,
     challenge: string | undefined,
   ): string | null {
-    const expected = this.config.get<string>('whatsapp.verifyToken');
-    if (mode === 'subscribe' && token && token === expected) {
+    const expected = this.config.get<string>('whatsapp.verifyToken') ?? '';
+    if (mode === 'subscribe' && token && expected && timingSafeStringEqual(token, expected)) {
       return challenge ?? '';
     }
     return null;

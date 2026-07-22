@@ -12,12 +12,13 @@ import { ConversationStatus } from '@prisma/client';
 import { AuthContext } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.decorator';
 import { ConversationsService } from './conversations.service';
 import { ListConversationsDto } from './dto/list-conversations.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('conversations')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 

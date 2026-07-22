@@ -1,6 +1,8 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
@@ -28,6 +30,10 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
         },
       }),
     }),
+    // Rate limiting global (red de seguridad por IP). El webhook de WhatsApp se
+    // exceptúa con @SkipThrottle (Meta envía ráfagas); auth usa un límite más
+    // estricto con @Throttle. Ver SECURITY.md.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     HealthModule,
     AuthModule,
@@ -37,5 +43,6 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     RemindersModule,
     WhatsappModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

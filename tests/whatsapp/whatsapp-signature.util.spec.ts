@@ -1,5 +1,19 @@
 import { createHmac } from 'crypto';
-import { verifyWhatsAppSignature } from '../../src/whatsapp/whatsapp-signature.util';
+import {
+  timingSafeStringEqual,
+  verifyWhatsAppSignature,
+} from '../../src/whatsapp/whatsapp-signature.util';
+
+describe('timingSafeStringEqual', () => {
+  it('es true para cadenas iguales', () => {
+    expect(timingSafeStringEqual('verify_token_123', 'verify_token_123')).toBe(true);
+  });
+  it('es false para cadenas distintas (incluso de distinta longitud)', () => {
+    expect(timingSafeStringEqual('token', 'token-x')).toBe(false);
+    expect(timingSafeStringEqual('a', 'b')).toBe(false);
+    expect(timingSafeStringEqual('', 'x')).toBe(false);
+  });
+});
 
 describe('verifyWhatsAppSignature', () => {
   const appSecret = 'test_app_secret';

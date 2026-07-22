@@ -1,4 +1,15 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
+
+/**
+ * Compara dos cadenas en tiempo constante (no filtra por temporización si
+ * coinciden o dónde difieren). Se comparan sus digests SHA-256 para tener
+ * siempre buffers de igual longitud.
+ */
+export function timingSafeStringEqual(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a, 'utf8').digest();
+  const hb = createHash('sha256').update(b, 'utf8').digest();
+  return timingSafeEqual(ha, hb);
+}
 
 /**
  * Verifica la firma `X-Hub-Signature-256` que Meta envía en cada webhook POST.

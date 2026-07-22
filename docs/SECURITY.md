@@ -35,6 +35,9 @@ modificar datos de otro**. Se garantiza así:
   reprocesan (evita disparar IA/acciones repetidas → guarda de costo y de efectos).
 - El webhook responde rápido y encola; el trabajo real corre en el worker (BullMQ), fuera del
   ciclo de respuesta.
+- El `verify_token` del registro (GET) se compara en **tiempo constante**.
+- El webhook está **exento del rate limiting** (`@SkipThrottle`): Meta envía ráfagas legítimas;
+  la firma HMAC ya lo protege.
 
 ## 4. Secretos y configuración
 
@@ -59,7 +62,14 @@ usan el software), no del propio tenant operador. Controles: acceso siempre filt
 tenant (sección 1), y —pendiente para fases posteriores— políticas de retención/borrado y
 cifrado de campos sensibles en reposo si el volumen o la normativa lo exigen.
 
-## 7. Requisitos transversales
+## 7. Rate limiting (implementado ✅)
+
+- `ThrottlerGuard` global (`@nestjs/throttler`): 100 req/min por IP como red de seguridad.
+- `/auth/login` y `/auth/register` con límite estricto (10/min por IP) para frenar fuerza
+  bruta de contraseñas y abuso de registro.
+- El webhook de WhatsApp está exento (ver sección 3).
+
+## 8. Requisitos transversales
 
 - Validar toda entrada en los límites del sistema (DTOs con `class-validator`, `ValidationPipe`
   global con `whitelist`/`forbidNonWhitelisted`; verificación de firma en el webhook).
@@ -67,9 +77,10 @@ cifrado de campos sensibles en reposo si el volumen o la normativa lo exigen.
 - Revisión humana antes de cualquier `git push` o cambio que afecte auth, autorización o
   manejo de datos sensibles.
 
-## 8. Pendiente (fases posteriores)
+## 9. Pendiente (fases posteriores)
 
-- Rate limiting por tenant/IP en la API pública.
+- Rate limiting distribuido por tenant (además del actual por IP) con backend Redis si se
+  despliega multi-instancia.
 - Cifrado en reposo de campos sensibles y política de retención/borrado de PII.
 - Rotación de `JWT_SECRET` y expiración/refresh de tokens más granular.
 - Almacenamiento cifrado del access token de Meta por tenant (onboarding multi-número).

@@ -189,6 +189,11 @@ model Reminder {
   message       String
   remindAt      DateTime       @map("remind_at")
   status        ReminderStatus @default(PENDING)
+  // Despacho a prueba de concurrencia/escala: `nextAttemptAt` actúa como lease
+  // (claim atómico entre instancias) y como backoff; `attempts` cuenta los
+  // envíos fallidos para acotar reintentos. Ver ReminderDispatchService.
+  attempts      Int            @default(0)
+  nextAttemptAt DateTime?      @map("next_attempt_at")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
 
@@ -198,6 +203,7 @@ model Reminder {
 
   @@index([tenantId])
   @@index([status, remindAt])
+  @@index([status, nextAttemptAt])
   @@map("reminders")
 }
 

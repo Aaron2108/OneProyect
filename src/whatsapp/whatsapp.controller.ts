@@ -11,10 +11,15 @@ import {
   Req,
   UnauthorizedException,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsAppWebhookBody } from './whatsapp.types';
 
+// El webhook no se limita por tasa: Meta puede enviar ráfagas legítimas de
+// eventos y limitarlas descartaría mensajes reales. La firma HMAC ya protege
+// esta ruta frente a llamadas no autorizadas.
+@SkipThrottle()
 @Controller('webhooks/whatsapp')
 export class WhatsappController {
   constructor(private readonly whatsapp: WhatsappService) {}
