@@ -25,13 +25,37 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     return new ConversationsService(makePrisma(prisma), sender);
   }
 
-  it('list filtra por tenantId y ordena por actividad reciente', async () => {
+  it('list filtra por tenantId y ordena por actividad reciente (keyset estable)', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const service = makeService({ conversation: { findMany } });
-    await service.list('t1', {});
+    const res = await service.list('t1', {});
     const arg = findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ tenantId: 't1' });
-    expect(arg.orderBy).toEqual({ lastMessageAt: 'desc' });
+    expect(arg.orderBy).toEqual([{ lastMessageAt: 'desc' }, { id: 'desc' }]);
+    expect(arg.take).toBe(25);
+    expect(res).toEqual({ items: [], nextCursor: null });
+  });
+
+  it('list aplica búsqueda por nombre/teléfono del contacto', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const service = makeService({ conversation: { findMany } });
+    await service.list('t1', { q: 'Ana' });
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.contact.OR).toEqual([
+      { name: { contains: 'Ana', mode: 'insensitive' } },
+      { phone: { contains: 'Ana' } },
+    ]);
+  });
+
+  it('list devuelve nextCursor cuando la página está llena y usa cursor', async () => {
+    const page = Array.from({ length: 25 }, (_, i) => ({ id: 'c' + i }));
+    const findMany = jest.fn().mockResolvedValue(page);
+    const service = makeService({ conversation: { findMany } });
+    const res = await service.list('t1', { limit: 25, cursor: 'c-prev' });
+    expect(res.nextCursor).toBe('c24');
+    const arg = findMany.mock.calls[0][0];
+    expect(arg.cursor).toEqual({ id: 'c-prev' });
+    expect(arg.skip).toBe(1);
   });
 
   it('handoffToHuman cambia handledBy a HUMAN (silencia la IA)', async () => {

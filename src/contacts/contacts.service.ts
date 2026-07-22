@@ -6,6 +6,7 @@ import {
 import { Contact } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateContactDto } from './dto/create-contact.dto';
+import { ListContactsDto } from './dto/list-contacts.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 
 /**
@@ -17,11 +18,31 @@ import { UpdateContactDto } from './dto/update-contact.dto';
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(tenantId: string): Promise<Contact[]> {
-    return this.prisma.contact.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
+  /** Contactos del tenant con búsqueda y paginación keyset (cursor). */
+  async list(
+    tenantId: string,
+    opts: ListContactsDto,
+  ): Promise<{ items: Contact[]; nextCursor: string | null }> {
+    const limit = opts.limit ?? 25;
+    const q = opts.q?.trim();
+    const items = await this.prisma.contact.findMany({
+      where: {
+        tenantId,
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: 'insensitive' } },
+                { phone: { contains: q } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
+    const nextCursor = items.length === limit ? items[items.length - 1].id : null;
+    return { items, nextCursor };
   }
 
   async get(tenantId: string, id: string): Promise<Contact> {

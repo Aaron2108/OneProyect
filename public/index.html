@@ -150,6 +150,10 @@
     .filters select { flex: 1; padding: 7px 9px; border: 1.5px solid var(--line-strong); border-radius: 8px; background: #fcfdfc; font-size: 13px; color: var(--ink-soft); transition: border-color .15s; }
     .filters select:hover { border-color: var(--brand); }
     .roster__list { flex: 1; overflow-y: auto; }
+    .search { width: 100%; margin-top: 9px; padding: 8px 11px 8px 32px; border: 1.5px solid var(--line-strong); border-radius: 9px; background: #fcfdfc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%23606c64' stroke-width='2.2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") no-repeat 10px center; font-size: 13.5px; transition: border-color .18s, box-shadow .18s; }
+    .search:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
+    .loadmore { display: block; width: calc(100% - 24px); margin: 12px; padding: 9px; border: 1.5px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink-soft); font-weight: 600; font-size: 13px; transition: border-color .15s, color .15s; }
+    .loadmore:hover { border-color: var(--brand); color: var(--brand); }
     .conv { display: flex; gap: 11px; padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: pointer; transition: background .14s; position: relative; }
     .conv::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--brand); transform: scaleY(0); transition: transform .18s var(--ease); }
     .conv:hover { background: #f7faf6; }
@@ -397,6 +401,7 @@
                 <option value="HUMAN">Atiende un humano</option>
               </select>
             </div>
+            <input id="convSearch" class="search" type="search" placeholder="Buscar por nombre o teléfono" aria-label="Buscar conversaciones" />
           </div>
           <div class="roster__list" id="convList" aria-live="polite"></div>
         </div>
@@ -427,6 +432,7 @@
             <input id="c_name" placeholder="Nombre (opcional)" />
             <button id="c_add" type="submit">Añadir contacto</button>
           </form>
+          <input id="contactSearch" class="search" type="search" placeholder="Buscar por nombre o teléfono" aria-label="Buscar contactos" style="margin-bottom:16px" />
           <div class="card" id="cBody"></div>
         </div>
       </section>
@@ -624,8 +630,11 @@
     }
 
     // ---- Bandeja ----
-    $('fStatus').onchange = loadConversations;
-    $('fHandled').onchange = loadConversations;
+    let convState = { items: [], cursor: null };
+    let convSearchTimer = null;
+    $('fStatus').onchange = () => loadConversations();
+    $('fHandled').onchange = () => loadConversations();
+    $('convSearch').addEventListener('input', () => { clearTimeout(convSearchTimer); convSearchTimer = setTimeout(() => loadConversations(), 300); });
 
     function handlerPill(c) {
       if (c.status === 'CLOSED') return '<span class="pill pill--closed"><i></i>Cerrada</span>';
@@ -639,32 +648,45 @@
       return h;
     }
 
-    async function loadConversations() {
+    // reset=true carga la 1ª página (filtros/búsqueda); reset=false añade con cursor.
+    async function loadConversations(reset = true) {
       const el = $('convList');
-      if (!el.querySelector('.conv')) el.innerHTML = skeleton();
+      if (reset && !el.querySelector('.conv')) el.innerHTML = skeleton();
       const qs = new URLSearchParams();
       if ($('fStatus').value) qs.set('status', $('fStatus').value);
       if ($('fHandled').value) qs.set('handledBy', $('fHandled').value);
-      try { renderConvList(await api('/conversations' + (qs.toString() ? '?' + qs : ''))); } catch (e) {}
+      const q = $('convSearch').value.trim(); if (q) qs.set('q', q);
+      const prevLen = reset ? 0 : convState.items.length;
+      if (!reset && convState.cursor) qs.set('cursor', convState.cursor);
+      try {
+        const res = await api('/conversations' + (qs.toString() ? '?' + qs : ''));
+        convState.items = reset ? res.items : convState.items.concat(res.items);
+        convState.cursor = res.nextCursor;
+        renderConvList(prevLen);
+      } catch (e) {}
     }
-    function renderConvList(list) {
+    function renderConvList(animateFrom = 0) {
       const el = $('convList');
+      const list = convState.items;
       if (!list.length) {
-        el.innerHTML = '<div class="empty-line">Aún no hay conversaciones.<br>Cuando un cliente escriba a tu WhatsApp, aparecerá aquí.</div>';
+        const q = $('convSearch').value.trim();
+        el.innerHTML = '<div class="empty-line">' + (q ? 'Sin resultados para “' + esc(q) + '”.' : 'Aún no hay conversaciones.<br>Cuando un cliente escriba a tu WhatsApp, aparecerá aquí.') + '</div>';
         return;
       }
       el.innerHTML = list.map((c, i) => {
         const nm = c.contact.name || c.contact.phone;
-        return '<div class="conv' + (currentConv === c.id ? ' sel' : '') + '" data-id="' + c.id + '" role="button" tabindex="0" style="animation:riseIn .4s var(--ease-out) both;animation-delay:' + (i * 35) + 'ms">'
+        const anim = i >= animateFrom ? 'animation:riseIn .4s var(--ease-out) both;animation-delay:' + ((i - animateFrom) * 30) + 'ms' : '';
+        return '<div class="conv' + (currentConv === c.id ? ' sel' : '') + '" data-id="' + c.id + '" role="button" tabindex="0" style="' + anim + '">'
           + '<div class="avatar" style="background:' + avatarColor(c.contact.id || c.contact.phone) + '">' + esc(initials(c.contact.name, c.contact.phone)) + '</div>'
           + '<div class="conv__body"><div class="conv__top"><span class="conv__name">' + esc(nm) + '</span>'
           + '<span class="conv__time">' + (c.lastMessageAt ? fmt(c.lastMessageAt) : '') + '</span></div>'
           + '<div class="conv__sub"><span class="conv__phone mono">' + esc(c.contact.phone) + '</span>' + handlerPill(c) + '</div></div></div>';
-      }).join('');
+      }).join('') + (convState.cursor ? '<button class="loadmore" id="convMore">Cargar más conversaciones</button>' : '');
       el.querySelectorAll('.conv').forEach((d) => {
         d.onclick = () => openConversation(d.dataset.id);
         d.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConversation(d.dataset.id); } };
       });
+      if ($('convMore')) $('convMore').onclick = () => loadConversations(false);
     }
 
     async function openConversation(id) {
@@ -735,17 +757,38 @@
     }
 
     // ---- Contactos ----
-    async function loadContacts() {
+    let contactState = { items: [], cursor: null };
+    let contactSearchTimer = null;
+    $('contactSearch').addEventListener('input', () => { clearTimeout(contactSearchTimer); contactSearchTimer = setTimeout(() => loadContacts(), 300); });
+
+    async function loadContacts(reset = true) {
+      const qs = new URLSearchParams();
+      const q = $('contactSearch').value.trim(); if (q) qs.set('q', q);
+      const prevLen = reset ? 0 : contactState.items.length;
+      if (!reset && contactState.cursor) qs.set('cursor', contactState.cursor);
       try {
-        const list = await api('/contacts');
-        $('cBody').innerHTML = list.length
-          ? list.map((c, i) => '<div class="crow" style="animation-delay:' + (i * 35) + 'ms">'
-              + '<div class="avatar" style="background:' + avatarColor(c.id || c.phone) + '">' + esc(initials(c.name, c.phone)) + '</div>'
-              + '<div><div class="crow__name">' + esc(c.name || 'Sin nombre') + '</div>'
-              + '<div class="crow__meta"><span class="mono" style="font-size:13px;color:var(--ink-soft)">' + esc(c.phone) + '</span></div></div>'
-              + (c.notes ? '<div class="crow__notes">' + esc(c.notes) + '</div>' : '') + '</div>').join('')
-          : '<div class="empty-line">Todavía no tienes contactos. Añade el primero arriba.</div>';
+        const res = await api('/contacts' + (qs.toString() ? '?' + qs : ''));
+        contactState.items = reset ? res.items : contactState.items.concat(res.items);
+        contactState.cursor = res.nextCursor;
+        renderContacts(prevLen);
       } catch (e) {}
+    }
+    function renderContacts(animateFrom = 0) {
+      const list = contactState.items;
+      if (!list.length) {
+        const q = $('contactSearch').value.trim();
+        $('cBody').innerHTML = '<div class="empty-line">' + (q ? 'Sin resultados para “' + esc(q) + '”.' : 'Todavía no tienes contactos. Añade el primero arriba.') + '</div>';
+        return;
+      }
+      $('cBody').innerHTML = list.map((c, i) => {
+        const anim = i >= animateFrom ? 'animation-delay:' + ((i - animateFrom) * 30) + 'ms' : 'animation:none';
+        return '<div class="crow" style="' + anim + '">'
+          + '<div class="avatar" style="background:' + avatarColor(c.id || c.phone) + '">' + esc(initials(c.name, c.phone)) + '</div>'
+          + '<div><div class="crow__name">' + esc(c.name || 'Sin nombre') + '</div>'
+          + '<div class="crow__meta"><span class="mono" style="font-size:13px;color:var(--ink-soft)">' + esc(c.phone) + '</span></div></div>'
+          + (c.notes ? '<div class="crow__notes">' + esc(c.notes) + '</div>' : '') + '</div>';
+      }).join('') + (contactState.cursor ? '<button class="loadmore" id="contactMore">Cargar más contactos</button>' : '');
+      if ($('contactMore')) $('contactMore').onclick = () => loadContacts(false);
     }
     $('newcForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();

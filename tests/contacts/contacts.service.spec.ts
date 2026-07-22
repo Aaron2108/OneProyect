@@ -7,13 +7,26 @@ describe('ContactsService (aislamiento por tenant)', () => {
     return { contact } as unknown as PrismaService;
   }
 
-  it('list filtra por tenantId', async () => {
+  it('list filtra por tenantId y pagina con keyset', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const service = new ContactsService(makePrisma({ findMany }));
-    await service.list('t1');
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { tenantId: 't1' } }),
-    );
+    const res = await service.list('t1', {});
+    const arg = findMany.mock.calls[0][0];
+    expect(arg.where).toEqual({ tenantId: 't1' });
+    expect(arg.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+    expect(arg.take).toBe(25);
+    expect(res).toEqual({ items: [], nextCursor: null });
+  });
+
+  it('list aplica búsqueda por nombre/teléfono', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const service = new ContactsService(makePrisma({ findMany }));
+    await service.list('t1', { q: '55512' });
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.OR).toEqual([
+      { name: { contains: '55512', mode: 'insensitive' } },
+      { phone: { contains: '55512' } },
+    ]);
   });
 
   it('get lanza NotFound si el contacto no es del tenant', async () => {

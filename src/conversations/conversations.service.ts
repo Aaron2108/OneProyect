@@ -27,19 +27,40 @@ export class ConversationsService {
     private readonly sender: WhatsappSenderService,
   ) {}
 
-  /** Bandeja: conversaciones del tenant ordenadas por actividad reciente. */
-  list(tenantId: string, filters: ListConversationsDto) {
-    return this.prisma.conversation.findMany({
+  /**
+   * Bandeja: conversaciones del tenant ordenadas por actividad reciente, con
+   * búsqueda por contacto y paginación keyset (cursor). El keyset (orden estable
+   * `lastMessageAt desc, id desc` + `cursor`) escala mejor que `offset` porque no
+   * recorre las filas saltadas.
+   */
+  async list(tenantId: string, filters: ListConversationsDto) {
+    const limit = filters.limit ?? 25;
+    const q = filters.q?.trim();
+    const items = await this.prisma.conversation.findMany({
       where: {
         tenantId,
         status: filters.status,
         handledBy: filters.handledBy,
+        ...(q
+          ? {
+              contact: {
+                OR: [
+                  { name: { contains: q, mode: 'insensitive' } },
+                  { phone: { contains: q } },
+                ],
+              },
+            }
+          : {}),
       },
-      orderBy: { lastMessageAt: 'desc' },
+      orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
       include: {
         contact: { select: { id: true, name: true, phone: true } },
       },
     });
+    const nextCursor = items.length === limit ? items[items.length - 1].id : null;
+    return { items, nextCursor };
   }
 
   /** Detalle de una conversación con su hilo de mensajes. */

@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { Contact } from '@prisma/client';
@@ -14,6 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.decorator';
 import { ContactsService } from './contacts.service';
 import { CreateContactDto } from './dto/create-contact.dto';
+import { ListContactsDto } from './dto/list-contacts.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 
 @Controller('contacts')
@@ -22,8 +24,8 @@ export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthContext): Promise<Contact[]> {
-    return this.contacts.list(user.tenantId);
+  list(@CurrentUser() user: AuthContext, @Query() query: ListContactsDto) {
+    return this.contacts.list(user.tenantId, query);
   }
 
   @Get(':id')
