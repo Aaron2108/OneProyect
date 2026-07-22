@@ -89,6 +89,12 @@
 **Motivo**: el plan Pro es para uso interactivo, no para acceso programático a la API (Anthropic factura la API aparte, con créditos del Console); enrutar el backend de un SaaS por el token de login sería un mal uso de la suscripción y de su ToS. El modo mock permite validar toda la cadena (webhook → cola → worker → respuesta → persistencia → acciones) sin gastar créditos, y es además una práctica sana de desarrollo local.
 **Estado**: confirmada. En producción/pruebas reales se usa `AI_PROVIDER=anthropic` (por defecto) con una `ANTHROPIC_API_KEY` con saldo.
 
+## 2026-07-21 — Módulo de envío saliente: texto libre dentro de la ventana de 24h; token global en el MVP
+
+**Decisión**: `WhatsappSenderService` envía las respuestas al cliente vía la Meta Cloud API (`POST /{phone_number_id}/messages`). En el MVP: (a) solo se envía **texto libre**, y únicamente **dentro de la ventana de servicio de 24h** (RF-10) — fuera de ella el envío se omite y se registra, dejando el uso de **plantillas pre-aprobadas** para una iteración posterior; (b) cada tenant envía desde **su propio `phone_number_id`** (`tenant.whatsappPhoneNumberId`), pero el **access token es global** (`WHATSAPP_ACCESS_TOKEN`, un único número de pruebas); (c) sin access token la respuesta se **persiste pero no se envía** (arranque local / modo mock), igual que `AiService.isEnabled()`.
+**Motivo**: enviar plantillas exige darlas de alta y aprobarlas en Meta —un paso de configuración externa aún no disponible—; el texto libre cubre el caso central del MVP (responder a quien acaba de escribir, siempre dentro de la ventana). El token por tenant (onboarding multi-número vía Embedded Signup, con almacenamiento cifrado) se difiere hasta tener más de un número real en producción.
+**Estado**: propuesta del arquitecto, revisable. La respuesta siempre queda persistida aunque el envío falle, para que sea visible en la bandeja; al enviarse con éxito se guarda el `wamid` devuelto por Meta (futuro seguimiento de entregas/lecturas).
+
 ---
 
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

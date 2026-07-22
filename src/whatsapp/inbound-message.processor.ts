@@ -12,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { HistoryTurn } from '../ai/ai.types';
 import { WHATSAPP_INBOUND_QUEUE } from './whatsapp.constants';
+import { WhatsappSenderService } from './whatsapp-sender.service';
+import { isWithinServiceWindow } from './whatsapp-window.util';
 import { InboundMessageJob } from './whatsapp.types';
 
 /** Cuántos mensajes recientes de contexto se le pasan a la IA. */
@@ -29,6 +31,7 @@ export class InboundMessageProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
+    private readonly sender: WhatsappSenderService,
   ) {
     super();
   }
@@ -121,7 +124,7 @@ export class InboundMessageProcessor extends WorkerHost {
 
     // 8. Respuesta de IA (solo si la conversación la maneja la IA — RF-11 handoff).
     if (conversation.handledBy === ConversationHandler.AI && this.ai.isEnabled()) {
-      await this.respondWithAi(tenantId, tenant.name, contact, conversation.id);
+      await this.respondWithAi(tenant, contact, conversation.id, sentAt);
     }
   }
 
@@ -130,10 +133,10 @@ export class InboundMessageProcessor extends WorkerHost {
    * reintentar en bucle una falla persistente del modelo); quedan logueados.
    */
   private async respondWithAi(
-    tenantId: string,
-    tenantName: string,
+    tenant: { id: string; name: string; whatsappPhoneNumberId: string | null },
     contact: { id: string; name: string | null; phone: string },
     conversationId: string,
+    lastInboundAt: Date,
   ): Promise<void> {
     try {
       if (!(await this.ai.withinRateLimit(conversationId))) {
@@ -146,8 +149,8 @@ export class InboundMessageProcessor extends WorkerHost {
       const history = await this.loadHistory(conversationId);
       const reply = await this.ai.respond(
         {
-          tenantId,
-          tenantName,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
           contactId: contact.id,
           contactName: contact.name,
           contactPhone: contact.phone,
@@ -159,9 +162,9 @@ export class InboundMessageProcessor extends WorkerHost {
       if (!reply.text) return;
 
       // Persistir la respuesta como mensaje saliente de la IA.
-      await this.prisma.message.create({
+      const persisted = await this.prisma.message.create({
         data: {
-          tenantId,
+          tenantId: tenant.id,
           conversationId,
           direction: MessageDirection.OUTBOUND,
           sender: MessageSender.AI,
@@ -174,13 +177,60 @@ export class InboundMessageProcessor extends WorkerHost {
         data: { lastMessageAt: new Date() },
       });
 
-      // TODO(módulo de envío): enviar `reply.text` al cliente vía Meta Cloud API
-      // respetando la ventana de 24h / plantillas (RF-10).
       this.logger.log(
         `IA respondió en conversación ${conversationId} (${reply.actions.length} acción/es)`,
       );
+
+      // Enviar la respuesta al cliente vía Meta Cloud API (RF-10).
+      await this.sendReply(tenant, contact.phone, conversationId, persisted.id, reply.text, lastInboundAt);
     } catch (err) {
       this.logger.error(`Fallo generando respuesta de IA: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Envía la respuesta ya persistida al cliente por la Meta Cloud API. La respuesta
+   * queda guardada aunque el envío no sea posible (sin credenciales, ventana de 24h
+   * cerrada o error de Meta): así siempre es visible en la bandeja. Al enviarse con
+   * éxito se guarda el wamid devuelto por Meta (para futuro seguimiento de estado).
+   */
+  private async sendReply(
+    tenant: { id: string; whatsappPhoneNumberId: string | null },
+    to: string,
+    conversationId: string,
+    messageId: string,
+    text: string,
+    lastInboundAt: Date,
+  ): Promise<void> {
+    if (!this.sender.isEnabled()) {
+      return; // sin credenciales de Meta (local/mock): respuesta persistida, no enviada
+    }
+    if (!tenant.whatsappPhoneNumberId) {
+      this.logger.warn(`Tenant ${tenant.id} sin whatsappPhoneNumberId; respuesta no enviada`);
+      return;
+    }
+    // RF-10: fuera de la ventana de 24h Meta exige plantilla pre-aprobada (diferido).
+    if (!isWithinServiceWindow(lastInboundAt)) {
+      this.logger.warn(
+        `Ventana de 24h cerrada (conversación ${conversationId}); se requiere plantilla, envío omitido`,
+      );
+      return;
+    }
+
+    try {
+      const { messageId: wamid } = await this.sender.sendText({
+        phoneNumberId: tenant.whatsappPhoneNumberId,
+        to,
+        text,
+      });
+      if (wamid) {
+        await this.prisma.message.update({
+          where: { id: messageId },
+          data: { whatsappMessageId: wamid },
+        });
+      }
+    } catch (err) {
+      this.logger.error(`Fallo enviando respuesta a Meta: ${(err as Error).message}`);
     }
   }
 

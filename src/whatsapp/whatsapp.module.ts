@@ -4,6 +4,7 @@ import { AiModule } from '../ai/ai.module';
 import { InboundMessageProcessor } from './inbound-message.processor';
 import { WHATSAPP_INBOUND_QUEUE } from './whatsapp.constants';
 import { WhatsappController } from './whatsapp.controller';
+import { WhatsappSenderService } from './whatsapp-sender.service';
 import { WhatsappService } from './whatsapp.service';
 
 @Module({
@@ -12,7 +13,7 @@ import { WhatsappService } from './whatsapp.service';
     AiModule,
   ],
   controllers: [WhatsappController],
-  providers: [WhatsappService, InboundMessageProcessor],
+  providers: [WhatsappService, WhatsappSenderService, InboundMessageProcessor],
   exports: [WhatsappService],
 })
 export class WhatsappModule {}

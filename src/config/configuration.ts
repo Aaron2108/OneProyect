@@ -21,6 +21,8 @@ export interface AppConfig {
     accessToken: string;
     phoneNumberId: string;
     appSecret: string;
+    apiBaseUrl: string;
+    graphApiVersion: string;
   };
   ai: {
     provider: string;
@@ -49,6 +51,9 @@ export default (): AppConfig => ({
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN ?? '',
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
     appSecret: process.env.WHATSAPP_APP_SECRET ?? '',
+    // Endpoint de la Meta Cloud API (envío saliente).
+    apiBaseUrl: process.env.WHATSAPP_API_BASE_URL ?? 'https://graph.facebook.com',
+    graphApiVersion: process.env.WHATSAPP_GRAPH_API_VERSION ?? 'v21.0',
   },
   ai: {
     // 'anthropic' (real) | 'mock' (pruebas locales sin gastar créditos)
