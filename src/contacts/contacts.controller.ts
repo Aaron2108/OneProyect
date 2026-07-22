@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Patch,
   Post,
@@ -26,6 +27,14 @@ export class ContactsController {
   @Get()
   list(@CurrentUser() user: AuthContext, @Query() query: ListContactsDto) {
     return this.contacts.list(user.tenantId, query);
+  }
+
+  /** Exporta los contactos a CSV. (Debe ir antes de `:id`.) */
+  @Get('export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="contactos.csv"')
+  export(@CurrentUser() user: AuthContext): Promise<string> {
+    return this.contacts.exportCsv(user.tenantId);
   }
 
   @Get(':id')

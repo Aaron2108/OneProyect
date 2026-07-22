@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   Param,
   Post,
@@ -26,6 +27,14 @@ export class ConversationsController {
   @Get()
   list(@CurrentUser() user: AuthContext, @Query() filters: ListConversationsDto) {
     return this.conversations.list(user.tenantId, filters);
+  }
+
+  /** Exporta las conversaciones a CSV. (Debe ir antes de `:id`.) */
+  @Get('export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="conversaciones.csv"')
+  export(@CurrentUser() user: AuthContext): Promise<string> {
+    return this.conversations.exportCsv(user.tenantId);
   }
 
   @Get(':id')

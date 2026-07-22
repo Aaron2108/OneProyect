@@ -8,9 +8,13 @@ import {
   MessageSender,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { toCsv } from '../common/csv.util';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { isWithinServiceWindow } from '../whatsapp/whatsapp-window.util';
 import { ListConversationsDto } from './dto/list-conversations.dto';
+
+/** Tope de filas en una exportación (evita respuestas enormes). */
+const EXPORT_LIMIT = 5000;
 
 /**
  * Bandeja de conversaciones y control del handoff humano (RF-11).
@@ -61,6 +65,28 @@ export class ConversationsService {
     });
     const nextCursor = items.length === limit ? items[items.length - 1].id : null;
     return { items, nextCursor };
+  }
+
+  /** Exporta las conversaciones del tenant a CSV. */
+  async exportCsv(tenantId: string): Promise<string> {
+    const convs = await this.prisma.conversation.findMany({
+      where: { tenantId },
+      orderBy: { lastMessageAt: 'desc' },
+      take: EXPORT_LIMIT,
+      include: { contact: { select: { name: true, phone: true } } },
+    });
+    return toCsv(
+      ['Contacto', 'Telefono', 'Estado', 'Atiende', 'SinLeer', 'UltimoMensaje', 'Creada'],
+      convs.map((c) => [
+        c.contact.name,
+        c.contact.phone,
+        c.status,
+        c.handledBy,
+        c.unreadCount,
+        c.lastMessageAt?.toISOString() ?? '',
+        c.createdAt.toISOString(),
+      ]),
+    );
   }
 
   /** Detalle de una conversación con su hilo de mensajes y el contador de notas. */

@@ -5,9 +5,13 @@ import {
 } from '@nestjs/common';
 import { Contact } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { toCsv } from '../common/csv.util';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { ListContactsDto } from './dto/list-contacts.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
+
+/** Tope de filas en una exportación (evita respuestas enormes). */
+const EXPORT_LIMIT = 5000;
 
 /**
  * CRUD de contactos. TODAS las operaciones se filtran por `tenantId` (que viene
@@ -43,6 +47,19 @@ export class ContactsService {
     });
     const nextCursor = items.length === limit ? items[items.length - 1].id : null;
     return { items, nextCursor };
+  }
+
+  /** Exporta los contactos del tenant a CSV. */
+  async exportCsv(tenantId: string): Promise<string> {
+    const contacts = await this.prisma.contact.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: EXPORT_LIMIT,
+    });
+    return toCsv(
+      ['Telefono', 'Nombre', 'Notas', 'Creado'],
+      contacts.map((c) => [c.phone, c.name, c.notes, c.createdAt.toISOString()]),
+    );
   }
 
   async get(tenantId: string, id: string): Promise<Contact> {
