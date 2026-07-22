@@ -156,6 +156,15 @@ export class ConversationsService {
     }
   }
 
+  /** Marca la conversación como leída (pone el contador de sin leer a 0). */
+  async markRead(tenantId: string, id: string): Promise<Conversation> {
+    const owned = await this.prisma.conversation.count({ where: { id, tenantId } });
+    if (owned === 0) {
+      throw new NotFoundException('Conversación no encontrada');
+    }
+    return this.prisma.conversation.update({ where: { id }, data: { unreadCount: 0 } });
+  }
+
   /** RF-11: pasar la conversación a un humano (silencia la IA). */
   handoffToHuman(tenantId: string, id: string): Promise<Conversation> {
     return this.setHandler(tenantId, id, ConversationHandler.HUMAN);

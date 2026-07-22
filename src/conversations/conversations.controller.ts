@@ -43,6 +43,13 @@ export class ConversationsController {
     return this.conversations.sendManualMessage(user.tenantId, id, dto.text);
   }
 
+  /** Marca la conversación como leída (contador de sin leer a 0). */
+  @Post(':id/read')
+  @HttpCode(200)
+  read(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.conversations.markRead(user.tenantId, id);
+  }
+
   /** RF-11: tomar la conversación como humano (silencia la IA). */
   @Post(':id/handoff')
   @HttpCode(200)

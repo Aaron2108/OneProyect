@@ -113,10 +113,15 @@ export class InboundMessageProcessor extends WorkerHost {
       },
     });
 
-    // 7. Actualizar marcas de tiempo (RF-10: ventana de 24h se mide desde aquí).
+    // 7. Actualizar marcas de tiempo (RF-10: ventana de 24h se mide desde aquí)
+    //    e incrementar el contador de sin leer del equipo.
     await this.prisma.conversation.update({
       where: { id: conversation.id },
-      data: { lastInboundAt: sentAt, lastMessageAt: sentAt },
+      data: {
+        lastInboundAt: sentAt,
+        lastMessageAt: sentAt,
+        unreadCount: { increment: 1 },
+      },
     });
 
     this.logger.log(

@@ -82,6 +82,22 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     });
   });
 
+  it('markRead pone unreadCount a 0 (scoped por tenant)', async () => {
+    const count = jest.fn().mockResolvedValue(1);
+    const update = jest.fn().mockResolvedValue({});
+    const service = makeService({ conversation: { count, update } });
+    await service.markRead('t1', 'cv1');
+    expect(update).toHaveBeenCalledWith({ where: { id: 'cv1' }, data: { unreadCount: 0 } });
+  });
+
+  it('markRead lanza NotFound si la conversación no es del tenant', async () => {
+    const count = jest.fn().mockResolvedValue(0);
+    const update = jest.fn();
+    const service = makeService({ conversation: { count, update } });
+    await expect(service.markRead('t1', 'x')).rejects.toBeInstanceOf(NotFoundException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('no actualiza una conversación de otro tenant', async () => {
     const count = jest.fn().mockResolvedValue(0);
     const update = jest.fn();

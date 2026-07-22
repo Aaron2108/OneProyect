@@ -126,6 +126,10 @@ model Conversation {
   contactId String              @map("contact_id")
   status    ConversationStatus  @default(OPEN)
   handledBy ConversationHandler @default(AI) @map("handled_by") // RF-11: quién responde ahora
+  // Contador denormalizado de mensajes entrantes sin leer por el equipo: lo
+  // incrementa el worker al recibir un entrante y se pone a 0 al abrir el hilo.
+  // Denormalizado para no recalcularlo en cada listado (escala).
+  unreadCount Int               @default(0) @map("unread_count")
   // RF-10: la ventana de 24h se calcula desde el último mensaje entrante
   lastInboundAt DateTime?       @map("last_inbound_at")
   lastMessageAt DateTime?       @map("last_message_at")
