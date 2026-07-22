@@ -1,180 +1,69 @@
-# Ruflo — Claude Code Configuration
+# WhatsFlow AI — Claude Code Configuration
 
-## Rules
+Plataforma SaaS con IA para PyMEs que centraliza la comunicación por WhatsApp
+(agente inteligente que responde con contexto del negocio, agenda citas, genera
+recordatorios y colabora con el equipo humano). Visión completa en
+[`docs/VISION.md`](docs/VISION.md).
 
-- Do what has been asked; nothing more, nothing less
-- NEVER create files unless absolutely necessary — prefer editing existing files
-- NEVER create documentation files unless explicitly requested
-- NEVER save working files or tests to root — use `/src`, `/tests`, `/docs`, `/config`, `/scripts`
-- ALWAYS read a file before editing it
-- NEVER commit secrets, credentials, or .env files
-- NEVER add a `Co-Authored-By` trailer to user commits unless this project's `.claude/settings.json` has `attribution.commit` set (#2078). The Claude Code Bash tool may suggest one in its default commit-message template — ignore it. `Co-Authored-By` is semantic authorship attribution under git/GitHub convention; the tool is the facilitator, not a co-author.
-- Keep files under 500 lines
-- Validate input at system boundaries
+## Reglas
 
-## Agent Comms (SendMessage-First Coordination)
+- Hacer solo lo que se pide; ni más ni menos.
+- Preferir editar un archivo existente antes que crear uno nuevo.
+- No crear documentación nueva salvo que se pida explícitamente.
+- No guardar archivos de trabajo/tests en la raíz — usar `/src`, `/tests`, `/docs`, `/prisma`, `/public`.
+- Leer siempre un archivo antes de editarlo.
+- Nunca commitear secretos, credenciales ni `.env`.
+- No añadir trailer `Co-Authored-By` a los commits salvo que este repo lo configure explícitamente en `.claude/settings.json` (`attribution.commit`).
+- Mantener los archivos bajo 500 líneas.
+- Validar la entrada en los límites del sistema (DTOs con `class-validator`, verificación de firma en webhooks, etc.).
 
-Named agents coordinate via `SendMessage`, not polling or shared state.
+## Stack
 
-```
-Lead (you) ←→ architect ←→ developer ←→ tester ←→ reviewer
-              (named agents message each other directly)
-```
+| Capa | Tecnología |
+|---|---|
+| Backend | Node.js + TypeScript + **NestJS** (monolito modular por feature) |
+| Base de datos | PostgreSQL (ORM **Prisma**), multi-tenant por `tenantId` |
+| Colas / async | Redis + BullMQ (procesamiento de webhooks fuera del ciclo de respuesta) |
+| Canal | WhatsApp vía **Meta Cloud API** oficial |
+| IA | Claude (Anthropic) con tool-calling · modelo por defecto `claude-haiku-4-5` |
 
-### Spawning a Coordinated Team
+Decisiones y su justificación en [`docs/DECISIONS.md`](docs/DECISIONS.md).
+Arquitectura en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-```javascript
-// ALL agents in ONE message, each knows WHO to message next
-Agent({ prompt: "Research the codebase. SendMessage findings to 'architect'.",
-  subagent_type: "researcher", name: "researcher", run_in_background: true })
-Agent({ prompt: "Wait for 'researcher'. Design solution. SendMessage to 'coder'.",
-  subagent_type: "system-architect", name: "architect", run_in_background: true })
-Agent({ prompt: "Wait for 'architect'. Implement it. SendMessage to 'tester'.",
-  subagent_type: "coder", name: "coder", run_in_background: true })
-Agent({ prompt: "Wait for 'coder'. Write tests. SendMessage results to 'reviewer'.",
-  subagent_type: "tester", name: "tester", run_in_background: true })
-Agent({ prompt: "Wait for 'tester'. Review code quality and security.",
-  subagent_type: "reviewer", name: "reviewer", run_in_background: true })
+## Estructura del código
 
-// Kick off the pipeline
-SendMessage({ to: "researcher", summary: "Start", message: "[task context]" })
-```
+`/src` organizado en **módulos de NestJS por feature** (controlador → servicio → Prisma):
 
-### Patterns
+- `auth/` — registro/login JWT con scope de tenant (guard sin passport, hashing scrypt).
+- `contacts/` · `conversations/` · `appointments/` · `reminders/` — CRUD con aislamiento por tenant.
+- `whatsapp/` — webhook (verificación + firma HMAC), cola BullMQ, worker de entrada, envío saliente (Meta Cloud API), ventana de 24h.
+- `ai/` — motor de IA (Claude + tool-calling), guarda de costo, proveedor `mock` para pruebas.
+- `prisma/` · `config/` · `health/` — infraestructura transversal.
 
-| Pattern | Flow | Use When |
-|---------|------|----------|
-| **Pipeline** | A → B → C → D | Sequential dependencies (feature dev) |
-| **Fan-out** | Lead → A, B, C → Lead | Independent parallel work (research) |
-| **Supervisor** | Lead ↔ workers | Ongoing coordination (complex refactor) |
-
-### Rules
-
-- ALWAYS name agents — `name: "role"` makes them addressable
-- ALWAYS include comms instructions in prompts — who to message, what to send
-- Spawn ALL agents in ONE message with `run_in_background: true`
-- After spawning: STOP, tell user what's running, wait for results
-- NEVER poll status — agents message back or complete automatically
-
-## Swarm & Routing
-
-### Config
-- **Topology**: hierarchical-mesh (anti-drift)
-- **Max Agents**: 15
-- **Memory**: hybrid
-- **HNSW**: Enabled
-- **Neural**: Enabled
-
-```bash
-npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --strategy specialized
-```
-
-### Agent Routing
-
-| Task | Agents | Topology |
-|------|--------|----------|
-| Bug Fix | researcher, coder, tester | hierarchical |
-| Feature | architect, coder, tester, reviewer | hierarchical |
-| Refactor | architect, coder, reviewer | hierarchical |
-| Performance | perf-engineer, coder | hierarchical |
-| Security | security-architect, auditor | hierarchical |
-
-### When to Swarm
-- **YES**: 3+ files, new features, cross-module refactoring, API changes, security, performance
-- **NO**: single file edits, 1-2 line fixes, docs updates, config changes, questions
-
-### 3-Tier Model Routing
-
-| Tier | Handler | Use Cases |
-|------|---------|-----------|
-| 1 | Agent Booster (WASM) | Simple transforms — skip LLM, use Edit directly |
-| 2 | Haiku | Simple tasks, low complexity |
-| 3 | Sonnet/Opus | Architecture, security, complex reasoning |
-
-## Memory & Learning
-
-### Before Any Task
-```bash
-npx @claude-flow/cli@latest memory search --query "[task keywords]" --namespace patterns
-npx @claude-flow/cli@latest hooks route --task "[task description]"
-```
-
-### After Success
-```bash
-npx @claude-flow/cli@latest memory store --namespace patterns --key "[name]" --value "[what worked]"
-npx @claude-flow/cli@latest hooks post-task --task-id "[id]" --success true --store-results true
-```
-
-### MCP Tools (use `ToolSearch("keyword")` to discover)
-
-| Category | Key Tools |
-|----------|-----------|
-| **Memory** | `memory_store`, `memory_search`, `memory_search_unified` |
-| **Bridge** | `memory_import_claude`, `memory_bridge_status` |
-| **Swarm** | `swarm_init`, `swarm_status`, `swarm_health` |
-| **Agents** | `agent_spawn`, `agent_list`, `agent_status` |
-| **Hooks** | `hooks_route`, `hooks_post-task`, `hooks_worker-dispatch` |
-| **Security** | `aidefence_scan`, `aidefence_is_safe`, `aidefence_has_pii` |
-| **Hive-Mind** | `hive-mind_init`, `hive-mind_consensus`, `hive-mind_spawn` |
-
-### Background Workers
-
-| Worker | When |
-|--------|------|
-| `audit` | After security changes |
-| `optimize` | After performance work |
-| `testgaps` | After adding features |
-| `map` | Every 5+ file changes |
-| `document` | After API changes |
-
-```bash
-npx @claude-flow/cli@latest hooks worker dispatch --trigger audit
-```
-
-## Agents
-
-**Core**: `coder`, `reviewer`, `tester`, `planner`, `researcher`
-**Architecture**: `system-architect`, `backend-dev`, `mobile-dev`
-**Security**: `security-architect`, `security-auditor`
-**Performance**: `performance-engineer`, `perf-analyzer`
-**Coordination**: `hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`
-**GitHub**: `pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`
-
-Any string works as a custom agent type.
+**Principio de seguridad transversal**: el `tenantId` (y en la IA, también el `contactId`)
+proviene SIEMPRE del contexto de confianza (el token JWT o el contexto de la conversación),
+nunca de la entrada del cliente. Ningún endpoint ni herramienta de IA puede operar sobre
+datos de otro tenant.
 
 ## Build & Test
 
-- ALWAYS run tests after code changes
-- ALWAYS verify build succeeds before committing
-
 ```bash
-npm run build && npm test
+npm run build && npm test     # compilar y correr los tests (Jest)
+npm run start:dev             # desarrollo con recarga
+npm run db:up                 # levantar Postgres + Redis (Docker)
 ```
 
-## CLI Quick Reference
+- Correr los tests después de cambios de código.
+- Verificar que el build compila antes de commitear.
 
-```bash
-npx @claude-flow/cli@latest init --wizard           # Setup
-npx @claude-flow/cli@latest swarm init --v3-mode     # Start swarm
-npx @claude-flow/cli@latest memory search --query "" # Vector search
-npx @claude-flow/cli@latest hooks route --task ""    # Route to agent
-npx @claude-flow/cli@latest doctor --fix             # Diagnostics
-npx @claude-flow/cli@latest security scan            # Security scan
-npx @claude-flow/cli@latest performance benchmark    # Benchmarks
-```
+**Pruebas de la IA sin gastar créditos**: `AI_PROVIDER=mock npm run start` — el agente
+devuelve respuestas simuladas y ejecuta el tool-calling real contra la BD.
 
-26 commands, 140+ subcommands. Use `--help` on any command for details.
+## Convenciones
 
-## Setup
-
-```bash
-claude mcp add claude-flow -- npx -y ruflo@latest mcp start
-npx ruflo@latest doctor --fix
-```
-
-> The background `daemon` is optional. It runs interval workers that each spawn
-> a headless `claude` session, so it consumes tokens continuously. Start it only
-> if you want those sweeps: `npx ruflo@latest daemon start` (self-stops after 12h
-> by default; `--ttl 0` to disable, `daemon status --all` to audit running daemons).
-
-**Agent tool** handles execution (agents, files, code, git). **MCP tools** handle coordination (swarm, memory, hooks). **CLI** is the same via Bash.
+- Código y comentarios en español (coherente con el resto del repo).
+- Cada tarea del Sprint 1 y su estado están en [`docs/TASKS.md`](docs/TASKS.md).
+- Las decisiones de arquitectura se **registran** en `docs/DECISIONS.md`, no se sobreescriben:
+  un cambio que reemplaza algo documentado se añade como entrada nueva.
+- El contenido de negocio (VISION, REQUIREMENTS, etc.) no se inventa; se completa solo con
+  información proporcionada por el propietario.

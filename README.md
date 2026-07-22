@@ -60,8 +60,3 @@ Toda en [`/docs`](docs/). Claves para el desarrollo del MVP:
 | [`TASKS.md`](docs/TASKS.md) | Backlog del Sprint 1. |
 | [`SECURITY.md`](docs/SECURITY.md) | Postura de seguridad y cumplimiento con Meta. |
 | [`DECISIONS.md`](docs/DECISIONS.md) | Log de decisiones de arquitectura. |
-| [`AGENTS.md`](docs/AGENTS.md) · [`AI_RULES.md`](docs/AI_RULES.md) | Agentes de desarrollo y reglas de colaboración con IA. |
-
-## Nota sobre el framework de desarrollo
-
-Este repo se apoya en el framework [`ruflo`](https://www.npmjs.com/package/ruflo) (carpetas `.claude/`, `.claude-flow/`, `.swarm/`) **solo como herramienta de orquestación del desarrollo** — no forma parte del runtime de producción de WhatsFlow AI. Ver [`docs/REPOSITORY_ANALYSIS.md`](docs/REPOSITORY_ANALYSIS.md) y la aclaración en `ARCHITECTURE.md` §2.

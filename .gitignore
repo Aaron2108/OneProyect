@@ -8,19 +8,15 @@ coverage/
 .env.*.local
 *.tsbuildinfo
 
-.claude-flow/data/
-.claude-flow/logs/
-.claude-flow/sessions/
-.claude-flow/neural/
+# Logs y temporales
 *.log
 *.tmp
-.swarm/memory.db
 
-# Estado de runtime generado por el framework ruflo (local a la máquina, no versionar)
-*.pid
-.claude-flow/daemon.pid
-.claude-flow/daemon-state.json
-.claude-flow/harness-active-policy.json
-.claude-flow/metrics/
-.claude/.proven-config-version
-.claude/proven-config.json
+# Estado local de Claude Code (no versionar)
+.claude/settings.local.json
+
+# Red de seguridad: si un ruflo global (fuera del repo) regenerara estas
+# carpetas, que no se vuelvan a versionar. El framework se retiró del proyecto.
+.claude-flow/
+.swarm/
+.mcp.json

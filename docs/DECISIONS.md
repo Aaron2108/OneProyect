@@ -101,6 +101,12 @@
 **Motivo**: passport añade abstracción e indirecta que no aporta en un MVP con una sola estrategia (JWT). `scrypt` es un KDF recomendado y suficiente, sin el dolor de instalar `bcrypt` en Windows. El email único global evita que el login por email (que no pide tenant) sea ambiguo entre tenants; es una restricción más estricta a propósito, revisable si en el futuro un mismo email debe pertenecer a varias empresas (entonces el login pediría identificar el tenant).
 **Estado**: propuesta del arquitecto, revisable. El `tenantId` viaja en el token y es la única fuente del scope de tenant en las consultas (nunca el cliente) — mismo principio de aislamiento que las herramientas de la IA.
 
+## 2026-07-21 — Eliminación de `ruflo`/Claude-Flow del repositorio (revierte la adopción)
+
+**Decisión**: se elimina por completo el framework `ruflo`/Claude-Flow del repo: carpetas `.claude/agents/`, `.claude/commands/`, `.claude/skills/`, `.claude/helpers/`, `.claude-flow/`, `.swarm/`, el archivo `.mcp.json` y la configuración `claudeFlow` de `.claude/settings.json`. También se borran los documentos que solo describían ese framework (`REPOSITORY_ANALYSIS.md`, `AGENTS.md`, `AI_RULES.md`) y se reescribe `CLAUDE.md` enfocado en WhatsFlow AI. **Revierte** la decisión "2026-07-21 — Adopción de `ruflo` como framework base" y deja sin efecto "2026-07-22 — No modificar archivos gestionados por el framework".
+**Motivo**: el desarrollo del MVP se hizo con Claude Code directamente, sin usar la capa de orquestación multi-agente de `ruflo` (los "agentes especializados" son el mismo modelo con un prompt de rol, no capacidades distintas; para trabajo secuencial con contexto ya cargado no aportaban valor y sí sobrecoste). El framework quedaba como andamiaje sin uso: se retira para dejar el repositorio limpio y 100% enfocado en el producto. Se conserva `.claude/settings.json` reducido a la regla que impide leer `.env`.
+**Estado**: confirmada por el propietario. Si en el futuro se quisiera una coordinación multi-agente, se re-evaluaría como decisión nueva.
+
 ---
 
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

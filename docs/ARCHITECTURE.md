@@ -1,24 +1,8 @@
 # ARCHITECTURE.md
 
-> Creado: 2026-07-22
+> Creado: 2026-07-22 · Arquitectura de la aplicación WhatsFlow AI.
 
-## 1. Arquitectura del framework (definida)
-
-El repositorio hoy es 100% infraestructura de orquestación provista por `ruflo` v3.32.9 (Claude-Flow V3). Detalle completo en [`REPOSITORY_ANALYSIS.md`](REPOSITORY_ANALYSIS.md#2-arquitectura) — aquí solo el resumen operativo:
-
-```
-CLAUDE.md        → reglas de comportamiento que Claude Code carga siempre
-.claude/          → integración: settings.json (hooks/permisos), agents/, commands/, skills/, helpers/
-.claude-flow/     → runtime V3: config.yaml, métricas, estado de seguridad
-.swarm/           → persistencia: schema.sql (versionado) + memory.db (runtime, SQLite+HNSW)
-.mcp.json         → servidor MCP opcional (~210 herramientas), autoStart: false
-```
-
-Principio de capas: `CLAUDE.md` define comportamiento → `.claude/settings.json` conecta eventos de Claude Code con scripts en `.claude/helpers/` → esos scripts leen/escriben `.claude-flow/` (config/métricas) y `.swarm/memory.db` (memoria real) → `.mcp.json` expone las mismas capacidades como herramientas MCP si se activa.
-
-**Esta capa no se modifica en el bootstrap** (regla explícita del usuario) y no debe alterarse salvo mediante los comandos propios del framework (`ruflo init upgrade`, etc.).
-
-## 2. Arquitectura de la aplicación — WhatsFlow AI (Fase 1 / MVP)
+## Arquitectura de la aplicación — WhatsFlow AI (Fase 1 / MVP)
 
 **Tipo de aplicación**: API backend + panel web para el equipo de cada empresa cliente (multi-tenant SaaS). El canal de comunicación con el cliente final es WhatsApp, no una app propia.
 
@@ -62,12 +46,8 @@ Meta Cloud API (WhatsApp) ⇄ Webhook receiver (NestJS)
 
 El webhook responde de inmediato a Meta y encola el mensaje; el procesamiento real (contexto + IA + tool-calling + persistencia) ocurre de forma asíncrona vía BullMQ, para no arriesgar timeouts/reintentos de Meta.
 
-**Estructura de código en `/src`** (adoptada en Sprint 1): **módulos de NestJS por feature** con separación ligera controlador → servicio → repositorio (Prisma). La estructura hexagonal estricta (domain/application/infrastructure/presentation en capas separadas) se difiere: para el MVP añade boilerplate sin valor de validación (mismo criterio que llevó a diferir `pgvector`, ver `DECISIONS.md`). Base ya creada: `src/config/` (configuración tipada + validación de entorno), `src/prisma/` (cliente global), `src/health/` (health check). Módulos de negocio a crear: `whatsapp/` (webhook + cliente Meta), `ai/` (agente Claude + tool-calling), `contacts/`, `conversations/`, `appointments/`, `reminders/`, `auth/`, `tenants/`.
+**Estructura de código en `/src`**: **módulos de NestJS por feature** con separación ligera controlador → servicio → repositorio (Prisma). La estructura hexagonal estricta (domain/application/infrastructure/presentation en capas separadas) se difiere: para el MVP añade boilerplate sin valor de validación (mismo criterio que llevó a diferir `pgvector`, ver `DECISIONS.md`). Módulos implementados: `config/` (configuración tipada + validación de entorno), `prisma/` (cliente global), `health/` (health check), `auth/` (JWT con scope de tenant), `whatsapp/` (webhook + firma HMAC + cola + worker + envío Meta), `ai/` (agente Claude + tool-calling + proveedor mock), `contacts/`, `conversations/`, `appointments/`, `reminders/`. El panel web mínimo se sirve como estático desde `public/`.
 
-**Importante — no confundir dos capas distintas**: el framework `ruflo`/Claude-Flow (sección 1 de este documento) es la capa que **orquesta el desarrollo** de WhatsFlow AI dentro de Claude Code (agentes, memoria, swarm) — **no forma parte del runtime de producción** del SaaS. En producción, WhatsFlow AI corre como el stack descrito arriba, sin dependencia de `ruflo`/`.claude-flow`/`.swarm`. Esta distinción evita activar por error infraestructura de desarrollo (daemon, MCP, swarm) como si fuera infraestructura de producto.
+**Seguridad transversal**: el `tenantId` (y en la IA también el `contactId`) proviene siempre del contexto de confianza (token JWT / contexto de la conversación), nunca de la entrada del cliente — ningún endpoint ni herramienta de IA puede operar sobre datos de otro tenant.
 
-## 3. Relación entre ambas capas
-
-La arquitectura de aplicación (sección 2) se construirá **dentro de** `/src`, `/tests`, `/config`, `/scripts`, dejando intacta la capa de orquestación de la sección 1. Los agentes de `.claude/agents/` (ver [`AGENTS.md`](AGENTS.md)) actuarán sobre el código de `/src` según las convenciones que se definan aquí una vez elegido el stack.
-
-Cualquier decisión de arquitectura de aplicación se registra en [`DECISIONS.md`](DECISIONS.md).
+Cualquier decisión de arquitectura se registra en [`DECISIONS.md`](DECISIONS.md).

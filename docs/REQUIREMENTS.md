@@ -12,8 +12,6 @@ Derivados de las reglas duras de `CLAUDE.md` y de `.claude/settings.json`, ya vi
 - **Estructura de carpetas**: código y artefactos van en `/src`, `/tests`, `/config`, `/scripts`; documentación en `/docs`; nada de eso se guarda en la raíz salvo excepciones ya establecidas (`README.md`, `CLAUDE.md`).
 - **Tests obligatorios**: tras cualquier cambio de código, correr la suite de tests antes de considerar la tarea terminada; verificar que el build compila antes de commitear.
 - **Preferir editar sobre crear**: no generar archivos nuevos si se puede lograr el mismo resultado editando uno existente.
-- **Reutilización de agentes/skills**: antes de definir un agente o skill de proyecto nuevo, revisar el catálogo existente en [`AGENTS.md`](AGENTS.md) y en `.claude/skills/`; no duplicar responsabilidades.
-- **Cuándo usar swarm**: coordinación multi-agente (swarm) se reserva para cambios de 3+ archivos, features nuevas, refactors cross-módulo, cambios de API, seguridad o performance — no para ediciones triviales.
 
 ## 2. Requisitos funcionales de negocio — MVP (WhatsFlow AI, Fase 1)
 

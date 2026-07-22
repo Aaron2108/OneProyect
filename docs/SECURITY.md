@@ -1,42 +1,75 @@
 # SECURITY.md
 
-> Creado: 2026-07-22
+> Creado: 2026-07-22 · Actualizado: 2026-07-21 · Postura de seguridad de WhatsFlow AI.
 
-## 1. Postura actual
+## 1. Aislamiento multi-tenant (control central)
 
-El repositorio está en fase de bootstrap: sin código de aplicación, sin datos de usuarios reales, sin superficie pública propia todavía. Los riesgos de seguridad actuales provienen exclusivamente del framework de orquestación (`ruflo`) y de las convenciones aún no aplicadas a código futuro. Auditoría técnica completa en [`REPOSITORY_ANALYSIS.md`](REPOSITORY_ANALYSIS.md#11-riesgos).
+El invariante de seguridad más importante del producto: **ningún tenant puede leer ni
+modificar datos de otro**. Se garantiza así:
 
-`.claude-flow/security/audit-status.json` reporta estado `PENDING`, 0 CVEs revisados — **el propio framework no se ha auditado a sí mismo todavía en este entorno.**
+- El `tenantId` viaja en el **JWT** (firmado) y se extrae en el `JwtAuthGuard`; los
+  controladores lo reciben vía `@CurrentUser()`. **Nunca** se toma de la entrada del cliente
+  (query, body o params).
+- Todas las consultas de negocio (contactos, conversaciones, citas, recordatorios, mensajes)
+  se filtran por ese `tenantId`. Las escrituras verifican pertenencia antes de actualizar.
+- El motor de IA aplica el mismo principio: sus herramientas (crear cita/recordatorio,
+  actualizar contacto) **no exponen** `tenantId` ni `contactId` en su schema — se inyectan
+  desde el contexto de confianza de la conversación, de modo que el texto no confiable del
+  cliente final no puede redirigir una acción hacia otro contacto o tenant.
 
-## 2. Riesgos conocidos
+## 2. Autenticación y contraseñas
 
-| # | Riesgo | Severidad | Descripción |
-|---|---|---|---|
-| 1 | Telemetría/marketing auto-activado sin consentimiento previo | Media | `hook-handler.cjs` activa "spinner verbs" (texto promocional) por defecto en el primer uso (opt-out, no opt-in) y hace llamadas de red detached (`funnel`/`advisor`) en cada `SessionStart`. Documentado por el propio framework (ADR-316/318/319), pero opt-out en vez de opt-in. |
-| 2 | Auto-push sin confirmación si se activa modo `pair` | Media | `auto-commit.sh` tiene `AUTO_PUSH=true` por defecto. No se dispara desde los hooks automáticos, solo si se activa explícitamente `ruflo pair start`, pero de activarse puede pushear a `origin` sin confirmación por commit. |
-| 3 | Validación de comandos peligrosos limitada | Media | El hook `pre-bash` solo bloquea 4 patrones literales (`rm -rf /`, `format c:`, `del /s /q c:\`, fork bomb). No es una sandbox; no sustituye la confirmación humana ante comandos destructivos. |
-| 4 | Sin pin de versión del framework | Baja-Media | Todos los hooks/helpers invocan `npx ruflo@latest` / `@claude-flow/cli@latest` sin lockfile de proyecto — una actualización aguas arriba puede cambiar comportamiento sin que el repo lo refleje. |
-| 5 | Auditoría de seguridad del framework pendiente | Media (mientras dure) | `audit-status.json` en `PENDING`. Mitigable ejecutando `ruflo security scan` / `ruflo doctor --fix`. |
-| 6 | Permisos amplios pre-aprobados | Baja | `.claude/settings.json.permissions.allow` autoriza sin preguntar cualquier `Bash(npx @claude-flow*)`, `Bash(npx claude-flow*)`, `Bash(node .claude/*)` y todo `mcp__claude-flow__*` — superficie amplia de auto-aprobación para un framework de terceros. |
-| 7 | Daemon consume tokens si se activa sin supervisión | Baja (operativa) | `ruflo daemon start` lanza sesiones headless de `claude` en intervalos; se autolimita a 12h salvo `--ttl 0`. |
+- **JWT** por sesión de usuario del panel (payload: `sub`, `tenantId`, `email`, `role`),
+  firmado con `JWT_SECRET`. Guard propio sin passport.
+- Contraseñas hasheadas con **`scrypt`** (KDF nativo de Node), formato `salt:hash`,
+  comparación en tiempo constante. Nunca se almacenan en claro.
+- Login que no revela por temporización si un email existe (se verifica siempre).
+- Autorización por rol vía `@Roles()` + `RolesGuard` (OWNER/AGENT).
 
-## 3. Mitigaciones recomendadas
+## 3. Webhook de WhatsApp (Meta Cloud API)
 
-- Ejecutar `ruflo doctor --fix` y `ruflo security scan` antes de empezar a construir sobre el andamiaje (resuelve el riesgo #5).
-- Si se activa el modo `pair`, exportar `AUTO_PUSH=false` explícitamente salvo que se quiera push automático consciente (riesgo #2).
-- Considerar `RUFLO_NO_AUTO_ENABLE=1` (o `RUFLO_NO_AUTO_ENABLE_SPINNER=1`) si no se desea la activación automática de contenido promocional (riesgo #1).
-- Revisar/pinear la versión de `ruflo` usada, o vendorizarla, si se necesita estabilidad de comportamiento (riesgo #4).
-- Tratar `pre-bash`/`security-scanner.sh` como primera línea de defensa, no como sustituto de revisión humana antes de comandos destructivos o pushes (riesgo #3).
+- **Verificación de firma HMAC-SHA256** (`X-Hub-Signature-256`) contra `WHATSAPP_APP_SECRET`
+  sobre el cuerpo crudo; se rechaza (401) cualquier payload sin firma válida.
+- Verificación del webhook (`hub.verify_token`) contra `WHATSAPP_VERIFY_TOKEN`.
+- **Deduplicación** por `whatsappMessageId` (único por tenant): los reenvíos de Meta no se
+  reprocesan (evita disparar IA/acciones repetidas → guarda de costo y de efectos).
+- El webhook responde rápido y encola; el trabajo real corre en el worker (BullMQ), fuera del
+  ciclo de respuesta.
 
-## 4. Requisitos de seguridad para código futuro
+## 4. Secretos y configuración
 
-Derivados de `CLAUDE.md` y aplicables a cualquier código de negocio que se escriba a partir de ahora:
+- `.env` y `.env.*` están gitignoreados y **denegados a la lectura** por
+  `.claude/settings.json` (`permissions.deny`). Nunca se commitean.
+- Las credenciales (claves de Anthropic/Meta, `JWT_SECRET`, `DATABASE_URL`) se leen solo de
+  variables de entorno, validadas al arranque (`env.validation.ts`).
 
-- Validar toda entrada en los límites del sistema (API pública, formularios, archivos subidos, parámetros de configuración).
-- Nunca commitear secretos, credenciales o archivos `.env` (ya denegado a nivel de lectura en `settings.json`, pero debe respetarse también al escribir).
-- Revisión humana antes de cualquier `git push`, cambio de permisos, o acción que afecte infraestructura compartida.
-- Escaneo de seguridad (`ruflo security scan`) después de cualquier cambio relevante en autenticación, autorización o manejo de datos sensibles.
+## 5. Cumplimiento con Meta / mensajería
 
-## 5. Seguridad de negocio (a definir)
+- **Ventana de servicio de 24h (RF-10)**: fuera de ella no se envía texto libre; se requiere
+  plantilla pre-aprobada (pendiente de implementar el envío con plantilla).
+- **Opt-in / consentimiento (RF-12)**: se registra el consentimiento del contacto
+  (`contact_consent`) al recibir su primer mensaje entrante; la verificación de consentimiento
+  antes de enviar mensajes proactivos se completa con el módulo de recordatorios.
+- **Handoff a humano (RF-11)**: el cliente puede pedir una persona; la IA deja de responder.
 
-**PENDIENTE.** Requisitos específicos de seguridad del producto (autenticación de usuarios, cifrado de datos sensibles, cumplimiento normativo, gestión de sesiones, etc.) se definirán al recibir la descripción del proyecto y se añadirán a esta sección.
+## 6. Privacidad de datos (PII)
+
+Los datos en `contacts`/`messages` son PII de clientes finales de terceros (las PyMEs que
+usan el software), no del propio tenant operador. Controles: acceso siempre filtrado por
+tenant (sección 1), y —pendiente para fases posteriores— políticas de retención/borrado y
+cifrado de campos sensibles en reposo si el volumen o la normativa lo exigen.
+
+## 7. Requisitos transversales
+
+- Validar toda entrada en los límites del sistema (DTOs con `class-validator`, `ValidationPipe`
+  global con `whitelist`/`forbidNonWhitelisted`; verificación de firma en el webhook).
+- Nunca commitear secretos, credenciales ni `.env`.
+- Revisión humana antes de cualquier `git push` o cambio que afecte auth, autorización o
+  manejo de datos sensibles.
+
+## 8. Pendiente (fases posteriores)
+
+- Rate limiting por tenant/IP en la API pública.
+- Cifrado en reposo de campos sensibles y política de retención/borrado de PII.
+- Rotación de `JWT_SECRET` y expiración/refresh de tokens más granular.
+- Almacenamiento cifrado del access token de Meta por tenant (onboarding multi-número).
