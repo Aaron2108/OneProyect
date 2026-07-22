@@ -171,6 +171,10 @@
     .pill--ai { background: var(--ai-tint); color: var(--ai-700); }
     .pill--human { background: var(--warn-tint); color: var(--warn); }
     .pill--closed { background: #eef1ee; color: #6b7a71; }
+    .pill--owner { background: var(--brand-tint); color: var(--brand-700); }
+    .pill--agent { background: #eef1ee; color: #6b7a71; }
+    .newc select { padding: 10px 12px; border: 1.5px solid var(--line-strong); border-radius: var(--radius-sm); background: #fcfdfc; color: var(--ink); }
+    .newc select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
     .pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
     .pill--ai i { animation: livePulseSm 2.4s ease-out infinite; }
     @keyframes livePulseSm { 0% { box-shadow: 0 0 0 0 rgba(107,92,230,.5);} 70% { box-shadow: 0 0 0 5px rgba(107,92,230,0);} 100% { box-shadow: 0 0 0 0 rgba(107,92,230,0);} }
@@ -378,6 +382,7 @@
         <button data-tab="inbox" class="active">Bandeja</button>
         <button data-tab="metrics">Métricas</button>
         <button data-tab="contacts">Contactos</button>
+        <button data-tab="team">Equipo</button>
       </nav>
       <div class="topbar__spacer"></div>
       <div class="who" id="who"></div>
@@ -434,6 +439,26 @@
           </form>
           <input id="contactSearch" class="search" type="search" placeholder="Buscar por nombre o teléfono" aria-label="Buscar contactos" style="margin-bottom:16px" />
           <div class="card" id="cBody"></div>
+        </div>
+      </section>
+
+      <!-- Equipo -->
+      <section id="tab-team" class="contacts hidden">
+        <div class="contacts__wrap">
+          <h2>Equipo</h2>
+          <p class="lede">Las personas de tu empresa que atienden conversaciones. Solo el propietario puede invitar a nuevos miembros.</p>
+          <div id="teamErr" class="notice notice--err hidden" role="alert"></div>
+          <form class="newc hidden" id="inviteForm">
+            <input id="u_name" placeholder="Nombre" />
+            <input id="u_email" type="email" placeholder="Email" />
+            <input id="u_pass" type="password" placeholder="Contraseña (mín. 8)" autocomplete="new-password" />
+            <select id="u_role" aria-label="Rol">
+              <option value="AGENT">Agente</option>
+              <option value="OWNER">Propietario</option>
+            </select>
+            <button id="u_add" type="submit">Invitar</button>
+          </form>
+          <div class="card" id="teamBody"></div>
         </div>
       </section>
     </main>
@@ -548,10 +573,44 @@
         $('tab-inbox').classList.toggle('hidden', tab !== 'inbox');
         $('tab-metrics').classList.toggle('hidden', tab !== 'metrics');
         $('tab-contacts').classList.toggle('hidden', tab !== 'contacts');
+        $('tab-team').classList.toggle('hidden', tab !== 'team');
         if (tab === 'contacts') loadContacts();
         else if (tab === 'metrics') loadMetrics();
+        else if (tab === 'team') loadTeam();
         else loadConversations();
       };
+    });
+
+    // ---- Equipo ----
+    async function loadTeam() {
+      // El formulario de invitación solo lo ve el propietario (el backend además
+      // lo exige con @Roles(OWNER)).
+      $('inviteForm').classList.toggle('hidden', !(me && me.role === 'OWNER'));
+      try {
+        const list = await api('/users');
+        $('teamBody').innerHTML = list.map((u, i) => {
+          const badge = u.role === 'OWNER'
+            ? '<span class="pill pill--owner">Propietario</span>'
+            : '<span class="pill pill--agent">Agente</span>';
+          return '<div class="crow" style="animation-delay:' + (i * 30) + 'ms">'
+            + '<div class="avatar" style="background:' + avatarColor(u.id || u.email) + '">' + esc(initials(u.name, u.email)) + '</div>'
+            + '<div><div class="crow__name">' + esc(u.name) + '</div>'
+            + '<div class="crow__meta"><span class="mono" style="font-size:13px;color:var(--ink-soft)">' + esc(u.email) + '</span></div></div>'
+            + '<span style="margin-left:auto">' + badge + '</span></div>';
+        }).join('');
+      } catch (e) {}
+    }
+    $('inviteForm').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const err = $('teamErr'); err.classList.add('hidden');
+      try {
+        await api('/users', { method:'POST', body: JSON.stringify({
+          name: $('u_name').value.trim(), email: $('u_email').value.trim(),
+          password: $('u_pass').value, role: $('u_role').value }) });
+        $('u_name').value = ''; $('u_email').value = ''; $('u_pass').value = '';
+        toast('Miembro añadido');
+        loadTeam();
+      } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
     });
 
     // ---- Métricas (dashboard) ----

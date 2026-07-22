@@ -8,6 +8,7 @@ import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { AppointmentsModule } from './appointments/appointments.module';
@@ -38,6 +39,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     PrismaModule,
     HealthModule,
     AuthModule,
+    UsersModule,
     ContactsModule,
     ConversationsModule,
     AppointmentsModule,
