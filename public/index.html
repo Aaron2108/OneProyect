@@ -248,7 +248,22 @@
     .crow:last-child { border-bottom: none; }
     .crow__name { font-weight: 650; font-size: 14.5px; }
     .crow__meta { display: flex; gap: 10px; align-items: center; margin-top: 2px; }
-    .crow__notes { margin-left: auto; font-size: 13px; color: var(--ink-soft); font-style: italic; }
+    .crow__notes { margin-left: auto; font-size: 13px; color: var(--ink-soft); font-style: italic; max-width: 45%; text-align: right; }
+    .crow[data-id] { cursor: pointer; transition: background .12s; }
+    .crow[data-id]:hover { background: #f7faf6; }
+
+    /* ===== Modal ===== */
+    .modal { position: fixed; inset: 0; z-index: 55; display: grid; place-items: center; padding: 20px; background: rgba(16,40,30,.42); backdrop-filter: blur(2px); animation: fade .2s var(--ease-out); }
+    .modal__card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 22px; width: 100%; max-width: 420px; animation: bubbleIn .3s var(--ease-out); }
+    .modal__card h3 { font-family: var(--display); font-weight: 700; font-size: 18px; margin: 0 0 4px; }
+    .modal__card .sub { margin: 0 0 16px; font-size: 13px; color: var(--ink-soft); }
+    .modal__card textarea { width: 100%; padding: 11px 13px; border: 1.5px solid var(--line-strong); border-radius: var(--radius-sm); background: #fcfdfc; resize: vertical; font: inherit; }
+    .modal__card textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
+    .modal__card input[readonly] { background: #f2f5f1; color: var(--ink-soft); }
+    .modal__actions { display: flex; gap: 9px; justify-content: flex-end; margin-top: 6px; }
+    .modal__actions .btn { width: auto; padding: 10px 18px; }
+    .btn.sec { background: #eceff1; color: var(--ink); box-shadow: none; }
+    .btn.sec:hover { background: #e2e6e4; }
     .empty-line { padding: 26px; text-align: center; color: var(--ink-faint); font-size: 14px; }
 
     /* ===== Toasts ===== */
@@ -468,6 +483,31 @@
   </div>
 
   <div id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal: editar contacto -->
+  <div id="contactModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cmTitle">
+    <div class="modal__card">
+      <h3 id="cmTitle">Editar contacto</h3>
+      <p class="sub">Actualiza el nombre o deja una nota interna para tu equipo.</p>
+      <div id="cmErr" class="notice notice--err hidden" role="alert"></div>
+      <div class="field">
+        <label for="cm_phone">Teléfono</label>
+        <input id="cm_phone" class="mono" readonly />
+      </div>
+      <div class="field">
+        <label for="cm_name">Nombre</label>
+        <input id="cm_name" placeholder="Nombre del contacto" />
+      </div>
+      <div class="field">
+        <label for="cm_notes">Notas</label>
+        <textarea id="cm_notes" rows="3" placeholder="Ej. Cliente frecuente, prefiere las tardes…"></textarea>
+      </div>
+      <div class="modal__actions">
+        <button class="btn sec" id="cmCancel" type="button">Cancelar</button>
+        <button class="btn" id="cmSave" type="button">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
 
   <script>
   (function () {
@@ -853,14 +893,50 @@
       }
       $('cBody').innerHTML = list.map((c, i) => {
         const anim = i >= animateFrom ? 'animation-delay:' + ((i - animateFrom) * 30) + 'ms' : 'animation:none';
-        return '<div class="crow" style="' + anim + '">'
+        return '<div class="crow" data-id="' + c.id + '" role="button" tabindex="0" style="' + anim + '">'
           + '<div class="avatar" style="background:' + avatarColor(c.id || c.phone) + '">' + esc(initials(c.name, c.phone)) + '</div>'
           + '<div><div class="crow__name">' + esc(c.name || 'Sin nombre') + '</div>'
           + '<div class="crow__meta"><span class="mono" style="font-size:13px;color:var(--ink-soft)">' + esc(c.phone) + '</span></div></div>'
           + (c.notes ? '<div class="crow__notes">' + esc(c.notes) + '</div>' : '') + '</div>';
       }).join('') + (contactState.cursor ? '<button class="loadmore" id="contactMore">Cargar más contactos</button>' : '');
       if ($('contactMore')) $('contactMore').onclick = () => loadContacts(false);
+      $('cBody').querySelectorAll('.crow[data-id]').forEach((row) => {
+        const open = () => openContactModal(contactState.items.find((x) => x.id === row.dataset.id));
+        row.onclick = open;
+        row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+      });
     }
+
+    // ---- Modal editar contacto ----
+    let editingContactId = null;
+    function openContactModal(c) {
+      if (!c) return;
+      editingContactId = c.id;
+      $('cm_phone').value = c.phone;
+      $('cm_name').value = c.name || '';
+      $('cm_notes').value = c.notes || '';
+      $('cmErr').classList.add('hidden');
+      $('contactModal').classList.remove('hidden');
+      $('cm_name').focus();
+    }
+    function closeContactModal() { $('contactModal').classList.add('hidden'); editingContactId = null; }
+    $('cmCancel').onclick = closeContactModal;
+    $('contactModal').addEventListener('click', (e) => { if (e.target === $('contactModal')) closeContactModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('contactModal').classList.contains('hidden')) closeContactModal(); });
+    $('cmSave').onclick = async () => {
+      if (!editingContactId) return;
+      const err = $('cmErr'); err.classList.add('hidden');
+      const btn = $('cmSave'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api('/contacts/' + editingContactId, { method: 'PATCH', body: JSON.stringify({
+          name: $('cm_name').value.trim() || undefined,
+          notes: $('cm_notes').value.trim() || undefined }) });
+        closeContactModal();
+        toast('Contacto actualizado');
+        loadContacts();
+      } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
+      btn.disabled = false; btn.textContent = 'Guardar cambios';
+    };
     $('newcForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const phone = $('c_phone').value.trim(), name = $('c_name').value.trim();
