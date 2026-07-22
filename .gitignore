@@ -14,6 +14,7 @@ coverage/
 
 # Estado local de Claude Code (no versionar)
 .claude/settings.local.json
+.claude/skills/
 
 # Red de seguridad: si un ruflo global (fuera del repo) regenerara estas
 # carpetas, que no se vuelvan a versionar. El framework se retiró del proyecto.
