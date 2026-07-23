@@ -65,7 +65,7 @@ Adelantada mientras se espera la aprobación de Meta y los créditos de Anthropi
 - [x] **Apartado "Agente IA"**: perfil de negocio configurable (`business-profile/`) — horarios, servicios, políticas, tono, instrucciones adicionales. `GET` para todo el equipo, `PUT` solo OWNER. Pestaña propia en el panel (`frontend/src/features/ai-agent/`). Se inyecta en el `system` prompt (`BusinessProfileService.describe`). Ver `docs/DECISIONS.md` (2026-07-23). Probado con unitarios + verificación manual end-to-end (OWNER lee/escribe, AGENT solo lee).
 - [ ] Subida de documentos / catálogos largos con búsqueda semántica — el propietario lo pedirá explícitamente cuando se empiece esa tarea.
 - [ ] Resúmenes automáticos de conversación para el dueño del negocio (distinto del resumen interno de memoria: uno es para la IA, este sería para que el dueño vea de un vistazo qué pasó).
-- [ ] Automatización de seguimiento sin intervención humana (secuencias de recordatorios más allá de una cita puntual).
+- [x] **Seguimiento automático sin intervención humana**: si el contacto no responde a un mensaje de la IA en 12h, `ConversationFollowUpService` genera (con la IA) y programa un único mensaje de seguimiento — reutiliza `ReminderDispatchService` para el envío real (consentimiento RF-12, ventana 24h RF-10, backoff). Worker periódico cada 30 min (`ConversationFollowUpProcessor`). Ver `docs/DECISIONS.md` (2026-07-23/24). Probado con unitarios + verificación manual end-to-end contra la base real.
 - [ ] Análisis predictivo de oportunidades de venta y aprendizaje de patrones del negocio — necesitan volumen real de conversaciones, no se puede avanzar de forma útil todavía.
 
 ## Backlog no priorizado (fases 3-5)

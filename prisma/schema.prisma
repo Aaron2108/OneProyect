@@ -223,6 +223,12 @@ model Conversation {
   // RF-10: la ventana de 24h se calcula desde el último mensaje entrante
   lastInboundAt DateTime?       @map("last_inbound_at")
   lastMessageAt DateTime?       @map("last_message_at")
+  // Fase 4 (seguimiento automático): cuántos seguimientos automáticos van
+  // enviados desde que el contacto respondió por última vez (se resetea a 0
+  // en cada entrante — ver InboundMessageProcessor) y cuándo se envió el
+  // último. Ver ConversationFollowUpService.
+  followUpCount  Int       @default(0) @map("follow_up_count")
+  lastFollowUpAt DateTime? @map("last_follow_up_at")
   createdAt DateTime            @default(now()) @map("created_at")
   updatedAt DateTime            @updatedAt @map("updated_at")
 
@@ -304,6 +310,11 @@ model Reminder {
   message       String
   remindAt      DateTime       @map("remind_at")
   status        ReminderStatus @default(PENDING)
+  // Origen del recordatorio, para distinguirlo en el panel de uno creado a
+  // mano/por tool-calling de la IA en una cita. Null = manual/vía IA (como
+  // hasta ahora); "auto-followup" = generado por ConversationFollowUpService
+  // (Fase 4, seguimiento automático sin intervención humana).
+  source        String?
   // Despacho a prueba de concurrencia/escala: `nextAttemptAt` actúa como lease
   // (claim atómico entre instancias) y como backoff; `attempts` cuenta los
   // envíos fallidos para acotar reintentos. Ver ReminderDispatchService.

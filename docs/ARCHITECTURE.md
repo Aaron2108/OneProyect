@@ -69,6 +69,16 @@ Antes de esto, la IA solo conocía el nombre del tenant — nada de horarios, se
 - `BusinessProfileService.describe()` devuelve solo las líneas de los campos que el negocio completó (nunca inventa ni rellena lo vacío) y `AiService.buildSystemPrompt` las añade al `system` prompt en cada respuesta.
 - No se cifra en reposo: es información operativa propia del negocio (no PII de clientes finales), mismo criterio que `Tenant.name`.
 
+## Seguimiento automático sin intervención humana (`conversations/conversation-follow-up.*`, Fase 4)
+
+Si un contacto no responde a un mensaje de la IA, no se pierde en silencio — se le envía **un único** seguimiento automático:
+
+- `ConversationFollowUpProcessor` (BullMQ, cada 30 min) revisa conversaciones `OPEN` atendidas por la IA cuyo último mensaje fue saliente hace más de 12h (`FOLLOW_UP_DELAY_MS`, menor a las 24h de RF-10 a propósito, para que el seguimiento se pueda enviar como texto libre).
+- `ConversationFollowUpService.scanAndSchedule` las toma con un claim optimista (compare-and-swap sobre `Conversation.followUpCount`) y le pide a `AiService.generateFollowUp` un mensaje breve y contextual (usa el tono de `BusinessProfileService` si está configurado).
+- En vez de enviar directo, crea un `Reminder` (`source: "auto-followup"`) y deja que **`ReminderDispatchService` lo despache** — reutiliza el consentimiento (RF-12), la ventana de 24h (RF-10) y el backoff que ya existen ahí, sin duplicar esa lógica.
+- `followUpCount` se resetea a 0 en `InboundMessageProcessor` en cuanto el contacto vuelve a escribir — rompe la racha de silencio para el próximo ciclo.
+- Solo aplica a conversaciones que atiende la **IA**, no las que un humano ya está gestionando (RF-11 handoff).
+
 ## Integraciones — Google Calendar (`google-calendar/`, Fase 3)
 
 Primer módulo de la Fase 3 (`docs/ROADMAP.md`): sincroniza citas del panel con Google Calendar. Alcance deliberadamente acotado, revisable si el negocio pide más:

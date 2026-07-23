@@ -116,13 +116,16 @@ export class InboundMessageProcessor extends WorkerHost {
     });
 
     // 7. Actualizar marcas de tiempo (RF-10: ventana de 24h se mide desde aquí)
-    //    e incrementar el contador de sin leer del equipo.
+    //    e incrementar el contador de sin leer del equipo. `followUpCount` se
+    //    resetea: el contacto respondió, se rompe la racha de silencio que
+    //    dispara el seguimiento automático (ver ConversationFollowUpService).
     await this.prisma.conversation.update({
       where: { id: conversation.id },
       data: {
         lastInboundAt: sentAt,
         lastMessageAt: sentAt,
         unreadCount: { increment: 1 },
+        followUpCount: 0,
       },
     });
 

@@ -169,4 +169,12 @@
 
 ---
 
+## 2026-07-23/24 — Seguimiento automático sin intervención humana (Fase 4)
+
+**Decisión**: si un contacto no responde a un mensaje de la IA, `ConversationFollowUpService` le envía **un único** mensaje de seguimiento automático (`MAX_FOLLOW_UPS = 1`) generado por la IA (`AiService.generateFollowUp`, con el tono del perfil de negocio si está configurado). Un worker periódico (`ConversationFollowUpProcessor`, BullMQ, cada 30 min) revisa las conversaciones `OPEN` atendidas por la IA cuyo último mensaje fue saliente hace más de `FOLLOW_UP_DELAY_MS` (12h — deliberadamente menos que las 24h de RF-10, para que el seguimiento se pueda mandar como texto libre sin depender de una plantilla pre-aprobada, que sigue pendiente). En vez de enviar directo, se crea un `Reminder` (marcado `source: "auto-followup"`) y se deja que `ReminderDispatchService` lo despache — así el seguimiento reutiliza, sin duplicar, el consentimiento (RF-12), la ventana de 24h y el backoff que ya están implementados y probados ahí. `Conversation.followUpCount` (con un claim optimista tipo compare-and-swap, igual de simple que el resto del proyecto) evita duplicados entre ticks/instancias, y se resetea a 0 en cuanto el contacto vuelve a escribir (`InboundMessageProcessor`), rompiendo la racha de silencio.
+**Motivo**: es el problema central que menciona la visión del producto — "seguimiento perdido" — y se apoya en infraestructura ya construida (recordatorios) en vez de crear un camino de envío paralelo. El límite de un solo seguimiento automático es deliberado: el objetivo es no perder al cliente, no insistirle: más de uno se siente como spam. Solo aplica a conversaciones que atiende la IA (no las que un humano ya está gestionando activamente) para no interferir con el trabajo del equipo.
+**Estado**: implementada y probada (unitarios de `ConversationFollowUpService` + `AiService.generateFollowUp`, y una verificación manual end-to-end contra la base real: conversación vieja sin respuesta → se crea el `Reminder`, `followUpCount` sube a 1, una segunda pasada inmediata no duplica).
+
+---
+
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

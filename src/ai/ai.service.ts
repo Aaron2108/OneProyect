@@ -230,4 +230,43 @@ export class AiService {
       ? `Conversación simulada; último mensaje del cliente: "${lastUser}".`
       : '';
   }
+
+  /**
+   * Genera un mensaje breve de seguimiento cuando el contacto no respondió
+   * (Fase 4, seguimiento automático sin intervención humana): lo llama
+   * `ConversationFollowUpService`. Usa el perfil de negocio (tono) si está
+   * configurado, para que no suene genérico. En modo mock no gasta créditos.
+   */
+  async generateFollowUp(ctx: ConversationContext, history: HistoryTurn[]): Promise<string> {
+    if (this.provider === 'mock' || !this.client) {
+      return this.mockFollowUp(ctx);
+    }
+    const profileLines = await this.businessProfile.describe(ctx.tenantId);
+    const transcript = history
+      .map((t) => `${t.role === 'user' ? 'Cliente' : 'Agente'}: ${t.text}`)
+      .join('\n');
+    const system = [
+      `Eres el asistente de "${ctx.tenantName}" en WhatsApp.`,
+      `El contacto ${ctx.contactName ?? ''} no respondió al último mensaje de la conversación.`,
+      'Escribe un único mensaje breve de seguimiento, cordial, en español, sin sonar insistente ni robótico. No repitas literalmente el mensaje anterior ni inventes información del negocio.',
+      ...profileLines,
+    ].join('\n');
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: MAX_SUMMARY_TOKENS,
+      system,
+      messages: [{ role: 'user', content: transcript || 'Sin mensajes previos.' }],
+    });
+    return response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join(' ')
+      .trim();
+  }
+
+  /** Seguimiento simulado (sin IA real) para pruebas locales. */
+  private mockFollowUp(ctx: ConversationContext): string {
+    const saludo = ctx.contactName ? `Hola ${ctx.contactName}` : 'Hola';
+    return `${saludo}, solo quería saber si seguís por ahí. Cualquier cosa, contame. [seguimiento simulado — modo pruebas sin créditos]`;
+  }
 }
