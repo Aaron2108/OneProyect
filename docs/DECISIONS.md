@@ -145,4 +145,12 @@
 
 ---
 
+## 2026-07-23 — Reintentos con backoff para la sincronización con Google Calendar
+
+**Decisión**: `GoogleCalendarSyncService` ya no abandona en silencio si la llamada a la API de Google falla (red, token, rate limit): agenda el intento en una tabla nueva, `GoogleCalendarSyncJob` (un job por cita, `@unique` en `appointmentId`), con backoff exponencial (5 min → 6h, tope `MAX_SYNC_ATTEMPTS = 8`). Un worker periódico (`GoogleCalendarSyncProcessor`, BullMQ, mismo patrón que `reminders/reminder.processor.ts`) revisa cada 5 minutos los reintentos vencidos con el mismo claim atómico (`updateMany` con guarda + lease) que ya usan los recordatorios, para que no se procesen dos veces en paralelo. Se aprovechó para unificar `syncOnCreate`/`syncOnUpdate` en un único método interno de reconciliación (`reconcile`) que decide crear/actualizar/borrar el evento según el estado de la cita — ya era, de hecho, la misma lógica repetida dos veces.
+**Motivo**: antes, una cita creada mientras Google Calendar tenía un fallo transitorio (o el token estaba en un estado raro) quedaba desincronizada para siempre — WhatsFlow seguía siendo la fuente de verdad para la cita en sí, pero el evento en Google nunca aparecía y nada lo reintentaba. Con empresas piloto reales esto es silencioso y confuso ("¿por qué esta cita no está en mi Google Calendar?"). El límite de reintentos evita que una integración rota (p. ej. token revocado y sin poder refrescarse) reintente indefinidamente; al agotarse se registra un error explícito pidiendo revisión manual, no hay tarea de alerta al usuario todavía (no existe sistema de notificación por email en el producto).
+**Estado**: implementada y probada (`tests/google-calendar/google-calendar-sync.service.spec.ts`, incluye reintento exitoso, backoff progresivo y abandono tras agotar intentos).
+
+---
+
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

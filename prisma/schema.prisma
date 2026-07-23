@@ -81,6 +81,7 @@ model Tenant {
   reminders     Reminder[]
   quickReplies  QuickReply[]
   googleCalendarIntegration GoogleCalendarIntegration?
+  googleCalendarSyncJobs    GoogleCalendarSyncJob[]
 
   @@map("tenants")
 }
@@ -104,6 +105,28 @@ model GoogleCalendarIntegration {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("google_calendar_integrations")
+}
+
+// Cola de reintentos para la sincronización con Google Calendar: si crear/
+// actualizar/borrar el evento falla (red, token, rate limit de Google), en vez
+// de abandonar en silencio se guarda aquí con backoff exponencial. Un job por
+// cita (@unique) — cada intento reconcilia el estado completo de la cita, así
+// que no hace falta encolar más de uno a la vez. Ver GoogleCalendarSyncService.
+model GoogleCalendarSyncJob {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  appointmentId String   @unique @map("appointment_id")
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @map("next_attempt_at")
+  lastError     String?  @map("last_error")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([nextAttemptAt])
+  @@map("google_calendar_sync_jobs")
 }
 
 // Respuestas rápidas: plantillas de mensaje reutilizables del equipo.
@@ -242,6 +265,7 @@ model Appointment {
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contact   Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
   reminders Reminder[]
+  googleCalendarSyncJob GoogleCalendarSyncJob?
 
   @@index([tenantId])
   @@index([tenantId, scheduledAt])

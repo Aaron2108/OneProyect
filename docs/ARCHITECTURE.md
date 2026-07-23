@@ -59,6 +59,7 @@ Primer módulo de la Fase 3 (`docs/ROADMAP.md`): sincroniza citas del panel con 
 - OAuth2 y llamadas a la API de Calendar vía `fetch` nativo, sin el SDK `googleapis` (pesado para 3 endpoints) — mismo criterio que `WhatsappSenderService`.
 - Tokens cifrados en reposo (`common/crypto.util.ts`, AES-256-GCM) — ver `SECURITY.md` §11.
 - `GoogleCalendarSyncService` nunca hace fallar la operación de la cita que la origina: si Google no responde o el tenant no conectó la integración, se registra el error y se continúa — WhatsFlow es la fuente de verdad.
+- Si la llamada a Google falla, el intento se agenda con backoff exponencial (`GoogleCalendarSyncJob`, un job por cita) y un worker periódico (`GoogleCalendarSyncProcessor`, BullMQ) lo reintenta — mismo patrón de claim atómico que `reminders/`. Evita que un fallo transitorio deje una cita desincronizada para siempre; ver `DECISIONS.md` (2026-07-23).
 
 Detalle de la decisión (alcance, alternativas descartadas) en `DECISIONS.md`.
 
