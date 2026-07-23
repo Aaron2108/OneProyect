@@ -55,7 +55,18 @@ Iniciada antes de tener credenciales de Meta (RF de WhatsApp) porque no depende 
 - [x] **Reintentos de sincronización con Google Calendar**: si la llamada a Google falla (red, token, rate limit), se agenda con backoff exponencial (`GoogleCalendarSyncJob`) en vez de abandonarse en silencio; worker periódico (`GoogleCalendarSyncProcessor`) la reintenta, mismo patrón de claim atómico que los recordatorios. Ver `docs/DECISIONS.md` (2026-07-23).
 - [x] **"Continuar con Google"** (login/registro, opcional): alternativa por usuario al email+contraseña, independiente de la integración de Calendar. Alta en dos pasos si el email es nuevo (falta el nombre de la empresa). `src/auth/google-auth.service.ts`. Ver `docs/DECISIONS.md` (2026-07-23) y `SECURITY.md` §9. Requiere `GOOGLE_LOGIN_REDIRECT_URI` además de las credenciales ya usadas por Calendar. Navegación de página completa (no popup) — ver `DECISIONS.md` (2026-07-23, "sin popup").
 - [x] **Pestaña "Calendario" en el panel** (`frontend/src/features/calendar/`): vista de mes (sin librería externa) con las citas del tenant, alta/edición/cancelación desde el panel (antes solo la creaba la IA o la API directo) y la tarjeta de conexión a Google Calendar (movida aquí desde "Equipo"). Backend: `GET /appointments` ahora admite `from`/`to` e incluye el contacto. Verificado end-to-end en navegador (crear, editar, cancelar, contador de citas por día).
-- [ ] Otros canales (Instagram, Messenger, email) — bloqueado por las mismas credenciales de Meta que WhatsApp (RF-1..RF-12); no se avanza hasta tenerlas.
+- [ ] Otros canales (Instagram, Messenger, email) — bloqueado por las mismas credenciales de Meta que WhatsApp (RF-1..RF-12). Decisión explícita del propietario (2026-07-23): se dejan para el final, después de que WhatsApp funcione completo — aunque email en particular no dependa de Meta, no se adelanta.
+
+## Fase 4 — IA y automatizaciones (iniciada)
+
+Adelantada mientras se espera la aprobación de Meta y los créditos de Anthropic — la memoria de contexto no depende de ninguna de las dos (ver `docs/ROADMAP.md`).
+
+- [x] **Memoria de contexto entre conversaciones** (`ai_context_memory`, `pgvector`): al cerrar una conversación se genera un resumen con la IA (`AiService.summarize`) y se guarda cifrado junto con su embedding (`AiContextMemoryService`); al responder, se recuperan los recuerdos más similares del mismo contacto y se añaden al `system` prompt. Proveedor de embeddings Voyage AI con modo `mock` para desarrollo sin créditos. Ver `docs/DECISIONS.md` (2026-07-23), `ARCHITECTURE.md` y `SECURITY.md` §12. Probada con unitarios + una verificación manual contra Postgres/pgvector real.
+- [ ] Perfil de negocio simple (horarios, servicios, políticas) para que la IA tenga contexto real del negocio, no solo historial de conversación — discutido con el propietario (2026-07-23), sin agendar todavía. No depende de pgvector ni de subir documentos.
+- [ ] Subida de documentos / catálogos largos con búsqueda semántica — el propietario lo pedirá explícitamente cuando se empiece esa tarea.
+- [ ] Resúmenes automáticos de conversación para el dueño del negocio (distinto del resumen interno de memoria: uno es para la IA, este sería para que el dueño vea de un vistazo qué pasó).
+- [ ] Automatización de seguimiento sin intervención humana (secuencias de recordatorios más allá de una cita puntual).
+- [ ] Análisis predictivo de oportunidades de venta y aprendizaje de patrones del negocio — necesitan volumen real de conversaciones, no se puede avanzar de forma útil todavía.
 
 ## Backlog no priorizado (fases 3-5)
 

@@ -7,6 +7,9 @@ import {
   MessageDirection,
   MessageSender,
 } from '@prisma/client';
+import { AiContextMemoryService } from '../ai/ai-context-memory.service';
+import { AiService } from '../ai/ai.service';
+import { HistoryTurn } from '../ai/ai.types';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toCsv } from '../common/csv.util';
@@ -16,6 +19,9 @@ import { ListConversationsDto } from './dto/list-conversations.dto';
 
 /** Tope de filas en una exportación (evita respuestas enormes). */
 const EXPORT_LIMIT = 5000;
+
+/** Cuántos mensajes como máximo se resumen al cerrar una conversación (Fase 4). */
+const SUMMARY_HISTORY_LIMIT = 60;
 
 /**
  * Bandeja de conversaciones y control del handoff humano (RF-11).
@@ -35,6 +41,8 @@ export class ConversationsService {
     private readonly prisma: PrismaService,
     private readonly sender: WhatsappSenderService,
     private readonly pii: PiiCryptoService,
+    private readonly ai: AiService,
+    private readonly contextMemory: AiContextMemoryService,
   ) {}
 
   /**
@@ -253,13 +261,52 @@ export class ConversationsService {
     return this.setHandler(tenantId, id, ConversationHandler.AI);
   }
 
-  /** Cerrar / reabrir una conversación. */
-  setStatus(
+  /**
+   * Cerrar / reabrir una conversación. Al cerrar, genera (best-effort) un
+   * recuerdo de contexto del contacto a partir de un resumen de la
+   * conversación (Fase 4, ver docs/DECISIONS.md) — no bloquea ni falla el
+   * cierre si la memoria de contexto no está disponible o algo sale mal.
+   */
+  async setStatus(
     tenantId: string,
     id: string,
     status: ConversationStatus,
   ): Promise<Conversation> {
-    return this.updateScoped(tenantId, id, { status });
+    const conversation = await this.updateScoped(tenantId, id, { status });
+    if (status === ConversationStatus.CLOSED) {
+      await this.rememberClosedConversation(tenantId, id);
+    }
+    return conversation;
+  }
+
+  private async rememberClosedConversation(tenantId: string, conversationId: string): Promise<void> {
+    if (!this.contextMemory.isEnabled()) return;
+    try {
+      const conversation = await this.prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: {
+          contactId: true,
+          messages: {
+            orderBy: { createdAt: 'asc' },
+            take: SUMMARY_HISTORY_LIMIT,
+            select: { direction: true, content: true },
+          },
+        },
+      });
+      if (!conversation || conversation.messages.length === 0) return;
+
+      const history: HistoryTurn[] = conversation.messages.map((m) => ({
+        role: m.direction === MessageDirection.INBOUND ? ('user' as const) : ('assistant' as const),
+        text: this.pii.decrypt(m.content),
+      }));
+      const summary = await this.ai.summarize(history);
+      if (!summary) return;
+      await this.contextMemory.remember(tenantId, conversation.contactId, conversationId, summary);
+    } catch (err) {
+      this.logger.error(
+        `No se pudo generar memoria de contexto al cerrar la conversación ${conversationId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   private setHandler(

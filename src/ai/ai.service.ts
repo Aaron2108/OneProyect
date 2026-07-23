@@ -3,8 +3,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessageSender } from '@prisma/client';
+import { AiContextMemoryService } from './ai-context-memory.service';
 import { AI_TOOLS, AiToolExecutorService } from './ai-tool-executor.service';
-import { MAX_OUTPUT_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
+import { MAX_OUTPUT_TOKENS, MAX_SUMMARY_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
 import { AgentReply, ConversationContext, HistoryTurn } from './ai.types';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class AiService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly tools: AiToolExecutorService,
+    private readonly contextMemory: AiContextMemoryService,
   ) {
     const apiKey = this.config.get<string>('ai.apiKey') ?? '';
     this.provider = this.config.get<string>('ai.provider') ?? 'anthropic';
@@ -55,6 +57,13 @@ export class AiService {
    * ejecutando herramientas (citas/recordatorios/contacto) cuando corresponda.
    */
   async respond(ctx: ConversationContext, history: HistoryTurn[]): Promise<AgentReply> {
+    // Fase 4: recuerdos de conversaciones anteriores del mismo contacto,
+    // relevantes para su último mensaje (nunca cruza tenants ni contactos).
+    // Se calcula siempre (incluso en modo mock) para poder probar toda la
+    // tubería de memoria localmente sin gastar créditos.
+    const lastUserText = [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
+    const recalled = await this.contextMemory.recall(ctx.tenantId, ctx.contactId, lastUserText);
+
     if (this.provider === 'mock') {
       return this.mockRespond(ctx, history);
     }
@@ -74,7 +83,7 @@ export class AiService {
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: this.buildSystemPrompt(ctx),
+        system: this.buildSystemPrompt(ctx, recalled),
         tools: AI_TOOLS,
         messages,
       });
@@ -159,13 +168,56 @@ export class AiService {
     };
   }
 
-  private buildSystemPrompt(ctx: ConversationContext): string {
-    return [
+  private buildSystemPrompt(ctx: ConversationContext, recalled: string[] = []): string {
+    const lines = [
       `Eres el asistente de IA de la empresa "${ctx.tenantName}", atendiendo por WhatsApp.`,
       `Hablas con el contacto ${ctx.contactName ?? 'sin nombre'} (teléfono ${ctx.contactPhone}).`,
       'Responde en español, de forma breve, cordial y útil.',
       'Usa las herramientas disponibles para programar citas, crear recordatorios o actualizar los datos del contacto cuando el cliente lo pida.',
       'No inventes información del negocio que no conozcas; si no puedes resolver algo, indícalo con claridad.',
-    ].join(' ');
+    ];
+    if (recalled.length > 0) {
+      lines.push(
+        'Esto es lo que sabes de conversaciones anteriores con este mismo cliente (puede ayudarte a dar continuidad, pero no lo repitas textualmente ni asumas que sigue siendo exacto):',
+        ...recalled.map((r) => `- ${r}`),
+      );
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * Resume una conversación ya cerrada en 1-2 frases (Fase 4, memoria de
+   * contexto): lo llama `ConversationsService` al cerrar una conversación,
+   * para guardar el resumen como recuerdo del contacto (ver
+   * `AiContextMemoryService`). En modo mock no gasta créditos.
+   */
+  async summarize(history: HistoryTurn[]): Promise<string> {
+    if (history.length === 0) return '';
+    if (this.provider === 'mock' || !this.client) {
+      return this.mockSummarize(history);
+    }
+    const transcript = history
+      .map((t) => `${t.role === 'user' ? 'Cliente' : 'Agente'}: ${t.text}`)
+      .join('\n');
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: MAX_SUMMARY_TOKENS,
+      system:
+        'Resume la siguiente conversación de atención al cliente en 1-2 frases breves, en español, pensadas para que el equipo recuerde el contexto en una conversación futura con el mismo cliente (qué quería, qué se resolvió). No inventes datos que no estén en la conversación.',
+      messages: [{ role: 'user', content: transcript }],
+    });
+    return response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join(' ')
+      .trim();
+  }
+
+  /** Resumen simulado (sin IA real) para pruebas locales de la tubería de memoria. */
+  private mockSummarize(history: HistoryTurn[]): string {
+    const lastUser = [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
+    return lastUser
+      ? `Conversación simulada; último mensaje del cliente: "${lastUser}".`
+      : '';
   }
 }

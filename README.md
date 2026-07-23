@@ -75,6 +75,18 @@ FRONTEND_BASE_URL=http://localhost:5173  # solo en dev, para que los callbacks d
 GOOGLE_LOGIN_REDIRECT_URI=http://localhost:3000/auth/google/callback
 ```
 
+**Memoria de contexto de la IA** (Fase 4): requiere Postgres con la extensión `pgvector`
+(ya viene en la imagen `pgvector/pgvector:pg16` de `docker-compose.yml` — si tenías el volumen de
+un `postgres:16` normal, `npm run db:up` recrea el contenedor sin perder los datos). Por defecto
+usa un proveedor de embeddings simulado (no gasta créditos, útil para probar que guarda/recupera
+memoria correctamente); para usar el real:
+
+```bash
+EMBEDDINGS_PROVIDER=voyage        # sin definir (o "mock") = simulado, sin gastar créditos
+VOYAGE_API_KEY=...                # https://www.voyageai.com/ — Anthropic no tiene API de embeddings propia
+VOYAGE_EMBEDDING_MODEL=voyage-3-lite   # 512 dimensiones; si cambias de modelo con otra dimensión, hace falta migrar la columna
+```
+
 Scripts útiles (raíz): `npm test` (tests del backend), `npm run build` (compila backend + frontend), `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores). Dentro de `frontend/`: `npm run build` (build de producción), `npm run lint`.
 
 ## Documentación

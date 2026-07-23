@@ -121,7 +121,24 @@ exige, extender el cifrado a `Contact.phone`/`name` (ver §10, requiere un índi
 - Al desconectar se intenta revocar el token en Google (best-effort) y siempre se borran las
   credenciales locales.
 
-## 12. Pendiente (fases posteriores)
+## 12. Memoria de contexto de la IA (`ai_context_memory`, Fase 4)
+
+- El resumen (`content`) se cifra en reposo con el mismo mecanismo que `Message.content` (§10) —
+  nunca se guarda el texto de una conversación en claro, sea el mensaje original o su resumen.
+- El `embedding` (vector numérico derivado del texto) **no se cifra**: pgvector necesita leerlo
+  en claro para calcular similitud (`<=>`) directamente en la base de datos — cifrarlo anularía la
+  búsqueda, igual que cifrar `Contact.phone`/`name` anularía sus búsquedas (§10). Es un vector de
+  floats, no reversible a texto sin el modelo de embeddings, pero sí codifica información semántica
+  derivada de PII; se acepta el mismo tipo de trade-off que en §10, con el mismo control de fondo
+  (aislamiento por tenant — nunca se consulta sin `tenant_id` **y** `contact_id` exactos).
+- Solo se toca con SQL parametrizado (`$executeRaw`/`$queryRaw` en `AiContextMemoryService`, nunca
+  interpolación de strings) porque el tipo `vector` no es representable en el Prisma Client normal
+  (`Unsupported("vector(512)")` en el esquema).
+- Se guarda al **cerrar** una conversación (acción explícita del equipo o de la IA vía tool-calling
+  futuro, no automática por inactividad) — límite deliberado para no generar memoria de cada
+  mensaje suelto.
+
+## 13. Pendiente (fases posteriores)
 
 - Rate limiting distribuido por tenant (además del actual por IP) con backend Redis si se
   despliega multi-instancia.

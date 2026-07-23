@@ -50,6 +50,16 @@ El webhook responde de inmediato a Meta y encola el mensaje; el procesamiento re
 
 **Seguridad transversal**: el `tenantId` (y en la IA también el `contactId`) proviene siempre del contexto de confianza (token JWT / contexto de la conversación), nunca de la entrada del cliente — ningún endpoint ni herramienta de IA puede operar sobre datos de otro tenant.
 
+## Memoria de contexto de la IA (`ai/ai-context-memory.service.ts`, Fase 4)
+
+Primera pieza de Fase 4 en implementarse — no dependía de las credenciales de Meta/Anthropic que sí bloquean el resto del roadmap (ver `ROADMAP.md`). Recuerdo entre conversaciones, por contacto, más allá de la ventana de contexto de la conversación en curso:
+
+- Al **cerrar** una conversación (`ConversationsService.setStatus`), se resume con la IA (`AiService.summarize`) y el resumen se guarda junto con su embedding (`AiContextMemoryService.remember`) — best-effort, nunca hace fallar el cierre.
+- Al **responder**, la IA recupera (`AiContextMemoryService.recall`) los recuerdos más similares al último mensaje del contacto (siempre `tenantId` + `contactId` exactos) y los añade al `system` prompt.
+- `EmbeddingsService` genera los embeddings: Voyage AI en producción (Anthropic no ofrece API de embeddings propia), con proveedor `mock` determinístico para desarrollo local sin gastar créditos — mismo patrón que `AI_PROVIDER=mock` en `AiService`.
+- Postgres necesita la extensión `pgvector` (imagen `pgvector/pgvector:pg16` en `docker-compose.yml`, compatible con los datos existentes de `postgres:16`). La columna `embedding` es `Unsupported("vector(512)")` en el esquema de Prisma — no representable en el Client, se accede solo con SQL parametrizado (`$executeRaw`/`$queryRaw`) en `AiContextMemoryService`.
+- Detalle y motivo en `docs/DECISIONS.md` (2026-07-23); seguridad de esta pieza en `SECURITY.md` §12.
+
 ## Integraciones — Google Calendar (`google-calendar/`, Fase 3)
 
 Primer módulo de la Fase 3 (`docs/ROADMAP.md`): sincroniza citas del panel con Google Calendar. Alcance deliberadamente acotado, revisable si el negocio pide más:

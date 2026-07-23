@@ -30,6 +30,12 @@ export interface AppConfig {
     model: string;
     maxCallsPerConversationPerHour: number;
   };
+  embeddings: {
+    // 'voyage' (real, recomendado por Anthropic) | 'mock' (pruebas locales)
+    provider: string;
+    apiKey: string;
+    model: string;
+  };
   google: {
     clientId: string;
     clientSecret: string;
@@ -82,6 +88,11 @@ export default (): AppConfig => ({
       process.env.AI_MAX_CALLS_PER_CONVERSATION_PER_HOUR ?? '20',
       10,
     ),
+  },
+  embeddings: {
+    provider: process.env.EMBEDDINGS_PROVIDER ?? 'mock',
+    apiKey: process.env.VOYAGE_API_KEY ?? '',
+    model: process.env.VOYAGE_EMBEDDING_MODEL ?? 'voyage-3-lite',
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',

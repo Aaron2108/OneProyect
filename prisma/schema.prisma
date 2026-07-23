@@ -82,6 +82,7 @@ model Tenant {
   quickReplies  QuickReply[]
   googleCalendarIntegration GoogleCalendarIntegration?
   googleCalendarSyncJobs    GoogleCalendarSyncJob[]
+  aiContextMemories         AiContextMemory[]
 
   @@map("tenants")
 }
@@ -180,6 +181,7 @@ model Contact {
   appointments  Appointment[]
   reminders     Reminder[]
   consent       ContactConsent?
+  aiContextMemories AiContextMemory[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -313,4 +315,32 @@ model ContactConsent {
 
   @@index([tenantId])
   @@map("contact_consent")
+}
+
+// Fase 4 (IA y automatizaciones): memoria de contexto entre conversaciones,
+// por contacto. Se guarda un resumen (generado por la IA al cerrar una
+// conversación, ver ConversationsService) junto con su embedding; al
+// responder, la IA recupera los resúmenes más similares al mensaje actual del
+// mismo contacto (nunca cruza tenants ni contactos) — así recuerda algo más
+// allá de la ventana de contexto de la conversación en curso. Ver
+// docs/DECISIONS.md (2026-07-23).
+//
+// `embedding` es `Unsupported` porque Prisma Client no representa el tipo
+// `vector` de pgvector: se inserta/consulta con SQL crudo
+// (AiContextMemoryService), nunca con el Prisma Client normal. `content` se
+// cifra en reposo igual que Message.content/ConversationNote.body (PII).
+model AiContextMemory {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  contactId      String   @map("contact_id")
+  conversationId String?  @map("conversation_id")
+  content        String // resumen cifrado (AES-256-GCM, ver common/pii-crypto.service.ts)
+  embedding      Unsupported("vector(512)")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contactId])
+  @@map("ai_context_memory")
 }

@@ -1,9 +1,12 @@
 import { NotFoundException } from '@nestjs/common';
 import {
   ConversationHandler,
+  ConversationStatus,
   MessageDirection,
   MessageSender,
 } from '@prisma/client';
+import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
+import { AiService } from '../../src/ai/ai.service';
 import { ConversationsService } from '../../src/conversations/conversations.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { WhatsappSenderService } from '../../src/whatsapp/whatsapp-sender.service';
@@ -15,6 +18,12 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     sendText: jest.fn(),
   } as unknown as WhatsappSenderService;
 
+  const aiDisabled = { summarize: jest.fn().mockResolvedValue('') } as unknown as AiService;
+  const contextMemoryDisabled = {
+    isEnabled: () => false,
+    remember: jest.fn(),
+  } as unknown as AiContextMemoryService;
+
   function makePrisma(prisma: Record<string, unknown>): PrismaService {
     return prisma as unknown as PrismaService;
   }
@@ -22,8 +31,10 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
   function makeService(
     prisma: Record<string, unknown>,
     sender: WhatsappSenderService = senderDisabled,
+    ai: AiService = aiDisabled,
+    contextMemory: AiContextMemoryService = contextMemoryDisabled,
   ): ConversationsService {
-    return new ConversationsService(makePrisma(prisma), sender, makeTestPiiCrypto());
+    return new ConversationsService(makePrisma(prisma), sender, makeTestPiiCrypto(), ai, contextMemory);
   }
 
   it('list filtra por tenantId y ordena por actividad reciente (keyset estable)', async () => {
@@ -224,6 +235,77 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
         service.sendManualMessage('t1', 'cv-de-otro', 'hola'),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setStatus + memoria de contexto al cerrar (Fase 4)', () => {
+    it('al cerrar, resume la conversación con la IA y lo guarda como memoria del contacto', async () => {
+      const count = jest.fn().mockResolvedValue(1);
+      const update = jest.fn().mockResolvedValue({ id: 'cv1', status: ConversationStatus.CLOSED });
+      const encryptedContent = makeTestPiiCrypto().encrypt('hola, cuanto cuesta');
+      const findUnique = jest.fn().mockResolvedValue({
+        contactId: 'c1',
+        messages: [{ direction: MessageDirection.INBOUND, content: encryptedContent }],
+      });
+      const summarize = jest.fn().mockResolvedValue('El cliente preguntó por precios.');
+      const remember = jest.fn().mockResolvedValue(undefined);
+      const service = makeService(
+        { conversation: { count, update, findUnique } },
+        senderDisabled,
+        { summarize } as unknown as AiService,
+        { isEnabled: () => true, remember } as unknown as AiContextMemoryService,
+      );
+
+      await service.setStatus('t1', 'cv1', ConversationStatus.CLOSED);
+
+      expect(findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'cv1' } }),
+      );
+      expect(summarize).toHaveBeenCalled();
+      expect(remember).toHaveBeenCalledWith('t1', 'c1', 'cv1', 'El cliente preguntó por precios.');
+    });
+
+    it('no consulta el historial si la memoria de contexto está deshabilitada', async () => {
+      const count = jest.fn().mockResolvedValue(1);
+      const update = jest.fn().mockResolvedValue({});
+      const findUnique = jest.fn();
+      const service = makeService({ conversation: { count, update, findUnique } });
+
+      await service.setStatus('t1', 'cv1', ConversationStatus.CLOSED);
+
+      expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it('no reabre memoria (reopen) ni guarda nada al reabrir una conversación', async () => {
+      const count = jest.fn().mockResolvedValue(1);
+      const update = jest.fn().mockResolvedValue({});
+      const findUnique = jest.fn();
+      const remember = jest.fn();
+      const service = makeService(
+        { conversation: { count, update, findUnique } },
+        senderDisabled,
+        aiDisabled,
+        { isEnabled: () => true, remember } as unknown as AiContextMemoryService,
+      );
+
+      await service.setStatus('t1', 'cv1', ConversationStatus.OPEN);
+
+      expect(findUnique).not.toHaveBeenCalled();
+      expect(remember).not.toHaveBeenCalled();
+    });
+
+    it('no falla el cierre si generar la memoria lanza un error', async () => {
+      const count = jest.fn().mockResolvedValue(1);
+      const update = jest.fn().mockResolvedValue({ id: 'cv1' });
+      const findUnique = jest.fn().mockRejectedValue(new Error('DB caída'));
+      const service = makeService(
+        { conversation: { count, update, findUnique } },
+        senderDisabled,
+        aiDisabled,
+        { isEnabled: () => true, remember: jest.fn() } as unknown as AiContextMemoryService,
+      );
+
+      await expect(service.setStatus('t1', 'cv1', ConversationStatus.CLOSED)).resolves.toBeDefined();
     });
   });
 });

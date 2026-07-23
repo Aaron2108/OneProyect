@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector/pgvector:pg16 = postgres:16 + la extensión `vector` ya instalada
+    # (Fase 4: memoria de contexto de la IA, ver docs/DECISIONS.md). Mismo
+    # formato de datos que postgres:16 — no rompe el volumen existente.
+    image: pgvector/pgvector:pg16
     container_name: whatsflow-postgres
     restart: unless-stopped
     environment:
