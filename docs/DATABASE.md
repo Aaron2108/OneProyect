@@ -27,10 +27,11 @@
 | Entidad | Propósito | Relaciones clave |
 |---|---|---|
 | `ai_context_memory` | Resumen (cifrado) + embedding `vector(512)` por contacto, generado al cerrar una conversación; la IA recupera los más similares al responder | `tenant_id`, `contact_id`, `conversation_id` (nullable) |
+| `business_profiles` | Perfil de negocio configurable por el OWNER (apartado "Agente IA"): horarios, servicios, políticas, tono, instrucciones adicionales — texto libre, sin cifrar (no es PII de clientes finales) | `tenant_id` (1—1 con `tenants`) |
 
-> **Aún diferido a Fase 4**: análisis predictivo de oportunidades de venta y aprendizaje de patrones específicos del negocio — necesitan volumen real de datos históricos por tenant, no solo la infraestructura de memoria (ver `ROADMAP.md`).
+> **Aún diferido a Fase 4**: análisis predictivo de oportunidades de venta y aprendizaje de patrones específicos del negocio — necesitan volumen real de datos históricos por tenant, no solo la infraestructura de memoria (ver `ROADMAP.md`). Subida de documentos/catálogos largos con búsqueda semántica también queda para cuando el propietario la pida explícitamente.
 
-**Relaciones básicas**: `tenants 1—N users`, `tenants 1—N contacts`, `contacts 1—N conversations`, `conversations 1—N messages`, `contacts 1—N appointments`, `contacts 1—N reminders`, `appointments 1—N reminders` (opcional), `contacts 1—1 contact_consent`.
+**Relaciones básicas**: `tenants 1—N users`, `tenants 1—N contacts`, `contacts 1—N conversations`, `conversations 1—N messages`, `contacts 1—N appointments`, `contacts 1—N reminders`, `appointments 1—N reminders` (opcional), `contacts 1—1 contact_consent`, `tenants 1—1 business_profiles`.
 
 **Migraciones de aplicación**: gestionadas por **Prisma** (ORM adoptado en Sprint 1, ver `DECISIONS.md`). El esquema vive en `prisma/schema.prisma` y las migraciones se generan con `npm run prisma:migrate`. Los nombres de tabla del esquema Prisma coinciden con los de esta sección (`tenants`, `users`, `contacts`, `conversations`, `messages`, `appointments`, `reminders`, `contact_consent`).
 

@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
 import { AiService } from '../../src/ai/ai.service';
 import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
+import { BusinessProfileService } from '../../src/business-profile/business-profile.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('AiService', () => {
@@ -17,16 +18,17 @@ describe('AiService', () => {
 
   const tools = {} as AiToolExecutorService;
   const noMemory = { recall: jest.fn().mockResolvedValue([]) } as unknown as AiContextMemoryService;
+  const noProfile = { describe: jest.fn().mockResolvedValue([]) } as unknown as BusinessProfileService;
 
   it('isEnabled es false sin API key', () => {
     const prisma = {} as PrismaService;
-    const service = new AiService(makeConfig(''), prisma, tools, noMemory);
+    const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile);
     expect(service.isEnabled()).toBe(false);
   });
 
   it('isEnabled es true con API key', () => {
     const prisma = {} as PrismaService;
-    const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory);
+    const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile);
     expect(service.isEnabled()).toBe(true);
   });
 
@@ -35,7 +37,7 @@ describe('AiService', () => {
       const prisma = {
         message: { count: jest.fn().mockResolvedValue(5) },
       } as unknown as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory);
+      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile);
       expect(await service.withinRateLimit('conv-1')).toBe(true);
     });
 
@@ -43,13 +45,13 @@ describe('AiService', () => {
       const prisma = {
         message: { count: jest.fn().mockResolvedValue(20) },
       } as unknown as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory);
+      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile);
       expect(await service.withinRateLimit('conv-1')).toBe(false);
     });
 
     it('respond lanza si la IA está deshabilitada', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig(''), prisma, tools, noMemory);
+      const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile);
       await expect(
         service.respond(
           {
@@ -69,7 +71,7 @@ describe('AiService', () => {
   it('devuelve un texto de cierre si el bucle de tools se agota sin texto (RF-NFR)', async () => {
     const prisma = {} as PrismaService;
     const toolsMock = { execute: jest.fn().mockResolvedValue('ok') } as unknown as AiToolExecutorService;
-    const service = new AiService(makeConfig('sk-ant-test'), prisma, toolsMock, noMemory);
+    const service = new AiService(makeConfig('sk-ant-test'), prisma, toolsMock, noMemory, noProfile);
     // El modelo siempre pide tool_use y nunca devuelve texto → agota el bucle.
     const create = jest.fn().mockResolvedValue({
       stop_reason: 'tool_use',
@@ -93,7 +95,7 @@ describe('AiService', () => {
       const contextMemory = {
         recall: jest.fn().mockResolvedValue(['El cliente preguntó por precios de envío.']),
       } as unknown as AiContextMemoryService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, contextMemory);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, contextMemory, noProfile);
       const create = jest.fn().mockResolvedValue({
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hola de nuevo' }],
@@ -112,7 +114,7 @@ describe('AiService', () => {
 
     it('summarize en modo real pide un resumen corto a Claude', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile);
       const create = jest.fn().mockResolvedValue({
         content: [{ type: 'text', text: 'El cliente agendó una cita para el jueves.' }],
       });
@@ -128,8 +130,50 @@ describe('AiService', () => {
     });
 
     it('summarize devuelve vacío sin historial', async () => {
-      const service = new AiService(makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory);
+      const service = new AiService(makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile);
       expect(await service.summarize([])).toBe('');
+    });
+  });
+
+  describe('perfil de negocio (Agente IA)', () => {
+    it('incluye lo configurado por el negocio en el system prompt', async () => {
+      const prisma = {} as PrismaService;
+      const profile = {
+        describe: jest.fn().mockResolvedValue(['Horario de atención: lunes a viernes 9-18h.']),
+      } as unknown as BusinessProfileService;
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile);
+      const create = jest.fn().mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Hola' }],
+      });
+      (service as unknown as { client: unknown }).client = { messages: { create } };
+
+      await service.respond(
+        { tenantId: 't1', tenantName: 'E', contactId: 'c1', contactName: null, contactPhone: '1', conversationId: 'cv' },
+        [{ role: 'user', text: '¿A qué hora abren?' }],
+      );
+
+      expect(profile.describe).toHaveBeenCalledWith('t1');
+      const systemPrompt = create.mock.calls[0][0].system as string;
+      expect(systemPrompt).toContain('Horario de atención: lunes a viernes 9-18h.');
+    });
+
+    it('sin perfil configurado, no añade nada extra al prompt', async () => {
+      const prisma = {} as PrismaService;
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile);
+      const create = jest.fn().mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Hola' }],
+      });
+      (service as unknown as { client: unknown }).client = { messages: { create } };
+
+      await service.respond(
+        { tenantId: 't1', tenantName: 'E', contactId: 'c1', contactName: null, contactPhone: '1', conversationId: 'cv' },
+        [{ role: 'user', text: 'Hola' }],
+      );
+
+      const systemPrompt = create.mock.calls[0][0].system as string;
+      expect(systemPrompt).not.toContain('el negocio configuró');
     });
   });
 });

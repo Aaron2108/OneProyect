@@ -98,6 +98,15 @@ export interface Appointment {
   contact: { id: string; name: string | null; phone: string };
 }
 
+export interface BusinessProfile {
+  businessHours: string | null;
+  services: string | null;
+  policies: string | null;
+  tone: string | null;
+  customInstructions: string | null;
+  updatedAt: string | null;
+}
+
 export interface GoogleCalendarStatus {
   connected: boolean;
   googleAccountEmail: string | null;

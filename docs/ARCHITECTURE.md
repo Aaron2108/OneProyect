@@ -60,6 +60,15 @@ Primera pieza de Fase 4 en implementarse — no dependía de las credenciales de
 - Postgres necesita la extensión `pgvector` (imagen `pgvector/pgvector:pg16` en `docker-compose.yml`, compatible con los datos existentes de `postgres:16`). La columna `embedding` es `Unsupported("vector(512)")` en el esquema de Prisma — no representable en el Client, se accede solo con SQL parametrizado (`$executeRaw`/`$queryRaw`) en `AiContextMemoryService`.
 - Detalle y motivo en `docs/DECISIONS.md` (2026-07-23); seguridad de esta pieza en `SECURITY.md` §12.
 
+## Perfil de negocio / "Agente IA" (`business-profile/`, Fase 4)
+
+Antes de esto, la IA solo conocía el nombre del tenant — nada de horarios, servicios, políticas ni tono propio del negocio (el trade-off explícito de RF-4 en el MVP, ver `DECISIONS.md` 2026-07-22). Ahora hay un apartado propio en el panel ("Agente IA") para que el propietario configure ese contexto:
+
+- `BusinessProfile` (1—1 con `Tenant`): campos de texto libre y acotados (horarios, servicios, políticas, tono, instrucciones adicionales) — nada de catálogos largos ni documentos (eso sigue en Fase 4, ver `ROADMAP.md`).
+- `GET /business-profile` (cualquier miembro del equipo) / `PUT /business-profile` (solo **OWNER**, `@Roles(OWNER)`) — mismo patrón de permisos que invitar al equipo.
+- `BusinessProfileService.describe()` devuelve solo las líneas de los campos que el negocio completó (nunca inventa ni rellena lo vacío) y `AiService.buildSystemPrompt` las añade al `system` prompt en cada respuesta.
+- No se cifra en reposo: es información operativa propia del negocio (no PII de clientes finales), mismo criterio que `Tenant.name`.
+
 ## Integraciones — Google Calendar (`google-calendar/`, Fase 3)
 
 Primer módulo de la Fase 3 (`docs/ROADMAP.md`): sincroniza citas del panel con Google Calendar. Alcance deliberadamente acotado, revisable si el negocio pide más:

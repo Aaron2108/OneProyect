@@ -83,8 +83,30 @@ model Tenant {
   googleCalendarIntegration GoogleCalendarIntegration?
   googleCalendarSyncJobs    GoogleCalendarSyncJob[]
   aiContextMemories         AiContextMemory[]
+  businessProfile           BusinessProfile?
 
   @@map("tenants")
+}
+
+// Contexto del negocio que el propietario le da a la IA (apartado "Agente IA"
+// del panel): horarios, servicios, políticas, tono e instrucciones libres. Sin
+// esto, la IA solo sabía el nombre del tenant — no podía responder nada
+// específico del negocio (ver docs/DECISIONS.md, 2026-07-23). Se inyecta
+// completo en el system prompt (AiService.buildSystemPrompt); campos acotados
+// en longitud para no inflar el prompt sin límite.
+model BusinessProfile {
+  id                 String   @id @default(uuid())
+  tenantId           String   @unique @map("tenant_id")
+  businessHours      String?  @map("business_hours")
+  services           String?
+  policies           String?
+  tone               String?
+  customInstructions String?  @map("custom_instructions")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("business_profiles")
 }
 
 // Fase 3 (integraciones): conexión de UN calendario de Google por tenant (lo

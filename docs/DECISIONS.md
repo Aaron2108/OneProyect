@@ -161,4 +161,12 @@
 
 ---
 
+## 2026-07-23 — Apartado propio "Agente IA": perfil de negocio configurable por el propietario
+
+**Decisión**: se agrega `BusinessProfile` (1—1 con `Tenant`): campos de texto libre y acotados en longitud (horario de atención, servicios/productos, políticas, tono, instrucciones adicionales) que el propietario completa desde una pestaña nueva del panel, "Agente IA" (`frontend/src/features/ai-agent/`). `GET /business-profile` lo puede ver cualquier miembro del equipo; `PUT /business-profile` (reemplazo completo) es **solo OWNER** — mismo patrón de permisos que invitar al equipo. `BusinessProfileService.describe()` devuelve solo las líneas de los campos que sí tienen contenido (nunca inventa lo que falta) y `AiService.buildSystemPrompt` las añade al `system` prompt en cada respuesta, junto a los recuerdos de `AiContextMemoryService`.
+**Motivo**: en el MVP, RF-4 ("contexto del negocio") terminó siendo solo historial de conversación + datos del contacto — la IA nunca tuvo un lugar donde el dueño le contara nada real del negocio (horarios, qué vende, sus reglas). Se construye ahora, con campos de texto simples, en vez de esperar a subir documentos/catálogos con búsqueda semántica (eso sigue en el backlog de Fase 4, el propietario lo pedirá explícitamente cuando llegue el momento) — mismo criterio anti-sobre-ingeniería del resto del proyecto: la versión más simple que resuelve el problema real ("la IA no sabe nada del negocio") antes de construir la versión más compleja ("la IA busca en documentos largos").
+**Estado**: implementada y probada (unitarios de `BusinessProfileService` + `AiService`, y una verificación manual end-to-end contra el backend real: OWNER puede leer/escribir, AGENT solo puede leer — `PUT` como AGENT responde 403).
+
+---
+
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.

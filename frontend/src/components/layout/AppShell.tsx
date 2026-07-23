@@ -9,6 +9,7 @@ import { InboxPage } from '@/features/inbox/InboxPage';
 import { ContactsPage } from '@/features/contacts/ContactsPage';
 import { TeamPage } from '@/features/team/TeamPage';
 import { CalendarPage } from '@/features/calendar/CalendarPage';
+import { AiAgentPage } from '@/features/ai-agent/AiAgentPage';
 
 // Recharts es el mayor contribuyente al peso del bundle; se carga solo cuando
 // se visita Métricas (no es la primera pantalla tras entrar) en vez de en el
@@ -20,6 +21,7 @@ const TABS = [
   { value: 'metrics', label: 'Métricas' },
   { value: 'contacts', label: 'Contactos' },
   { value: 'calendar', label: 'Calendario' },
+  { value: 'agent', label: 'Agente IA' },
   { value: 'team', label: 'Equipo' },
 ];
 
@@ -97,6 +99,9 @@ export function AppShell(): JSX.Element {
         </RadixTabs.Content>
         <RadixTabs.Content value="calendar" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
           <CalendarPage active={tab === 'calendar'} />
+        </RadixTabs.Content>
+        <RadixTabs.Content value="agent" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
+          <AiAgentPage active={tab === 'agent'} />
         </RadixTabs.Content>
         <RadixTabs.Content value="team" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
           <TeamPage active={tab === 'team'} />

@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessageSender } from '@prisma/client';
+import { BusinessProfileService } from '../business-profile/business-profile.service';
 import { AiContextMemoryService } from './ai-context-memory.service';
 import { AI_TOOLS, AiToolExecutorService } from './ai-tool-executor.service';
 import { MAX_OUTPUT_TOKENS, MAX_SUMMARY_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
@@ -21,6 +22,7 @@ export class AiService {
     private readonly prisma: PrismaService,
     private readonly tools: AiToolExecutorService,
     private readonly contextMemory: AiContextMemoryService,
+    private readonly businessProfile: BusinessProfileService,
   ) {
     const apiKey = this.config.get<string>('ai.apiKey') ?? '';
     this.provider = this.config.get<string>('ai.provider') ?? 'anthropic';
@@ -63,6 +65,7 @@ export class AiService {
     // tubería de memoria localmente sin gastar créditos.
     const lastUserText = [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
     const recalled = await this.contextMemory.recall(ctx.tenantId, ctx.contactId, lastUserText);
+    const profileLines = await this.businessProfile.describe(ctx.tenantId);
 
     if (this.provider === 'mock') {
       return this.mockRespond(ctx, history);
@@ -83,7 +86,7 @@ export class AiService {
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: this.buildSystemPrompt(ctx, recalled),
+        system: this.buildSystemPrompt(ctx, recalled, profileLines),
         tools: AI_TOOLS,
         messages,
       });
@@ -168,7 +171,11 @@ export class AiService {
     };
   }
 
-  private buildSystemPrompt(ctx: ConversationContext, recalled: string[] = []): string {
+  private buildSystemPrompt(
+    ctx: ConversationContext,
+    recalled: string[] = [],
+    profileLines: string[] = [],
+  ): string {
     const lines = [
       `Eres el asistente de IA de la empresa "${ctx.tenantName}", atendiendo por WhatsApp.`,
       `Hablas con el contacto ${ctx.contactName ?? 'sin nombre'} (teléfono ${ctx.contactPhone}).`,
@@ -176,6 +183,9 @@ export class AiService {
       'Usa las herramientas disponibles para programar citas, crear recordatorios o actualizar los datos del contacto cuando el cliente lo pida.',
       'No inventes información del negocio que no conozcas; si no puedes resolver algo, indícalo con claridad.',
     ];
+    if (profileLines.length > 0) {
+      lines.push('Esto es lo que el negocio configuró para que lo tengas en cuenta:', ...profileLines);
+    }
     if (recalled.length > 0) {
       lines.push(
         'Esto es lo que sabes de conversaciones anteriores con este mismo cliente (puede ayudarte a dar continuidad, pero no lo repitas textualmente ni asumas que sigue siendo exacto):',

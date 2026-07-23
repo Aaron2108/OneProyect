@@ -18,6 +18,7 @@ import { MetricsModule } from './metrics/metrics.module';
 import { QuickRepliesModule } from './quick-replies/quick-replies.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
+import { BusinessProfileModule } from './business-profile/business-profile.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
     QuickRepliesModule,
     WhatsappModule,
     GoogleCalendarModule,
+    BusinessProfileModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
