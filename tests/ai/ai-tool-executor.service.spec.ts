@@ -1,4 +1,5 @@
 import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
+import { AppointmentsService } from '../../src/appointments/appointments.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationContext } from '../../src/ai/ai.types';
 import { makeTestPiiCrypto } from '../helpers/pii-crypto.stub';
@@ -6,10 +7,10 @@ import { makeTestPiiCrypto } from '../helpers/pii-crypto.stub';
 describe('AiToolExecutorService', () => {
   let executor: AiToolExecutorService;
   let prisma: {
-    appointment: { create: jest.Mock };
     reminder: { create: jest.Mock };
     contact: { update: jest.Mock };
   };
+  let appointments: { create: jest.Mock };
 
   const ctx: ConversationContext = {
     tenantId: 'tenant-1',
@@ -22,25 +23,29 @@ describe('AiToolExecutorService', () => {
 
   beforeEach(() => {
     prisma = {
-      appointment: { create: jest.fn().mockResolvedValue({ id: 'appt-1' }) },
       reminder: { create: jest.fn().mockResolvedValue({ id: 'rem-1' }) },
       contact: { update: jest.fn().mockResolvedValue({}) },
     };
-    executor = new AiToolExecutorService(prisma as unknown as PrismaService, makeTestPiiCrypto());
+    appointments = { create: jest.fn().mockResolvedValue({ id: 'appt-1' }) };
+    executor = new AiToolExecutorService(
+      prisma as unknown as PrismaService,
+      makeTestPiiCrypto(),
+      appointments as unknown as AppointmentsService,
+    );
   });
 
-  it('crea una cita ligando tenant/contacto desde el contexto, no desde el input', async () => {
+  it('crea una cita vía AppointmentsService (para sincronizar con Google Calendar) ligando tenant/contacto desde el contexto, no desde el input', async () => {
     const result = await executor.execute(
       'create_appointment',
       // el modelo NO envía tenantId/contactId; aunque los enviara, se ignoran
       { title: 'Consulta', scheduled_at: '2026-08-01T15:00:00Z', tenantId: 'HACK', contactId: 'HACK' },
       ctx,
     );
-    expect(prisma.appointment.create).toHaveBeenCalledTimes(1);
-    const arg = prisma.appointment.create.mock.calls[0][0].data;
-    expect(arg.tenantId).toBe('tenant-1'); // del contexto, no 'HACK'
-    expect(arg.contactId).toBe('contact-1');
-    expect(arg.title).toBe('Consulta');
+    expect(appointments.create).toHaveBeenCalledTimes(1);
+    const [tenantId, dto] = appointments.create.mock.calls[0];
+    expect(tenantId).toBe('tenant-1'); // del contexto, no 'HACK'
+    expect(dto.contactId).toBe('contact-1');
+    expect(dto.title).toBe('Consulta');
     expect(result).toContain('Cita creada');
   });
 
@@ -50,7 +55,7 @@ describe('AiToolExecutorService', () => {
       { title: 'X', scheduled_at: 'no-es-fecha' },
       ctx,
     );
-    expect(prisma.appointment.create).not.toHaveBeenCalled();
+    expect(appointments.create).not.toHaveBeenCalled();
     expect(result).toContain('inválida');
   });
 

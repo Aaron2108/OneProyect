@@ -49,4 +49,13 @@ describe('UsersService (equipo por tenant)', () => {
     ).rejects.toBeInstanceOf(ConflictException);
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('invite rechaza con ConflictException si la restricción única de la BD salta (condición de carrera)', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null); // el chequeo previo no ve nada...
+    const create = jest.fn().mockRejectedValue({ code: 'P2002' }); // ...pero otra alta ganó la carrera
+    const service = new UsersService(makePrisma({ findFirst, create }));
+    await expect(
+      service.invite('t1', { name: 'X', email: 'dup@x.com', password: 'password123' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
 });

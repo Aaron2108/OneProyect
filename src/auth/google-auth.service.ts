@@ -9,6 +9,7 @@ import {
   GoogleProfile,
   GoogleTokenResponse,
 } from '../common/google-oauth.util';
+import { isUniqueConstraintViolation } from '../common/prisma-error.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { AuthResult, GoogleAuthCallbackResult } from './auth.types';
@@ -136,28 +137,37 @@ export class GoogleAuthService {
       throw new BadRequestException('El enlace de alta con Google expiró; inténtalo de nuevo');
     }
 
-    // Guarda contra condición de carrera: alguien pudo registrarse con ese
-    // email por el flujo normal entre el callback y este segundo paso.
+    // Chequeo previo para un mensaje de error rápido; la restricción `@unique`
+    // en `User.email` (base de datos) es la que de verdad cierra la condición
+    // de carrera si alguien se registró con ese email entre el callback y
+    // este segundo paso (ver DECISIONS.md).
     const existing = await this.prisma.user.findFirst({ where: { email: payload.email } });
     if (existing) {
       throw new ConflictException('El email ya está registrado');
     }
 
-    const tenant = await this.prisma.tenant.create({
-      data: {
-        name: tenantName,
-        users: {
-          create: {
-            email: payload.email,
-            name: payload.name,
-            passwordHash: null,
-            googleId: payload.googleId,
-            role: UserRole.OWNER,
+    try {
+      const tenant = await this.prisma.tenant.create({
+        data: {
+          name: tenantName,
+          users: {
+            create: {
+              email: payload.email,
+              name: payload.name,
+              passwordHash: null,
+              googleId: payload.googleId,
+              role: UserRole.OWNER,
+            },
           },
         },
-      },
-      include: { users: true },
-    });
-    return this.authService.issueToken(tenant.users[0]);
+        include: { users: true },
+      });
+      return this.authService.issueToken(tenant.users[0]);
+    } catch (err) {
+      if (isUniqueConstraintViolation(err)) {
+        throw new ConflictException('El email ya está registrado');
+      }
+      throw err;
+    }
   }
 }

@@ -170,7 +170,12 @@ model QuickReply {
 model User {
   id           String   @id @default(uuid())
   tenantId     String   @map("tenant_id")
-  email        String
+  // Único a nivel global (no solo por tenant): el login por email sería
+  // ambiguo si el mismo email existiera en dos tenants (ver auth.service.ts).
+  // Antes solo se exigía en el código de la aplicación (`findFirst` +
+  // `create`, con una ventana de condición de carrera); ahora también lo
+  // exige la base de datos.
+  email        String   @unique
   // Nulo si la cuenta se creó con "Continuar con Google" y nunca puso una
   // contraseña propia (ver auth/google-auth.service.ts) — no reemplaza al login
   // por contraseña, es una alternativa.
@@ -184,7 +189,6 @@ model User {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, email])
   @@index([tenantId])
   @@map("users")
 }

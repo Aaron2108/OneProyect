@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { User, UserRole } from '@prisma/client';
+import { isUniqueConstraintViolation } from '../common/prisma-error.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthResult, JwtPayload } from './auth.types';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -29,9 +30,12 @@ export class AuthService {
 
   /**
    * Alta de una empresa (tenant) con su usuario propietario (OWNER).
-   * El email se exige único a nivel global en el MVP para que el login por
-   * email no sea ambiguo (el esquema lo restringe por tenant; esta comprobación
-   * es más estricta a propósito). Ver DECISIONS.md.
+   * El email se exige único a nivel global (para que el login por email no
+   * sea ambiguo) con una restricción `@unique` en la base de datos —
+   * `findFirst` de abajo solo da un mensaje de error más rápido/claro en el
+   * caso común; la restricción de la BD es la que de verdad cierra la
+   * condición de carrera entre dos altas concurrentes con el mismo email
+   * (ver DECISIONS.md).
    */
   async register(dto: RegisterDto): Promise<AuthResult> {
     const existing = await this.prisma.user.findFirst({
@@ -42,22 +46,28 @@ export class AuthService {
     }
 
     const passwordHash = await hashPassword(dto.password);
-    const tenant = await this.prisma.tenant.create({
-      data: {
-        name: dto.tenantName,
-        users: {
-          create: {
-            email: dto.email,
-            name: dto.name,
-            passwordHash,
-            role: UserRole.OWNER,
+    try {
+      const tenant = await this.prisma.tenant.create({
+        data: {
+          name: dto.tenantName,
+          users: {
+            create: {
+              email: dto.email,
+              name: dto.name,
+              passwordHash,
+              role: UserRole.OWNER,
+            },
           },
         },
-      },
-      include: { users: true },
-    });
-
-    return this.issueToken(tenant.users[0]);
+        include: { users: true },
+      });
+      return this.issueToken(tenant.users[0]);
+    } catch (err) {
+      if (isUniqueConstraintViolation(err)) {
+        throw new ConflictException('El email ya está registrado');
+      }
+      throw err;
+    }
   }
 
   /** Inicio de sesión con email + contraseña. */

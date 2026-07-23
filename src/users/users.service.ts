@@ -2,6 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword } from '../auth/password.util';
+import { isUniqueConstraintViolation } from '../common/prisma-error.util';
 import { InviteUserDto } from './dto/invite-user.dto';
 
 /** Miembro del equipo expuesto a la API (nunca incluye el hash de contraseña). */
@@ -33,9 +34,11 @@ export class UsersService {
 
   /**
    * Da de alta a un miembro del equipo en el tenant actual. El email se exige
-   * único a nivel global (coherente con el registro, para que el login por email
-   * no sea ambiguo). El nuevo usuario hereda el `tenantId` del contexto, nunca
-   * del cliente.
+   * único a nivel global (coherente con el registro, para que el login por
+   * email no sea ambiguo) — `@unique` en la base de datos, no solo un
+   * `findFirst` previo (que por sí solo dejaría una ventana de condición de
+   * carrera entre dos invitaciones/registros concurrentes con el mismo
+   * email). El nuevo usuario hereda el `tenantId` del contexto, nunca del cliente.
    */
   async invite(tenantId: string, dto: InviteUserDto): Promise<TeamMember> {
     const existing = await this.prisma.user.findFirst({ where: { email: dto.email } });
@@ -43,15 +46,22 @@ export class UsersService {
       throw new ConflictException('El email ya está registrado');
     }
     const passwordHash = await hashPassword(dto.password);
-    return this.prisma.user.create({
-      data: {
-        tenantId,
-        email: dto.email,
-        name: dto.name,
-        passwordHash,
-        role: dto.role ?? UserRole.AGENT,
-      },
-      select: PUBLIC_FIELDS,
-    });
+    try {
+      return await this.prisma.user.create({
+        data: {
+          tenantId,
+          email: dto.email,
+          name: dto.name,
+          passwordHash,
+          role: dto.role ?? UserRole.AGENT,
+        },
+        select: PUBLIC_FIELDS,
+      });
+    } catch (err) {
+      if (isUniqueConstraintViolation(err)) {
+        throw new ConflictException('El email ya está registrado');
+      }
+      throw err;
+    }
   }
 }

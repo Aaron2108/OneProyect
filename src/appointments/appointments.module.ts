@@ -8,5 +8,9 @@ import { AppointmentsService } from './appointments.service';
   imports: [AuthModule, GoogleCalendarModule],
   controllers: [AppointmentsController],
   providers: [AppointmentsService],
+  // AiModule la usa para que las citas creadas por la IA (tool-calling)
+  // pasen por las mismas reglas de negocio que las creadas desde el panel
+  // (sincronización con Google Calendar incluida) — ver ai-tool-executor.service.ts.
+  exports: [AppointmentsService],
 })
 export class AppointmentsModule {}

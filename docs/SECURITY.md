@@ -24,7 +24,8 @@ modificar datos de otro**. Se garantiza así:
 - Contraseñas hasheadas con **`scrypt`** (KDF nativo de Node), formato `salt:hash`,
   comparación en tiempo constante. Nunca se almacenan en claro.
 - Login en tiempo constante: siempre ejecuta scrypt (contra un hash señuelo si el email no existe), para no revelar por temporización qué emails están registrados.
-- Autorización por rol **disponible** vía `@Roles()` + `RolesGuard` (OWNER/AGENT). Aún ningún endpoint la usa; cuando se use, debe aplicarse con ambos guards juntos: `@UseGuards(JwtAuthGuard, RolesGuard)` (el orden importa: primero autentica y adjunta el usuario, luego valida el rol).
+- Autorización por rol vía `@Roles()` + `RolesGuard` (OWNER/AGENT), siempre junto a `JwtAuthGuard`: `@UseGuards(JwtAuthGuard, RolesGuard)` (el orden importa: primero autentica y adjunta el usuario, luego valida el rol). En uso en `users` (invitar), `business-profile` (editar) y las mutaciones de `google-calendar` (conectar/desconectar).
+- **Email único a nivel global** (no solo por tenant) para que el login no sea ambiguo: exigido con `@unique` en la base de datos (`User.email`), no solo con un chequeo previo en la aplicación — antes había una condición de carrera real entre dos altas concurrentes con el mismo email (`AuthService.register`, `UsersService.invite`, `GoogleAuthService.completeSignup`); ver `DECISIONS.md` (2026-07-24).
 
 ## 3. Webhook de WhatsApp (Meta Cloud API)
 

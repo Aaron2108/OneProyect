@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type Anthropic from '@anthropic-ai/sdk';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -70,6 +71,7 @@ export class AiToolExecutorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pii: PiiCryptoService,
+    private readonly appointments: AppointmentsService,
   ) {}
 
   /**
@@ -105,14 +107,14 @@ export class AiToolExecutorService {
   ): Promise<string> {
     const scheduledAt = this.parseDate(input.scheduled_at);
     if (!scheduledAt) return 'Fecha de la cita inválida.';
-    const appt = await this.prisma.appointment.create({
-      data: {
-        tenantId: ctx.tenantId,
-        contactId: ctx.contactId,
-        title: String(input.title ?? 'Cita'),
-        scheduledAt,
-        notes: input.notes ? String(input.notes) : null,
-      },
+    // Vía AppointmentsService (no prisma.appointment.create directo) para que
+    // la cita se sincronice con Google Calendar igual que si la creara un
+    // humano desde el panel — ver DECISIONS.md.
+    const appt = await this.appointments.create(ctx.tenantId, {
+      contactId: ctx.contactId,
+      title: String(input.title ?? 'Cita'),
+      scheduledAt: scheduledAt.toISOString(),
+      notes: input.notes ? String(input.notes) : undefined,
     });
     return `Cita creada (id ${appt.id}) para ${scheduledAt.toISOString()}.`;
   }

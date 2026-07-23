@@ -63,6 +63,32 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.tenant.create).not.toHaveBeenCalled();
     });
+
+    it('rechaza con ConflictException si la restricción única de la BD salta (condición de carrera entre dos registros concurrentes)', async () => {
+      const prisma = makePrisma({
+        user: { findFirst: jest.fn().mockResolvedValue(null) }, // el chequeo previo no ve nada...
+        tenant: {
+          create: jest.fn().mockRejectedValue({ code: 'P2002' }), // ...pero otro registro ganó la carrera
+        },
+      });
+      const service = new AuthService(prisma, jwt);
+
+      await expect(
+        service.register({ tenantName: 'X', name: 'Y', email: 'a@b.com', password: 'password123' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('propaga otros errores de Prisma sin convertirlos en ConflictException', async () => {
+      const prisma = makePrisma({
+        user: { findFirst: jest.fn().mockResolvedValue(null) },
+        tenant: { create: jest.fn().mockRejectedValue(new Error('DB caída')) },
+      });
+      const service = new AuthService(prisma, jwt);
+
+      await expect(
+        service.register({ tenantName: 'X', name: 'Y', email: 'a@b.com', password: 'password123' }),
+      ).rejects.toThrow('DB caída');
+    });
   });
 
   describe('login', () => {

@@ -161,6 +161,26 @@ describe('GoogleAuthService', () => {
       expect(prisma.tenant.create).not.toHaveBeenCalled();
     });
 
+    it('rechaza con ConflictException si la restricción única de la BD salta (condición de carrera con el registro normal)', async () => {
+      const jwt = {
+        verifyAsync: jest.fn().mockResolvedValue({
+          purpose: 'google-signup',
+          email: 'nuevo@b.com',
+          name: 'Nuevo',
+          googleId: 'g1',
+        }),
+      } as unknown as JwtService;
+      const prisma = {
+        user: { findFirst: jest.fn().mockResolvedValue(null) }, // el chequeo previo no ve nada...
+        tenant: { create: jest.fn().mockRejectedValue({ code: 'P2002' }) }, // ...pero otra alta ganó la carrera
+      } as unknown as PrismaService;
+      const service = new GoogleAuthService(makeConfig(), prisma, jwt, {} as AuthService);
+
+      await expect(service.completeSignup('pending-token', 'Mi Negocio')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
     it('rechaza un token expirado o de otro propósito', async () => {
       const jwt = { verifyAsync: jest.fn().mockRejectedValue(new Error('expirado')) } as unknown as JwtService;
       const service = new GoogleAuthService(makeConfig(), {} as PrismaService, jwt, {} as AuthService);
