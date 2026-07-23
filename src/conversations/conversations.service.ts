@@ -7,6 +7,7 @@ import {
   MessageDirection,
   MessageSender,
 } from '@prisma/client';
+import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toCsv } from '../common/csv.util';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
@@ -21,6 +22,10 @@ const EXPORT_LIMIT = 5000;
  * Todo se filtra por `tenantId` (del token). Cambiar `handledBy` a HUMAN silencia
  * la respuesta automática de la IA: el worker de entrada solo responde con IA si
  * `handledBy === AI` (ver inbound-message.processor.ts).
+ *
+ * `Message.content` y `ConversationNote.body` se cifran en reposo (ver
+ * SECURITY.md §11) — no se buscan por SQL, así que cifrarlos no cambia nada
+ * visible.
  */
 @Injectable()
 export class ConversationsService {
@@ -29,6 +34,7 @@ export class ConversationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sender: WhatsappSenderService,
+    private readonly pii: PiiCryptoService,
   ) {}
 
   /**
@@ -102,16 +108,20 @@ export class ConversationsService {
     if (!conversation) {
       throw new NotFoundException('Conversación no encontrada');
     }
-    return conversation;
+    return {
+      ...conversation,
+      messages: conversation.messages.map((m) => ({ ...m, content: this.pii.decrypt(m.content) })),
+    };
   }
 
   /** Notas internas de una conversación (scoped por tenant). */
   async listNotes(tenantId: string, id: string) {
     await this.assertExists(tenantId, id);
-    return this.prisma.conversationNote.findMany({
+    const notes = await this.prisma.conversationNote.findMany({
       where: { conversationId: id },
       orderBy: { createdAt: 'asc' },
     });
+    return notes.map((n) => ({ ...n, body: this.pii.decrypt(n.body) }));
   }
 
   /** Añade una nota interna. El autor viene del contexto de confianza (token). */
@@ -126,15 +136,16 @@ export class ConversationsService {
       where: { id: author.userId, tenantId },
       select: { name: true },
     });
-    return this.prisma.conversationNote.create({
+    const created = await this.prisma.conversationNote.create({
       data: {
         tenantId,
         conversationId: id,
         authorId: author.userId,
         authorName: user?.name ?? 'Usuario',
-        body,
+        body: this.pii.encrypt(body),
       },
     });
+    return { ...created, body: this.pii.decrypt(created.body) };
   }
 
   private async assertExists(tenantId: string, id: string): Promise<void> {
@@ -170,7 +181,7 @@ export class ConversationsService {
         direction: MessageDirection.OUTBOUND,
         sender: MessageSender.HUMAN,
         type: 'text',
-        content: text,
+        content: this.pii.encrypt(text),
       },
     });
 
@@ -180,17 +191,18 @@ export class ConversationsService {
       data: { handledBy: ConversationHandler.HUMAN, lastMessageAt: new Date() },
     });
 
-    await this.deliver(conversation.tenant.whatsappPhoneNumberId, conversation.contact.phone, conversation.lastInboundAt, message, id);
-    return message;
+    await this.deliver(conversation.tenant.whatsappPhoneNumberId, conversation.contact.phone, conversation.lastInboundAt, message, id, text);
+    return { ...message, content: text };
   }
 
-  /** Envía el mensaje ya persistido al cliente por Meta (si es posible). */
+  /** Envía el mensaje ya persistido al cliente por Meta (si es posible). `text` es el texto plano (message.content ya está cifrado). */
   private async deliver(
     phoneNumberId: string | null,
     to: string,
     lastInboundAt: Date | null,
     message: Message,
     conversationId: string,
+    text: string,
   ): Promise<void> {
     if (!this.sender.isEnabled()) {
       return; // sin credenciales de Meta (local): mensaje persistido, no enviado
@@ -209,7 +221,7 @@ export class ConversationsService {
       const { messageId: wamid } = await this.sender.sendText({
         phoneNumberId,
         to,
-        text: message.content,
+        text,
       });
       if (wamid) {
         await this.prisma.message.update({

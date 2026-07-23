@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type Anthropic from '@anthropic-ai/sdk';
+import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   TOOL_CREATE_APPOINTMENT,
@@ -66,7 +67,10 @@ export const AI_TOOLS: Anthropic.Tool[] = [
 export class AiToolExecutorService {
   private readonly logger = new Logger(AiToolExecutorService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pii: PiiCryptoService,
+  ) {}
 
   /**
    * Ejecuta una herramienta invocada por el modelo, ligando tenant/contacto
@@ -136,7 +140,7 @@ export class AiToolExecutorService {
   ): Promise<string> {
     const data: { name?: string; notes?: string } = {};
     if (typeof input.name === 'string') data.name = input.name;
-    if (typeof input.notes === 'string') data.notes = input.notes;
+    if (typeof input.notes === 'string') data.notes = this.pii.encrypt(input.notes);
     if (Object.keys(data).length === 0) return 'No se indicó ningún campo a actualizar.';
     await this.prisma.contact.update({ where: { id: ctx.contactId }, data });
     return 'Contacto actualizado.';

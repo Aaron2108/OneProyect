@@ -23,6 +23,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "prisma:encrypt-pii": "ts-node prisma/encrypt-existing-pii.ts",
     "db:up": "docker compose up -d postgres redis",
     "db:down": "docker compose down"
   },

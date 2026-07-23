@@ -1,6 +1,7 @@
 import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationContext } from '../../src/ai/ai.types';
+import { makeTestPiiCrypto } from '../helpers/pii-crypto.stub';
 
 describe('AiToolExecutorService', () => {
   let executor: AiToolExecutorService;
@@ -25,7 +26,7 @@ describe('AiToolExecutorService', () => {
       reminder: { create: jest.fn().mockResolvedValue({ id: 'rem-1' }) },
       contact: { update: jest.fn().mockResolvedValue({}) },
     };
-    executor = new AiToolExecutorService(prisma as unknown as PrismaService);
+    executor = new AiToolExecutorService(prisma as unknown as PrismaService, makeTestPiiCrypto());
   });
 
   it('crea una cita ligando tenant/contacto desde el contexto, no desde el input', async () => {
@@ -71,6 +72,14 @@ describe('AiToolExecutorService', () => {
       where: { id: 'contact-1' },
       data: { name: 'Ana Pérez' },
     });
+  });
+
+  it('cifra las notas del contacto antes de guardarlas', async () => {
+    await executor.execute('update_contact', { notes: 'Alérgico al polen' }, ctx);
+    const arg = prisma.contact.update.mock.calls[0][0];
+    expect(arg.where).toEqual({ id: 'contact-1' });
+    expect(arg.data.notes).not.toBe('Alérgico al polen');
+    expect(arg.data.notes).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
   });
 
   it('devuelve mensaje para herramienta desconocida', async () => {

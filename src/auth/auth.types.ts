@@ -32,3 +32,8 @@ export interface AuthResult {
     tenantId: string;
   };
 }
+
+/** Resultado de procesar el callback de "Continuar con Google". */
+export type GoogleAuthCallbackResult =
+  | { kind: 'authenticated'; result: AuthResult }
+  | { kind: 'signup-required'; signupToken: string; email: string; name: string };

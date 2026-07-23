@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Contact } from '@prisma/client';
+import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toCsv } from '../common/csv.util';
 import { CreateContactDto } from './dto/create-contact.dto';
@@ -17,10 +18,18 @@ const EXPORT_LIMIT = 5000;
  * CRUD de contactos. TODAS las operaciones se filtran por `tenantId` (que viene
  * del token, no del cliente): un tenant nunca puede leer ni tocar contactos de
  * otro — mismo principio de aislamiento que el resto del sistema.
+ *
+ * `notes` se cifra en reposo (ver SECURITY.md §11): `phone`/`name` siguen en
+ * claro a propósito, porque se buscan con `contains` y `phone` tiene un
+ * índice único por tenant — cifrarlos exigiría un índice ciego aparte y
+ * perder la búsqueda parcial (ver DECISIONS.md).
  */
 @Injectable()
 export class ContactsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pii: PiiCryptoService,
+  ) {}
 
   /** Contactos del tenant con búsqueda y paginación keyset (cursor). */
   async list(
@@ -46,7 +55,7 @@ export class ContactsService {
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
     const nextCursor = items.length === limit ? items[items.length - 1].id : null;
-    return { items, nextCursor };
+    return { items: items.map((c) => this.decrypted(c)), nextCursor };
   }
 
   /** Exporta los contactos del tenant a CSV. */
@@ -58,7 +67,7 @@ export class ContactsService {
     });
     return toCsv(
       ['Telefono', 'Nombre', 'Notas', 'Creado'],
-      contacts.map((c) => [c.phone, c.name, c.notes, c.createdAt.toISOString()]),
+      contacts.map((c) => [c.phone, c.name, this.pii.decryptNullable(c.notes), c.createdAt.toISOString()]),
     );
   }
 
@@ -69,7 +78,7 @@ export class ContactsService {
     if (!contact) {
       throw new NotFoundException('Contacto no encontrado');
     }
-    return contact;
+    return this.decrypted(contact);
   }
 
   async create(tenantId: string, dto: CreateContactDto): Promise<Contact> {
@@ -79,14 +88,15 @@ export class ContactsService {
     if (exists) {
       throw new ConflictException('Ya existe un contacto con ese teléfono');
     }
-    return this.prisma.contact.create({
+    const created = await this.prisma.contact.create({
       data: {
         tenantId,
         phone: dto.phone,
         name: dto.name ?? null,
-        notes: dto.notes ?? null,
+        notes: this.pii.encryptNullable(dto.notes ?? null),
       },
     });
+    return this.decrypted(created);
   }
 
   async update(
@@ -95,9 +105,17 @@ export class ContactsService {
     dto: UpdateContactDto,
   ): Promise<Contact> {
     await this.get(tenantId, id); // asegura pertenencia al tenant antes de tocar
-    return this.prisma.contact.update({
+    const updated = await this.prisma.contact.update({
       where: { id },
-      data: { name: dto.name, notes: dto.notes },
+      data: {
+        name: dto.name,
+        notes: dto.notes === undefined ? undefined : this.pii.encryptNullable(dto.notes),
+      },
     });
+    return this.decrypted(updated);
+  }
+
+  private decrypted(contact: Contact): Contact {
+    return { ...contact, notes: this.pii.decryptNullable(contact.notes) };
   }
 }

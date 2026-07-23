@@ -15,6 +15,7 @@ const API_PREFIXES = [
   '/quick-replies',
   '/webhooks',
   '/health',
+  '/integrations',
 ];
 
 export default defineConfig({

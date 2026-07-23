@@ -26,6 +26,7 @@
 - **Funcionalidades**: otros canales digitales (Instagram, Messenger, email); integraciones con CRMs externos y calendarios (Google Calendar, etc.) para que citas/recordatorios se sincronicen con herramientas que la PyME ya usa.
 - **Dependencias**: `API.md` estable y con versionado si ya hay clientes usándola activamente; decisión explícita de qué integración aporta valor real por canal/empresa piloto (no activar todas por defecto).
 - **Riesgos**: cada canal nuevo repite el mismo riesgo de cumplimiento que WhatsApp (políticas de la plataforma, riesgo de bloqueo si se usa vía no oficial) — aplicar el mismo criterio que llevó a elegir Meta Cloud API oficial (ver `DECISIONS.md`).
+- **Estado**: iniciada. **Google Calendar** (sincronización de citas, una sola vía) implementada — no dependía de credenciales de Meta, a diferencia de Instagram/Messenger (mismo tipo de aprobación de negocio que WhatsApp) que siguen bloqueados. Ver `TASKS.md` y `DECISIONS.md` (2026-07-23).
 
 ## Fase 4 — IA y automatizaciones
 

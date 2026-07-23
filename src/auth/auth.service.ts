@@ -66,10 +66,12 @@ export class AuthService {
       where: { email: dto.email },
     });
     // Ejecuta scrypt SIEMPRE (contra el hash real o el señuelo) para no filtrar
-    // por temporización cuál email está registrado.
+    // por temporización cuál email está registrado. Una cuenta creada con
+    // "Continuar con Google" tiene `passwordHash` nulo — nunca puede autenticar
+    // por contraseña, así que se compara igual contra el señuelo.
     const passwordOk = await verifyPassword(
       dto.password,
-      user ? user.passwordHash : DUMMY_HASH,
+      user?.passwordHash ?? DUMMY_HASH,
     );
     if (!user || !passwordOk) {
       throw new UnauthorizedException('Credenciales inválidas');
@@ -77,10 +79,19 @@ export class AuthService {
     return this.issueToken(user);
   }
 
-  /** Cambia la contraseña del usuario autenticado, verificando la actual. */
+  /**
+   * Cambia (o establece por primera vez) la contraseña del usuario
+   * autenticado. Si la cuenta no tiene contraseña aún (se creó con
+   * "Continuar con Google"), no hay nada que verificar y se establece
+   * directamente — estar autenticado con un JWT válido ya es la prueba de
+   * identidad en ese caso.
+   */
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ ok: true }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !(await verifyPassword(dto.currentPassword, user.passwordHash))) {
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+    if (user.passwordHash && !(await verifyPassword(dto.currentPassword, user.passwordHash))) {
       throw new UnauthorizedException('La contraseña actual no es correcta');
     }
     const passwordHash = await hashPassword(dto.newPassword);
@@ -88,7 +99,8 @@ export class AuthService {
     return { ok: true };
   }
 
-  private async issueToken(user: User): Promise<AuthResult> {
+  /** Público: lo usa también `GoogleAuthService` tras autenticar/crear la cuenta con Google. */
+  async issueToken(user: User): Promise<AuthResult> {
     const payload: JwtPayload = {
       sub: user.id,
       tenantId: user.tenantId,

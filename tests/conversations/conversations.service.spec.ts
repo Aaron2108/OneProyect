@@ -7,6 +7,7 @@ import {
 import { ConversationsService } from '../../src/conversations/conversations.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { WhatsappSenderService } from '../../src/whatsapp/whatsapp-sender.service';
+import { makeTestPiiCrypto } from '../helpers/pii-crypto.stub';
 
 describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
   const senderDisabled = {
@@ -22,7 +23,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     prisma: Record<string, unknown>,
     sender: WhatsappSenderService = senderDisabled,
   ): ConversationsService {
-    return new ConversationsService(makePrisma(prisma), sender);
+    return new ConversationsService(makePrisma(prisma), sender, makeTestPiiCrypto());
   }
 
   it('list filtra por tenantId y ordena por actividad reciente (keyset estable)', async () => {
@@ -110,23 +111,24 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
   });
 
   describe('notas internas', () => {
-    it('addNote crea la nota con el autor del token y scoped por tenant', async () => {
+    it('addNote crea la nota con el autor del token y scoped por tenant, cifrando el cuerpo en reposo', async () => {
       const count = jest.fn().mockResolvedValue(1);
       const userFindFirst = jest.fn().mockResolvedValue({ name: 'Ana' });
-      const noteCreate = jest.fn().mockResolvedValue({ id: 'n1' });
+      const noteCreate = jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'n1', ...data }));
       const service = makeService({
         conversation: { count },
         user: { findFirst: userFindFirst },
         conversationNote: { create: noteCreate },
       });
 
-      await service.addNote('t1', 'cv1', { userId: 'u1' }, 'Cliente pidió factura');
+      const result = await service.addNote('t1', 'cv1', { userId: 'u1' }, 'Cliente pidió factura');
       expect(noteCreate).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          tenantId: 't1', conversationId: 'cv1', authorId: 'u1', authorName: 'Ana',
-          body: 'Cliente pidió factura',
-        }),
+        data: expect.objectContaining({ tenantId: 't1', conversationId: 'cv1', authorId: 'u1', authorName: 'Ana' }),
       });
+      // El body persistido está cifrado (no en claro), pero el resultado devuelto sí lo trae en claro.
+      const persistedBody = noteCreate.mock.calls[0][0].data.body;
+      expect(persistedBody).not.toBe('Cliente pidió factura');
+      expect(result.body).toBe('Cliente pidió factura');
     });
 
     it('addNote lanza NotFound si la conversación no es del tenant', async () => {

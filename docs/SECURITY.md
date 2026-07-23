@@ -59,8 +59,9 @@ modificar datos de otro**. Se garantiza así:
 
 Los datos en `contacts`/`messages` son PII de clientes finales de terceros (las PyMEs que
 usan el software), no del propio tenant operador. Controles: acceso siempre filtrado por
-tenant (sección 1), y —pendiente para fases posteriores— políticas de retención/borrado y
-cifrado de campos sensibles en reposo si el volumen o la normativa lo exigen.
+tenant (sección 1); el contenido real de las conversaciones se cifra en reposo (§10); pendiente
+para fases posteriores: políticas de retención/borrado y, si el volumen o la normativa lo
+exige, extender el cifrado a `Contact.phone`/`name` (ver §10, requiere un índice ciego).
 
 ## 7. Rate limiting (implementado ✅)
 
@@ -77,10 +78,54 @@ cifrado de campos sensibles en reposo si el volumen o la normativa lo exigen.
 - Revisión humana antes de cualquier `git push` o cambio que afecte auth, autorización o
   manejo de datos sensibles.
 
-## 9. Pendiente (fases posteriores)
+## 9. "Continuar con Google" (login/registro, opcional)
+
+- Scope mínimo: `openid email profile` — **no** pide acceso a Calendar ni a nada más. Es un flujo de identidad, separado del de Google Calendar (sección 10): un usuario puede tener uno, otro, ambos o ninguno.
+- Solo se acepta el email si Google lo reporta como **verificado** (`email_verified`); si no, se rechaza — evita que alguien entre con un email de un dominio que no controla.
+- El alta de cuenta nueva (email no encontrado) usa un token de alta pendiente firmado (JWT corto, ~15 min, `purpose: 'google-signup'`) para pasar el email/nombre/`sub` de Google al segundo paso sin volver a tocar a Google — no se persiste nada hasta que el usuario confirma el nombre de la empresa.
+- El token de sesión final (`accessToken`) viaja al navegador en el **fragmento** de la URL de redirección (`#googleAuth=...`), nunca en la query string — los fragmentos no se envían al servidor en peticiones posteriores ni quedan en logs de acceso.
+- `User.passwordHash` es nulo para cuentas creadas solo con Google: el login por contraseña se rechaza explícitamente para esas cuentas (nunca intenta comparar contra `null`); `changePassword` permite establecer una contraseña por primera vez sin pedir la "actual" (no existe), usando el JWT de sesión como prueba de identidad suficiente.
+
+## 10. Cifrado en reposo del contenido de conversaciones
+
+- **Qué se cifra** (AES-256-GCM, `src/common/crypto.util.ts` + `PiiCryptoService`): `Message.content`
+  (el texto de cada mensaje, entrante y saliente), `ConversationNote.body` (notas internas del
+  equipo) y `Contact.notes`. Ninguno de estos campos se busca por SQL, así que cifrarlos no
+  cambia ningún comportamiento visible del panel.
+- **Qué NO se cifra, a propósito**: `Contact.phone` (índice único por tenant + búsqueda `contains`)
+  y `Contact.name` (búsqueda `contains`). Cifrarlos con AES-GCM (no determinista) rompería
+  ambas cosas; requeriría un **índice ciego** (hash determinista aparte para el único/búsqueda
+  exacta) que además degrada la búsqueda actual a solo-coincidencia-exacta. Decisión explícita
+  del propietario de dejarlos en claro por ahora — ver `DECISIONS.md` (2026-07-23).
+- **Clave**: `TOKEN_ENCRYPTION_KEY` (AES-256, 32 bytes en base64) — **obligatoria** desde el
+  arranque (`env.validation.ts`), no es una integración opcional como Meta/Anthropic/Google:
+  no tendría sentido correr con parte de las conversaciones cifradas y parte no.
+- **Migración de datos preexistentes**: `prisma/encrypt-existing-pii.ts` (`npm run prisma:encrypt-pii`)
+  cifra en un solo paso lo que ya estaba en claro antes de esta funcionalidad; es idempotente
+  (detecta el formato ya cifrado y lo deja igual), así que correrlo de más no hace daño.
+- Mismo mecanismo de cifrado que los tokens OAuth de Google Calendar (§10) — una sola
+  implementación de AES-256-GCM para todo secreto/PII en reposo.
+
+## 11. Integraciones OAuth (Google Calendar, Fase 3)
+
+- Un tenant conecta **una** cuenta de Google (la del negocio); solo el **OWNER** puede
+  conectar/desconectar (`@Roles(OWNER)`).
+- `access_token`/`refresh_token` se guardan **cifrados en reposo** (AES-256-GCM,
+  `src/common/crypto.util.ts`) con `TOKEN_ENCRYPTION_KEY` — nunca en claro en la BD.
+- El callback de OAuth (`GET /integrations/google-calendar/callback`) no lleva Bearer token
+  (lo invoca el navegador tras el consentimiento en Google); la identidad del tenant/usuario
+  viaja en el parámetro `state`, un JWT de corta duración (10 min) firmado con `JWT_SECRET`,
+  para que el callback no pueda usarse para inyectar la integración en un tenant ajeno.
+- Sincronización de una sola vía (WhatsFlow → Google): sin webhooks entrantes de Google que
+  verificar, sin superficie de ataque adicional en esa dirección.
+- Al desconectar se intenta revocar el token en Google (best-effort) y siempre se borran las
+  credenciales locales.
+
+## 12. Pendiente (fases posteriores)
 
 - Rate limiting distribuido por tenant (además del actual por IP) con backend Redis si se
   despliega multi-instancia.
-- Cifrado en reposo de campos sensibles y política de retención/borrado de PII.
+- Cifrado en reposo de campos sensibles (PII de contactos/mensajes) y política de
+  retención/borrado.
 - Rotación de `JWT_SECRET` y expiración/refresh de tokens más granular.
 - Almacenamiento cifrado del access token de Meta por tenant (onboarding multi-número).

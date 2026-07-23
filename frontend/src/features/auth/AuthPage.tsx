@@ -1,10 +1,24 @@
 import { motion } from 'framer-motion';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { ApiError } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 import { Field, Input, Label } from '@/components/ui/Input';
+import type { AuthResult } from '@/lib/types';
 import { HeroDemo } from './HeroDemo';
+
+/** Decodifica el AuthResult que el backend deja en el fragmento de la URL tras "Continuar con Google" (ver GoogleAuthController.callback). */
+function decodeGoogleAuthResult(base64url: string): AuthResult {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return JSON.parse(atob(padded)) as AuthResult;
+}
+
+function clearUrlHash(): void {
+  window.history.replaceState({}, '', window.location.pathname + window.location.search);
+}
 
 type Mode = 'login' | 'register';
 
@@ -17,7 +31,8 @@ const HEADLINE = [
 ];
 
 export function AuthPage(): JSX.Element {
-  const { login, register } = useAuth();
+  const { login, register, loginWithResult } = useAuth();
+  const toast = useToast();
   const [mode, setMode] = useState<Mode>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -27,6 +42,40 @@ export function AuthPage(): JSX.Element {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleSignup, setGoogleSignup] = useState<{ token: string; email: string; name: string } | null>(null);
+  const [googleTenantName, setGoogleTenantName] = useState('');
+  const [googleSignupBusy, setGoogleSignupBusy] = useState(false);
+  const [googleSignupError, setGoogleSignupError] = useState('');
+
+  // El backend redirige aquí (GoogleAuthController.callback) con el resultado
+  // en el fragmento de la URL — nunca en la query string, que sí viaja al servidor.
+  function processGoogleParams(params: URLSearchParams): void {
+    if (params.has('googleAuth')) {
+      try {
+        loginWithResult(decodeGoogleAuthResult(params.get('googleAuth')!));
+      } catch {
+        toast.show('No se pudo completar el inicio de sesión con Google', 'error');
+      }
+    } else if (params.has('googleSignup')) {
+      setGoogleSignup({
+        token: params.get('googleSignup')!,
+        email: params.get('email') ?? '',
+        name: params.get('name') ?? '',
+      });
+    } else if (params.has('googleAuthError')) {
+      toast.show('No se pudo conectar con Google', 'error');
+    }
+  }
+
+  useEffect(() => {
+    if (!window.location.hash) return;
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    clearUrlHash();
+    processGoogleParams(params);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(ev: FormEvent): Promise<void> {
     ev.preventDefault();
@@ -39,6 +88,42 @@ export function AuthPage(): JSX.Element {
       setError(e instanceof ApiError ? e.message : 'Algo salió mal. Intenta de nuevo.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function continueWithGoogle(): Promise<void> {
+    // Navegación completa (no popup): un popup exige comunicar el resultado
+    // de vuelta entre ventanas, y las páginas de Google imponen
+    // Cross-Origin-Opener-Policy — eso rompe, según el navegador, la
+    // detección de la ventana, el cierre automático o el aviso por
+    // `localStorage`. La navegación completa no depende de nada de eso: es
+    // la misma ventana la que vuelve con el resultado.
+    setGoogleLoading(true);
+    try {
+      const { url } = await api<{ url: string }>('/auth/google/start');
+      window.location.href = url;
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'No se pudo iniciar sesión con Google', 'error');
+      setGoogleLoading(false);
+    }
+  }
+
+  async function completeGoogleSignup(ev: FormEvent): Promise<void> {
+    ev.preventDefault();
+    if (!googleSignup) return;
+    setGoogleSignupError('');
+    setGoogleSignupBusy(true);
+    try {
+      const result = await api<AuthResult>('/auth/google/complete-signup', {
+        method: 'POST',
+        body: { token: googleSignup.token, tenantName: googleTenantName },
+      });
+      loginWithResult(result);
+      setGoogleSignup(null);
+    } catch (e) {
+      setGoogleSignupError(e instanceof ApiError ? e.message : 'No se pudo crear la empresa');
+    } finally {
+      setGoogleSignupBusy(false);
     }
   }
 
@@ -175,6 +260,24 @@ export function AuthPage(): JSX.Element {
             </Button>
           </form>
 
+          <div className="my-4 flex items-center gap-3" style={{ color: '#6d8177' }}>
+            <span className="h-px flex-1" style={{ background: 'rgba(255,255,255,.12)' }} />
+            <span className="text-xs">o</span>
+            <span className="h-px flex-1" style={{ background: 'rgba(255,255,255,.12)' }} />
+          </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            fullWidth
+            loading={googleLoading}
+            disabled={googleLoading}
+            onClick={continueWithGoogle}
+            className="!border-[rgba(255,255,255,.2)] !text-[#eaf3ee] hover:!border-[#7be8bf] hover:!text-[#7be8bf]"
+          >
+            <span aria-hidden="true" className="font-bold">G</span> Continuar con Google
+          </Button>
+
           <p className="mt-4 text-center text-sm" style={{ color: '#9fb3aa' }}>
             {isRegister ? '¿Ya tienes cuenta? ' : '¿Aún no tienes cuenta? '}
             <a
@@ -193,6 +296,42 @@ export function AuthPage(): JSX.Element {
           </p>
         </motion.div>
       </section>
+
+      <Dialog
+        open={!!googleSignup}
+        onOpenChange={(open) => !open && setGoogleSignup(null)}
+        title="Un último paso"
+        description={`Vamos a crear tu empresa en WhatsFlow para ${googleSignup?.email ?? 'tu cuenta de Google'}.`}
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setGoogleSignup(null)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="google-signup-form" loading={googleSignupBusy} disabled={googleSignupBusy}>
+              Crear mi empresa
+            </Button>
+          </>
+        }
+      >
+        {googleSignupError && (
+          <div role="alert" className="mb-3.5 rounded-sm bg-danger-tint px-3.5 py-2.5 text-[13.5px] text-danger">
+            {googleSignupError}
+          </div>
+        )}
+        <form id="google-signup-form" onSubmit={completeGoogleSignup}>
+          <Field>
+            <Label htmlFor="f_google_tenant">Nombre de tu empresa</Label>
+            <Input
+              id="f_google_tenant"
+              placeholder="Mi Negocio"
+              autoComplete="organization"
+              autoFocus
+              value={googleTenantName}
+              onChange={(e) => setGoogleTenantName(e.target.value)}
+            />
+          </Field>
+        </form>
+      </Dialog>
     </div>
   );
 }

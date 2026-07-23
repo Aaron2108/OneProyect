@@ -8,6 +8,7 @@ import {
   MessageSender,
 } from '@prisma/client';
 import { Job } from 'bullmq';
+import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { HistoryTurn } from '../ai/ai.types';
@@ -33,6 +34,7 @@ export class InboundMessageProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
     private readonly sender: WhatsappSenderService,
+    private readonly pii: PiiCryptoService,
   ) {
     super();
   }
@@ -108,7 +110,7 @@ export class InboundMessageProcessor extends WorkerHost {
         sender: MessageSender.CONTACT,
         whatsappMessageId: data.waMessageId,
         type: data.type,
-        content: data.text,
+        content: this.pii.encrypt(data.text),
         createdAt: sentAt,
       },
     });
@@ -192,7 +194,7 @@ export class InboundMessageProcessor extends WorkerHost {
           direction: MessageDirection.OUTBOUND,
           sender: MessageSender.AI,
           type: 'text',
-          content: reply.text,
+          content: this.pii.encrypt(reply.text),
         },
       });
       await this.prisma.conversation.update({
@@ -271,7 +273,7 @@ export class InboundMessageProcessor extends WorkerHost {
           m.direction === MessageDirection.INBOUND
             ? ('user' as const)
             : ('assistant' as const),
-        text: m.content,
+        text: this.pii.decrypt(m.content),
       }));
   }
 

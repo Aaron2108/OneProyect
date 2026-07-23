@@ -44,7 +44,17 @@ Features de escalabilidad y colaboración construidas sobre el MVP (todas con sc
 - [x] **Respuestas rápidas** (plantillas de mensaje del equipo, insertables en el composer).
 - [x] Endurecimiento del worker de recordatorios (claim atómico + backoff) y correcciones de la auditoría de código.
 - [x] **Migración del panel a React** (`/frontend`: Vite + TypeScript + Tailwind + Radix UI + Framer Motion + Recharts + `@formkit/auto-animate`), sin Next.js ni monorepo (ver `DECISIONS.md`). Sistema de diseño con tokens claro/oscuro (modo oscuro cinematográfico en auth, toggle en la app), glassmorphism en superficies clave, tri-voz reforzada (bubbles con glow, gauge radial de automatización, bento en métricas). Servido por Nest como build estático (`npm run build` en la raíz). Verificado: build de producción, Lighthouse accesibilidad 100 / buenas prácticas 100, responsive sin overflow, funcional end-to-end (login, envío de mensajes, handoff, notas, respuestas rápidas, export).
-- [ ] Migrar a esquema-por-tenant si el volumen lo justifica; versionado de API; cifrado de PII en reposo (ver `ROADMAP.md` Fase 2 y `SECURITY.md`).
+- [x] **Cifrado en reposo del contenido de conversaciones**: `Message.content`, `ConversationNote.body` y `Contact.notes` (AES-256-GCM, `PiiCryptoService`). `Contact.phone`/`name` quedan en claro a propósito (se buscan por `contains` y `phone` tiene índice único — cifrarlos exige un índice ciego, ver `SECURITY.md` §10 y `DECISIONS.md` 2026-07-23). Migración de datos preexistentes: `npm run prisma:encrypt-pii`.
+- [ ] Migrar a esquema-por-tenant si el volumen lo justifica; versionado de API; cifrado de `Contact.phone`/`name` si se decide construir el índice ciego (ver `ROADMAP.md` Fase 2 y `SECURITY.md` §10).
+
+## Fase 3 — Integraciones (en curso)
+
+Iniciada antes de tener credenciales de Meta (RF de WhatsApp) porque no depende de ellas — ver `docs/ROADMAP.md`.
+
+- [x] **Google Calendar**: conexión OAuth2 por tenant (solo OWNER, un calendario por negocio) y sincronización de una sola vía WhatsFlow→Google al crear/editar/cancelar una cita (`src/google-calendar/`). Tokens cifrados en reposo. Ver `docs/DECISIONS.md` (2026-07-23) y `SECURITY.md` §11. Probada end-to-end con credenciales reales del propietario.
+- [x] **"Continuar con Google"** (login/registro, opcional): alternativa por usuario al email+contraseña, independiente de la integración de Calendar. Alta en dos pasos si el email es nuevo (falta el nombre de la empresa). `src/auth/google-auth.service.ts`. Ver `docs/DECISIONS.md` (2026-07-23) y `SECURITY.md` §9. Requiere `GOOGLE_LOGIN_REDIRECT_URI` además de las credenciales ya usadas por Calendar. Navegación de página completa (no popup) — ver `DECISIONS.md` (2026-07-23, "sin popup").
+- [x] **Pestaña "Calendario" en el panel** (`frontend/src/features/calendar/`): vista de mes (sin librería externa) con las citas del tenant, alta/edición/cancelación desde el panel (antes solo la creaba la IA o la API directo) y la tarjeta de conexión a Google Calendar (movida aquí desde "Equipo"). Backend: `GET /appointments` ahora admite `from`/`to` e incluye el contacto. Verificado end-to-end en navegador (crear, editar, cancelar, contador de citas por día).
+- [ ] Otros canales (Instagram, Messenger, email) — bloqueado por las mismas credenciales de Meta que WhatsApp (RF-1..RF-12); no se avanza hasta tenerlas.
 
 ## Backlog no priorizado (fases 3-5)
 

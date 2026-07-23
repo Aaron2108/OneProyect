@@ -20,6 +20,8 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (input: LoginInput) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  /** Usado tras "Continuar con Google": ya llega un AuthResult completo, sin llamar a /auth/login. */
+  loginWithResult: (result: AuthResult) => void;
   logout: () => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
@@ -57,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       isAuthenticated: !!user && !!getToken(),
       login: async (input) => persist(await api<AuthResult>('/auth/login', { method: 'POST', body: input })),
       register: async (input) => persist(await api<AuthResult>('/auth/register', { method: 'POST', body: input })),
+      loginWithResult: persist,
       logout,
       changePassword: async (currentPassword, newPassword) => {
         await api('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });

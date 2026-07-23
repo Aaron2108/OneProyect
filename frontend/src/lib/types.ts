@@ -5,6 +5,7 @@ export type ConversationStatus = 'OPEN' | 'CLOSED';
 export type ConversationHandler = 'AI' | 'HUMAN';
 export type MessageDirection = 'INBOUND' | 'OUTBOUND';
 export type MessageSender = 'CONTACT' | 'AI' | 'HUMAN';
+export type AppointmentStatus = 'SCHEDULED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
 
 export interface AuthUser {
   id: string;
@@ -83,6 +84,24 @@ export interface TeamMember {
   email: string;
   role: UserRole;
   createdAt: string;
+}
+
+export interface Appointment {
+  id: string;
+  contactId: string;
+  title: string;
+  scheduledAt: string;
+  status: AppointmentStatus;
+  notes: string | null;
+  googleEventId: string | null;
+  createdAt: string;
+  contact: { id: string; name: string | null; phone: string };
+}
+
+export interface GoogleCalendarStatus {
+  connected: boolean;
+  googleAccountEmail: string | null;
+  connectedAt: string | null;
 }
 
 export interface ActivityPoint {

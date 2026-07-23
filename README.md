@@ -52,6 +52,29 @@ Para producción (o para probar el build real servido por Nest en `:3000`): `npm
 
 **Probar la IA sin gastar créditos** (desarrollo local): arranca el backend con `AI_PROVIDER=mock npm run start`. El agente devuelve respuestas simuladas y ejecuta el tool-calling real contra la BD (crear cita, etc.). Para usar Claude real, deja `AI_PROVIDER` sin definir (o `anthropic`) y pon una `ANTHROPIC_API_KEY` con saldo.
 
+**`TOKEN_ENCRYPTION_KEY` (obligatoria)**: cifra en reposo el contenido de conversaciones (mensajes, notas — ver `SECURITY.md` §10) y, si están configuradas, las credenciales de Google. Sin ella la app **no arranca** (`env.validation.ts`).
+
+```bash
+TOKEN_ENCRYPTION_KEY=...    # clave AES-256 en base64: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Si ya tenías datos guardados antes de configurar esta clave, cífralos una vez con `npm run prisma:encrypt-pii` (script idempotente).
+
+**Google Calendar** (Fase 3, opcional): sin configurar, la integración queda deshabilitada sin afectar el resto del panel. Para activarla, añade a `.env`:
+
+```bash
+GOOGLE_CLIENT_ID=...        # de una app OAuth en Google Cloud Console (tipo "Web application")
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:3000/integrations/google-calendar/callback  # debe coincidir exactamente con el registrado en Google
+FRONTEND_BASE_URL=http://localhost:5173  # solo en dev, para que los callbacks de Google redirijan a Vite y no a :3000
+```
+
+**"Continuar con Google"** (login/registro, opcional — independiente de lo anterior): reusa `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (mismo cliente OAuth) más una segunda URI de redirección, registrada también en Google Cloud Console:
+
+```bash
+GOOGLE_LOGIN_REDIRECT_URI=http://localhost:3000/auth/google/callback
+```
+
 Scripts útiles (raíz): `npm test` (tests del backend), `npm run build` (compila backend + frontend), `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores). Dentro de `frontend/`: `npm run build` (build de producción), `npm run lint`.
 
 ## Documentación

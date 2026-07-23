@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
+import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -16,6 +17,7 @@ import { RemindersModule } from './reminders/reminders.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { QuickRepliesModule } from './quick-replies/quick-replies.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 
 @Module({
   imports: [
@@ -38,6 +40,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     // estricto con @Throttle. Ver SECURITY.md.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
+    CommonModule,
     HealthModule,
     AuthModule,
     UsersModule,
@@ -48,6 +51,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     MetricsModule,
     QuickRepliesModule,
     WhatsappModule,
+    GoogleCalendarModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

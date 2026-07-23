@@ -20,7 +20,10 @@
 | `/auth/register` | `POST` | Alta de empresa (tenant) + usuario propietario (OWNER). Devuelve JWT. |
 | `/auth/login` | `POST` | Inicio de sesión con email + contraseña. Devuelve JWT. |
 | `/auth/me` | `GET` | Datos del usuario autenticado (requiere Bearer token). |
-| `/auth/change-password` | `POST` | Cambiar la propia contraseña (verifica la actual). |
+| `/auth/change-password` | `POST` | Cambiar la propia contraseña (verifica la actual; si la cuenta no tenía una —creada con Google— la establece directamente). |
+| `/auth/google/start` | `GET` | "Continuar con Google" (opcional, alternativo al email+contraseña): devuelve la URL de consentimiento de Google. |
+| `/auth/google/callback` | `GET` | Callback de Google. Si el email ya existe, autentica; si no, redirige con un token de alta pendiente (falta el nombre de la empresa). |
+| `/auth/google/complete-signup` | `POST` | Segundo paso del alta con Google: recibe el token pendiente + `tenantName` y crea el tenant/usuario OWNER (sin contraseña). |
 
 **Endpoints REST de producto (todos con scope de tenant; ✅ implementado / ⏳ planificado):**
 
@@ -34,10 +37,11 @@
 | Equipo (usuarios) | `GET/POST /users` | ✅ Lista el equipo del tenant; invitar es **solo OWNER** (`@Roles(OWNER)`). |
 | Respuestas rápidas | `GET/POST /quick-replies`, `PATCH/DELETE /quick-replies/:id` | ✅ Plantillas de mensaje compartidas por el equipo. |
 | Mensajes salientes manuales | `POST /conversations/:id/messages` | ✅ El humano responde directo; persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y envía por Meta (ventana 24h). |
-| Citas | `GET/POST /appointments`, `GET/PATCH /appointments/:id` | ✅ CRUD con scope de tenant (la IA también las crea vía tool-calling). |
+| Citas | `GET/POST /appointments`, `GET/PATCH /appointments/:id` | ✅ CRUD con scope de tenant (la IA también las crea vía tool-calling). `GET` admite `contactId`, `from`/`to` (rango de fechas, para la vista de calendario) e incluye el contacto (`id`/`name`/`phone`). |
 | Recordatorios | `GET/POST /reminders`, `GET/PATCH /reminders/:id` | ✅ CRUD con scope de tenant. Envío programado (worker por `remindAt`) ⏳. |
 | Métricas | `GET /metrics/overview?from=&to=` | ✅ Resumen agregado por tenant y **período** (conversaciones, mensajes, tasa de automatización IA vs humano, citas, recordatorios, actividad diaria). |
-| Panel web | `GET /` | ✅ SPA React (`/frontend`, build estático servido por Nest): login/registro, bandeja (búsqueda, sin leer, notas, respuestas rápidas), dashboard de métricas con filtro de fechas, contactos, equipo, mi cuenta, export CSV, modo claro/oscuro. |
+| Google Calendar (Fase 3) | `GET /integrations/google-calendar/status`, `GET /integrations/google-calendar/connect-url`, `POST /integrations/google-calendar/disconnect`, `GET /integrations/google-calendar/callback` | ✅ Conexión OAuth2 de un calendario de Google por tenant (solo OWNER conecta/desconecta); sincronización de una sola vía WhatsFlow→Google al crear/editar/cancelar una cita. `callback` es público (lo invoca el navegador desde Google); ver `SECURITY.md` §11. |
+| Panel web | `GET /` | ✅ SPA React (`/frontend`, build estático servido por Nest): login/registro (con "Continuar con Google" opcional), bandeja (búsqueda, sin leer, notas, respuestas rápidas), dashboard de métricas con filtro de fechas, contactos, **calendario** (vista de mes con las citas, alta/edición/cancelación, conexión a Google Calendar), equipo, mi cuenta, export CSV, modo claro/oscuro. |
 
 **Autenticación/autorización (implementado ✅)**: JWT por sesión de usuario del panel; cada token incluye `tenantId`, `sub` (userId), `email` y `role`. El `JwtAuthGuard` valida el Bearer token y adjunta el contexto a la request; el `tenantId` usado en las consultas viene SIEMPRE del token, nunca del cliente, así ningún endpoint puede leer o tocar datos de otro tenant (ver `DATABASE.md`). Contraseñas con `scrypt` (nativo de Node). Roles vía `@Roles()` + `RolesGuard`. Detalle de amenazas y controles en `SECURITY.md`.
 

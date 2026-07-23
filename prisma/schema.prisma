@@ -80,8 +80,30 @@ model Tenant {
   appointments  Appointment[]
   reminders     Reminder[]
   quickReplies  QuickReply[]
+  googleCalendarIntegration GoogleCalendarIntegration?
 
   @@map("tenants")
+}
+
+// Fase 3 (integraciones): conexión de UN calendario de Google por tenant (lo
+// conecta el OWNER). Sincronización de una sola vía (WhatsFlow → Google) — ver
+// docs/DECISIONS.md. Tokens cifrados en reposo (AES-256-GCM, ver
+// src/common/crypto.util.ts); nunca se guardan en claro.
+model GoogleCalendarIntegration {
+  id                   String   @id @default(uuid())
+  tenantId             String   @unique @map("tenant_id")
+  googleAccountEmail   String   @map("google_account_email")
+  googleCalendarId     String   @default("primary") @map("google_calendar_id")
+  accessToken          String   @map("access_token") // cifrado
+  refreshToken         String   @map("refresh_token") // cifrado
+  accessTokenExpiresAt DateTime @map("access_token_expires_at")
+  connectedByUserId    String   @map("connected_by_user_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("google_calendar_integrations")
 }
 
 // Respuestas rápidas: plantillas de mensaje reutilizables del equipo.
@@ -103,7 +125,12 @@ model User {
   id           String   @id @default(uuid())
   tenantId     String   @map("tenant_id")
   email        String
-  passwordHash String   @map("password_hash")
+  // Nulo si la cuenta se creó con "Continuar con Google" y nunca puso una
+  // contraseña propia (ver auth/google-auth.service.ts) — no reemplaza al login
+  // por contraseña, es una alternativa.
+  passwordHash String?  @map("password_hash")
+  // `sub` de Google (identificador estable de la cuenta), si se vinculó.
+  googleId     String?  @unique @map("google_id")
   name         String
   role         UserRole @default(AGENT)
   createdAt    DateTime @default(now()) @map("created_at")
@@ -206,6 +233,9 @@ model Appointment {
   scheduledAt DateTime          @map("scheduled_at")
   status      AppointmentStatus @default(SCHEDULED)
   notes       String?
+  // ID del evento en Google Calendar si el tenant tiene la integración conectada
+  // (Fase 3); null si no está sincronizada o si el tenant no la usa.
+  googleEventId String?         @map("google_event_id")
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 

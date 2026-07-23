@@ -30,6 +30,23 @@ export interface AppConfig {
     model: string;
     maxCallsPerConversationPerHour: number;
   };
+  google: {
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+    // Redirect URI del login/registro con Google — distinto del de Calendar
+    // (mismo cliente OAuth, dos URIs de redirección autorizadas en Google
+    // Cloud Console, un scope mínimo para cada propósito).
+    loginRedirectUri: string;
+  };
+  security: {
+    tokenEncryptionKey: string;
+  };
+  frontend: {
+    // Origen del panel para redirigir tras el callback de OAuth. Vacío = ruta
+    // relativa (mismo origen que Nest en producción); en dev es http://localhost:5173.
+    baseUrl: string;
+  };
 }
 
 export default (): AppConfig => ({
@@ -65,5 +82,17 @@ export default (): AppConfig => ({
       process.env.AI_MAX_CALLS_PER_CONVERSATION_PER_HOUR ?? '20',
       10,
     ),
+  },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    redirectUri: process.env.GOOGLE_REDIRECT_URI ?? '',
+    loginRedirectUri: process.env.GOOGLE_LOGIN_REDIRECT_URI ?? '',
+  },
+  security: {
+    tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? '',
+  },
+  frontend: {
+    baseUrl: process.env.FRONTEND_BASE_URL ?? '',
   },
 });

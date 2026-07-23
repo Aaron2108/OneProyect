@@ -33,6 +33,13 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   JWT_SECRET!: string;
+
+  // Cifra en reposo el contenido de conversaciones (mensajes, notas — ver
+  // SECURITY.md §11): no es una integración opcional como Meta/Anthropic, así
+  // que se exige desde el arranque igual que JWT_SECRET/DATABASE_URL.
+  @IsString()
+  @IsNotEmpty()
+  TOKEN_ENCRYPTION_KEY!: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

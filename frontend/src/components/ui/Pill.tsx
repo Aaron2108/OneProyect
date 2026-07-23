@@ -5,7 +5,16 @@ import clsx from 'clsx';
  * lleva además una forma/glifo distinta (diamante, punto, cuadrado, estrella,
  * anillo), así funciona igual para daltonismo o escala de grises.
  */
-export type PillKind = 'ai' | 'human' | 'closed' | 'owner' | 'agent';
+export type PillKind =
+  | 'ai'
+  | 'human'
+  | 'closed'
+  | 'owner'
+  | 'agent'
+  | 'scheduled'
+  | 'confirmed'
+  | 'cancelled'
+  | 'completed';
 
 const CONFIG: Record<PillKind, { label: string; glyph: string; cls: string }> = {
   ai: { label: 'IA', glyph: '◆', cls: 'bg-ai-tint text-ai-700' },
@@ -13,6 +22,10 @@ const CONFIG: Record<PillKind, { label: string; glyph: string; cls: string }> = 
   closed: { label: 'Cerrada', glyph: '▪', cls: 'bg-[var(--muted-bg)] text-[var(--muted-ink)]' },
   owner: { label: 'Propietario', glyph: '★', cls: 'bg-brand-tint text-brand-700' },
   agent: { label: 'Agente', glyph: '○', cls: 'bg-[var(--muted-bg)] text-[var(--muted-ink)]' },
+  scheduled: { label: 'Agendada', glyph: '◷', cls: 'bg-warn-tint text-warn' },
+  confirmed: { label: 'Confirmada', glyph: '✓', cls: 'bg-brand-tint text-brand-700' },
+  cancelled: { label: 'Cancelada', glyph: '✕', cls: 'bg-danger-tint text-danger' },
+  completed: { label: 'Completada', glyph: '●', cls: 'bg-[var(--muted-bg)] text-[var(--muted-ink)]' },
 };
 
 export function Pill({ kind, label }: { kind: PillKind; label?: string }): JSX.Element {

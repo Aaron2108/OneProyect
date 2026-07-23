@@ -46,9 +46,33 @@ Meta Cloud API (WhatsApp) ⇄ Webhook receiver (NestJS)
 
 El webhook responde de inmediato a Meta y encola el mensaje; el procesamiento real (contexto + IA + tool-calling + persistencia) ocurre de forma asíncrona vía BullMQ, para no arriesgar timeouts/reintentos de Meta.
 
-**Estructura de código en `/src`**: **módulos de NestJS por feature** con separación ligera controlador → servicio → repositorio (Prisma). La estructura hexagonal estricta (domain/application/infrastructure/presentation en capas separadas) se difiere: para el MVP añade boilerplate sin valor de validación (mismo criterio que llevó a diferir `pgvector`, ver `DECISIONS.md`). Módulos implementados: `config/` (configuración tipada + validación de entorno), `prisma/` (cliente global), `health/` (health check), `auth/` (JWT con scope de tenant), `whatsapp/` (webhook + firma HMAC + cola + worker + envío Meta), `ai/` (agente Claude + tool-calling + proveedor mock), `contacts/`, `conversations/`, `appointments/`, `reminders/`, `metrics/`, `quick-replies/`, `users/`.
+**Estructura de código en `/src`**: **módulos de NestJS por feature** con separación ligera controlador → servicio → repositorio (Prisma). La estructura hexagonal estricta (domain/application/infrastructure/presentation en capas separadas) se difiere: para el MVP añade boilerplate sin valor de validación (mismo criterio que llevó a diferir `pgvector`, ver `DECISIONS.md`). Módulos implementados: `config/` (configuración tipada + validación de entorno), `prisma/` (cliente global), `health/` (health check), `auth/` (JWT con scope de tenant), `whatsapp/` (webhook + firma HMAC + cola + worker + envío Meta), `ai/` (agente Claude + tool-calling + proveedor mock), `contacts/`, `conversations/`, `appointments/`, `reminders/`, `metrics/`, `quick-replies/`, `users/`, `google-calendar/` (OAuth2 + sincronización de citas, Fase 3), `common/` (utilidades transversales, p. ej. cifrado de secretos en reposo).
 
 **Seguridad transversal**: el `tenantId` (y en la IA también el `contactId`) proviene siempre del contexto de confianza (token JWT / contexto de la conversación), nunca de la entrada del cliente — ningún endpoint ni herramienta de IA puede operar sobre datos de otro tenant.
+
+## Integraciones — Google Calendar (`google-calendar/`, Fase 3)
+
+Primer módulo de la Fase 3 (`docs/ROADMAP.md`): sincroniza citas del panel con Google Calendar. Alcance deliberadamente acotado, revisable si el negocio pide más:
+
+- **Una sola vía** (WhatsFlow → Google): crear/editar/cancelar una cita en el panel refleja el evento en Google; no hay importación en sentido inverso (evita webhooks push de Google y resolución de conflictos, mucho más complejos y frágiles).
+- **Conexión por tenant**, no por usuario: el OWNER conecta una vez la cuenta de Google del negocio (`GoogleCalendarOauthService`); todas las citas del tenant van a ese calendario.
+- OAuth2 y llamadas a la API de Calendar vía `fetch` nativo, sin el SDK `googleapis` (pesado para 3 endpoints) — mismo criterio que `WhatsappSenderService`.
+- Tokens cifrados en reposo (`common/crypto.util.ts`, AES-256-GCM) — ver `SECURITY.md` §11.
+- `GoogleCalendarSyncService` nunca hace fallar la operación de la cita que la origina: si Google no responde o el tenant no conectó la integración, se registra el error y se continúa — WhatsFlow es la fuente de verdad.
+
+Detalle de la decisión (alcance, alternativas descartadas) en `DECISIONS.md`.
+
+## "Continuar con Google" (`auth/google-*`, opcional)
+
+Alternativa opcional al login por email+contraseña para entrar a WhatsFlow — **independiente** de la integración de Google Calendar de arriba, aunque ambas hablan OAuth2 con Google:
+
+- Scope mínimo (`openid email profile`, sin `calendar.events`): esto es solo identidad, no pide acceso de escritura a nada.
+- Por **usuario**, no por tenant: cada persona conecta su propia cuenta de Google si quiere.
+- Alta en dos pasos si el email es nuevo: Google no sabe el nombre de la empresa, así que `GoogleAuthService.handleCallback` devuelve un token de alta pendiente (firmado, ~15 min) y el panel pide un solo campo antes de crear el tenant (`completeSignup`). Si el email ya existe, es un login normal y se vincula el `googleId` a esa cuenta.
+- `src/common/google-oauth.util.ts` reúne las primitivas de bajo nivel (canjear código, leer perfil) compartidas por este flujo y por `google-calendar/` — la única parte que de verdad se repetía entre los dos.
+- Un usuario puede tener contraseña, Google, o ambos; `User.passwordHash` es nulo para cuentas creadas solo con Google.
+
+Un cliente que se registra por el flujo normal (email+contraseña) **igual necesita conectar su cuenta de Google por separado** si quiere usar Google Calendar — son dos concesiones de acceso distintas (identidad vs. calendario), no una implica la otra.
 
 ## Frontend — panel web (`/frontend`)
 
@@ -61,7 +85,7 @@ El webhook responde de inmediato a Meta y encola el mensaje; el procesamiento re
 lib/            → cliente API (fetch + auth header), tipos compartidos, contexts (auth/theme/toast)
 components/ui/   → primitivos de UI reutilizables (Button, Input, Dialog, Pill, Avatar, KpiCard, RadialGauge…)
 components/layout/ → AppShell (topbar + tabs + tema + menú de perfil)
-features/        → un directorio por dominio: auth, inbox, metrics, contacts, team, account
+features/        → un directorio por dominio: auth, inbox, metrics, contacts, calendar, integrations, team, account
 styles/          → tokens.css (sistema de diseño) + components.css (bubbles, glass, mesh, gauge…)
 ```
 

@@ -108,6 +108,19 @@ describe('AuthService', () => {
         service.login({ email: 'noexiste@b.com', password: 'password123' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
+
+    it('rechaza login por contraseña si la cuenta se creó con Google (passwordHash nulo)', async () => {
+      const prisma = makePrisma({
+        user: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'u1', email: 'a@b.com', passwordHash: null }),
+        },
+      });
+      const service = new AuthService(prisma, jwt);
+
+      await expect(
+        service.login({ email: 'a@b.com', password: 'cualquiera123' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
   });
 
   describe('changePassword', () => {
@@ -141,6 +154,21 @@ describe('AuthService', () => {
         service.changePassword('u1', { currentPassword: 'incorrecta', newPassword: 'nueva12345' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(update).not.toHaveBeenCalled();
+    });
+
+    it('establece la contraseña directamente si la cuenta no tenía (creada con Google)', async () => {
+      const update = jest.fn().mockResolvedValue({});
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', passwordHash: null }), update },
+      });
+      const service = new AuthService(prisma, jwt);
+
+      const res = await service.changePassword('u1', {
+        currentPassword: 'lo-que-sea',
+        newPassword: 'nueva12345',
+      });
+      expect(res).toEqual({ ok: true });
+      expect(update).toHaveBeenCalledTimes(1);
     });
   });
 });
