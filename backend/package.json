@@ -1,15 +1,12 @@
 {
   "name": "whatsflow-ai",
   "version": "0.1.0",
-  "description": "WhatsFlow AI — plataforma SaaS de gestión de comunicación por WhatsApp con IA para PyMEs",
+  "description": "WhatsFlow AI â€” plataforma SaaS de gestiÃ³n de comunicaciÃ³n por WhatsApp con IA para PyMEs",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build && npm run build:frontend",
-    "build:backend": "nest build",
-    "build:frontend": "cd frontend && npm install && npm run build",
-    "dev:frontend": "cd frontend && npm run dev",
+    "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -24,8 +21,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:encrypt-pii": "ts-node prisma/encrypt-existing-pii.ts",
-    "db:up": "docker compose up -d postgres redis",
-    "db:down": "docker compose down"
+    "db:up": "docker compose -f ../docker-compose.yml up -d postgres redis",
+    "db:down": "docker compose -f ../docker-compose.yml down"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.5",

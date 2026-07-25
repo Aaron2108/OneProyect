@@ -5,6 +5,12 @@
 
 const TOKEN_KEY = 'wf_token';
 
+/** Backend en otro origen (repos separados): normaliza `path` a `VITE_API_URL + path` si está definida. */
+function resolveUrl(path: string): string {
+  const base = import.meta.env.VITE_API_URL;
+  return base ? `${base.replace(/\/$/, '')}${path}` : path;
+}
+
 export function getToken(): string {
   return localStorage.getItem(TOKEN_KEY) || '';
 }
@@ -44,7 +50,7 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
   };
   if (token) finalHeaders.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(path, {
+  const res = await fetch(resolveUrl(path), {
     ...rest,
     headers: finalHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -68,7 +74,7 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
 /** Descarga un archivo (CSV) autenticado — un <a href> normal no llevaría el token. */
 export async function downloadFile(path: string, filename: string): Promise<void> {
   const token = getToken();
-  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(resolveUrl(path), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) throw new ApiError('No se pudo exportar', res.status);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

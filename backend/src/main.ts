@@ -1,4 +1,3 @@
-import { join } from 'path';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -12,11 +11,15 @@ async function bootstrap(): Promise<void> {
     rawBody: true,
   });
 
-  // Panel web (React + Vite, ver /frontend) servido como build estático — Nest
-  // no compila ni sirve el frontend en dev; `npm run build` (raíz) construye
-  // frontend/dist antes de este paso. __dirname es dist/ en ejecución, así que
-  // ../frontend/dist apunta al build generado por Vite.
-  app.useStaticAssets(join(__dirname, '..', 'frontend', 'dist'));
+  // Backend y frontend son repos/despliegues independientes (ver /CLAUDE.md):
+  // Nest ya no sirve el build de React como estático, solo expone la API. El
+  // panel (origen distinto) necesita CORS habilitado para poder consumirla.
+  const config = app.get(ConfigService);
+  const frontendBaseUrl = config.get<string>('frontend.baseUrl');
+  app.enableCors({
+    origin: frontendBaseUrl || 'http://localhost:5173',
+    credentials: true,
+  });
 
   // Validación global de DTOs en los límites del sistema (REQUIREMENTS.md).
   app.useGlobalPipes(
@@ -27,7 +30,6 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  const config = app.get(ConfigService);
   const port = config.get<number>('port') ?? 3000;
   await app.listen(port);
 

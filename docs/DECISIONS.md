@@ -189,3 +189,9 @@
 ---
 
 Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS antes de pasar a producción real con las primeras empresas piloto.
+
+## 2026-07-25 — Separación del repositorio en `/frontend` y `/backend`
+
+**Decisión**: el backend NestJS pasa de la raíz a `/backend`; `/frontend` se mantiene donde estaba. Cada carpeta es una aplicación independiente con su propio `package.json`, `.env` y despliegue, pensadas como repositorios de GitHub separados. `docker-compose.yml` (Postgres + Redis) y `/docs` quedan en la raíz porque son infraestructura y documentación compartidas.
+**Motivo**: solicitado por el propietario para publicar frontend y backend como repos independientes.
+**Consecuencia**: el backend ya **no sirve** el build de React como estático (se quitó `useStaticAssets` de `main.ts`) y expone solo la API con CORS habilitado hacia `FRONTEND_BASE_URL`. El frontend usa `VITE_API_URL` cuando no hay proxy de desarrollo de por medio.

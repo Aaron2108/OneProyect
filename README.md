@@ -17,12 +17,21 @@ Plataforma SaaS con IA para PyMEs que centraliza la comunicación por WhatsApp: 
 
 Decisiones y su justificación en [`docs/DECISIONS.md`](docs/DECISIONS.md). Arquitectura en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## Estructura del repositorio
+
+`/backend` (NestJS, API + IA + WhatsApp) y `/frontend` (React + Vite, panel web) son
+**dos aplicaciones independientes**, pensadas como repos separados — ver
+[`backend/CLAUDE.md`](backend/CLAUDE.md) y [`frontend/CLAUDE.md`](frontend/CLAUDE.md).
+El backend expone solo la API (con CORS habilitado); ya no sirve el frontend como
+build estático.
+
 ## Puesta en marcha (desarrollo local)
 
 Requisitos: Node.js ≥ 22, Docker + Docker Compose.
 
 ```bash
 # 1. Instalar dependencias del backend
+cd backend
 npm install
 
 # 2. Configurar entorno (rellenar credenciales de Meta/Anthropic cuando las tengas)
@@ -40,7 +49,7 @@ npm run start:dev
 
 Comprobación: `GET http://localhost:3000/health` responde el estado del servicio y la base de datos.
 
-**Panel web** (`/frontend`, React + Vite): para desarrollo con recarga en caliente, en otra terminal:
+**Panel web** (`/frontend`, React + Vite): en otra terminal, con el backend ya corriendo:
 
 ```bash
 cd frontend
@@ -48,7 +57,14 @@ npm install
 npm run dev        # http://localhost:5173 — proxya /auth, /conversations, etc. al backend en :3000
 ```
 
-Para producción (o para probar el build real servido por Nest en `:3000`): `npm run build` en la **raíz** compila backend y frontend (`frontend/dist`) y Nest sirve ese build estático — una sola app, sin servidor adicional. Todo el equipo del negocio se maneja ahí: registro/login, bandeja con búsqueda y estado de sin leer, hilo tri-voz (cliente/IA/agente) con notas internas y respuestas rápidas, métricas con filtro de fechas, contactos, equipo y modo claro/oscuro.
+Registro/login, bandeja con búsqueda y estado de sin leer, hilo tri-voz (cliente/IA/agente)
+con notas internas y respuestas rápidas, métricas con filtro de fechas, contactos y equipo.
+
+Para producción, cada carpeta se compila y despliega por separado: `npm run build` dentro
+de `backend/` (API) y dentro de `frontend/` (sitio estático en `frontend/dist`, servido
+desde su propio hosting). El frontend en producción necesita `VITE_API_URL` apuntando al
+origen del backend (ver `frontend/.env.example`); el backend necesita `FRONTEND_BASE_URL`
+apuntando al origen del frontend (para CORS y los redirects de OAuth).
 
 **Probar la IA sin gastar créditos** (desarrollo local): arranca el backend con `AI_PROVIDER=mock npm run start`. El agente devuelve respuestas simuladas y ejecuta el tool-calling real contra la BD (crear cita, etc.). Para usar Claude real, deja `AI_PROVIDER` sin definir (o `anthropic`) y pon una `ANTHROPIC_API_KEY` con saldo.
 
@@ -87,7 +103,7 @@ VOYAGE_API_KEY=...                # https://www.voyageai.com/ — Anthropic no t
 VOYAGE_EMBEDDING_MODEL=voyage-3-lite   # 512 dimensiones; si cambias de modelo con otra dimensión, hace falta migrar la columna
 ```
 
-Scripts útiles (raíz): `npm test` (tests del backend), `npm run build` (compila backend + frontend), `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores). Dentro de `frontend/`: `npm run build` (build de producción), `npm run lint`.
+Scripts útiles dentro de `backend/`: `npm test`, `npm run build`, `npm run prisma:studio` (explorar la BD), `npm run db:down` (apagar contenedores). Dentro de `frontend/`: `npm run build` (build de producción), `npm run lint`.
 
 ## Documentación
 
