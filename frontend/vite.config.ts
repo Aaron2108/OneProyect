@@ -16,6 +16,7 @@ const API_PREFIXES = [
   '/webhooks',
   '/health',
   '/integrations',
+  '/business-profile',
 ];
 
 export default defineConfig({
