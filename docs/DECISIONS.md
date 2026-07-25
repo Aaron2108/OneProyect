@@ -253,3 +253,17 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 
 **Zona inválida degrada, no rompe**: una zona mal escrita haría fallar a `Intl` en cada mensaje entrante, así que `resolveTimeZone` valida y cae a la del servidor.
 
+## 2026-07-25 — Chat de prueba del agente en el panel (`POST /ai-context/test-chat`)
+
+**Decisión**: el apartado "Agente IA" incluye un chat donde el dueño conversa con su propio agente desde el panel, sin WhatsApp y sin un cliente real.
+
+**Motivo**: el agente solo responde a mensajes entrantes por el webhook, y escribir desde la bandeja hace lo contrario de probarlo (`sendManualMessage` marca la conversación como `handledBy: HUMAN`, que apaga la IA en ese hilo). Sin esto, la única forma de saber cómo contesta el agente era exponerlo a clientes reales.
+
+**Las herramientas se simulan, no se ejecutan** (`AiService.respond(..., { simulateTools: true })`): probar el agente no puede crear citas ni recordatorios en la agenda del negocio. Lo que habría hecho viaja en `simulatedTools` con sus argumentos y el panel lo muestra — es más informativo que crearlo en silencio, porque el dueño ve la fecha exacta que el modelo interpretó.
+
+**Un único punto de ejecución de herramientas**: los tres proveedores (Anthropic, NVIDIA, mock) reciben el mismo `runTool`, así que la simulación no puede quedar cubierta en un camino y olvidada en otro. El modo `mock` también ejecutaba tool-calling real contra la BD, y sin esto el chat de prueba habría creado citas.
+
+**El texto de confirmación es el mismo simulado que real**: `describeWithoutExecuting` es la única fuente de ese texto y los métodos reales lo reutilizan tras hacer el trabajo. Si divergieran, el dueño probaría una cosa y su cliente leería otra.
+
+**Contacto ficticio y solo OWNER**: el `contactId` es una constante que no existe en la BD, así que la memoria de contexto no devuelve recuerdos de un cliente real. Lleva un límite propio de 15/min: cada mensaje es una llamada pagada al modelo y el límite global de 100/min sería demasiado caro.
+

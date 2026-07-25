@@ -73,6 +73,26 @@ describe('AiService (modo mock)', () => {
     expect(tools.execute).not.toHaveBeenCalled();
   });
 
+  it('en el chat de prueba, el modo mock tampoco crea la cita', async () => {
+    // El proveedor simulado ejecuta tool-calling REAL contra la BD, así que el
+    // chat de prueba tenía que desactivarlo también aquí, no solo con NVIDIA.
+    const tools = {
+      execute: jest.fn(),
+      describeWithoutExecuting: jest.fn().mockReturnValue('Cita creada para el lunes.'),
+    } as unknown as AiToolExecutorService;
+    const service = new AiService(
+      config, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+    );
+
+    const reply = await service.respond(
+      ctx, [{ role: 'user', text: 'Hola, quiero agendar una cita' }], { simulateTools: true },
+    );
+
+    expect(tools.execute).not.toHaveBeenCalled();
+    expect(reply.simulatedTools).toHaveLength(1);
+    expect(reply.simulatedTools?.[0].name).toBe('create_appointment');
+  });
+
   it('recupera memoria de contexto también en modo mock (prueba la tubería completa sin gastar créditos)', async () => {
     const tools = { execute: jest.fn() } as unknown as AiToolExecutorService;
     const contextMemory = { recall: jest.fn().mockResolvedValue([]) } as unknown as AiContextMemoryService;

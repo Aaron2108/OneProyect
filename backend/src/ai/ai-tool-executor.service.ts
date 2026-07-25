@@ -110,6 +110,34 @@ export class AiToolExecutorService {
     }
   }
 
+  /**
+   * Texto de confirmación de una herramienta SIN ejecutarla, para el chat de
+   * prueba del panel. Es también el que devuelven los métodos reales tras hacer
+   * el trabajo: una sola fuente de verdad, para que el dueño lea en la prueba
+   * exactamente lo mismo que leería su cliente.
+   */
+  describeWithoutExecuting(toolName: string, input: Record<string, unknown>): string {
+    switch (toolName) {
+      case TOOL_CREATE_APPOINTMENT: {
+        const scheduledAt = this.parseDate(input.scheduled_at);
+        if (!scheduledAt) return 'Fecha de la cita inválida.';
+        return `Cita creada para el ${formatBusinessDateTime(scheduledAt, this.timeZone)}.`;
+      }
+      case TOOL_CREATE_REMINDER: {
+        const remindAt = this.parseDate(input.remind_at);
+        if (!remindAt) return 'Fecha del recordatorio inválida.';
+        return `Recordatorio creado para el ${formatBusinessDateTime(remindAt, this.timeZone)}.`;
+      }
+      case TOOL_UPDATE_CONTACT:
+        if (typeof input.name !== 'string' && typeof input.notes !== 'string') {
+          return 'No se indicó ningún campo a actualizar.';
+        }
+        return 'Contacto actualizado.';
+      default:
+        return `Herramienta desconocida: ${toolName}`;
+    }
+  }
+
   private async createAppointment(
     input: Record<string, unknown>,
     ctx: ConversationContext,
@@ -129,7 +157,7 @@ export class AiToolExecutorService {
     // modelo repite este texto al cliente, y un UUID interno no debe salir por
     // WhatsApp. La fecha va en la zona del negocio, no en UTC, por lo mismo.
     this.logger.log(`Cita ${appt.id} creada por la IA (tenant ${ctx.tenantId})`);
-    return `Cita creada para el ${formatBusinessDateTime(scheduledAt, this.timeZone)}.`;
+    return this.describeWithoutExecuting(TOOL_CREATE_APPOINTMENT, input);
   }
 
   private async createReminder(
@@ -147,7 +175,7 @@ export class AiToolExecutorService {
       },
     });
     this.logger.log(`Recordatorio ${reminder.id} creado por la IA (tenant ${ctx.tenantId})`);
-    return `Recordatorio creado para el ${formatBusinessDateTime(remindAt, this.timeZone)}.`;
+    return this.describeWithoutExecuting(TOOL_CREATE_REMINDER, input);
   }
 
   private async updateContact(

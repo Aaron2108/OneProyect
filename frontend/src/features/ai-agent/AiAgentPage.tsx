@@ -6,6 +6,7 @@ import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
 import { Field, Label, Textarea } from '@/components/ui/Input';
 import { AiContextPanel } from './AiContextPanel';
+import { AiTestChat } from './AiTestChat';
 import { KnowledgeDocuments } from './KnowledgeDocuments';
 import type { BusinessProfile } from '@/lib/types';
 
@@ -163,6 +164,7 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
             onChanged={() => setContextKey((k) => k + 1)}
           />
           <AiContextPanel reloadKey={contextKey} />
+          <AiTestChat isOwner={isOwner} />
         </div>
       )}
     </div>

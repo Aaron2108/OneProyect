@@ -14,10 +14,22 @@ export interface HistoryTurn {
   text: string;
 }
 
+/** Una herramienta que el modelo decidió invocar, con sus argumentos. */
+export interface ToolIntent {
+  name: string;
+  input: Record<string, unknown>;
+}
+
 /** Resultado de una respuesta del agente. */
 export interface AgentReply {
   /** Texto a enviar al cliente por WhatsApp. */
   text: string;
   /** Acciones ejecutadas por tool-calling (para logging/auditoría). */
   actions: string[];
+  /**
+   * Solo en el chat de prueba del panel: lo que el agente HABRÍA hecho, sin
+   * haberlo hecho. Ausente en una conversación real, donde las acciones de
+   * `actions` sí se ejecutaron.
+   */
+  simulatedTools?: ToolIntent[];
 }

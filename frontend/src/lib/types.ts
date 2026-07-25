@@ -165,3 +165,15 @@ export interface AiContextPreview {
   knowledgeChunksUsed: number;
   documents: Array<{ filename: string; charCount: number }>;
 }
+
+/** Herramienta que el agente habría usado en el chat de prueba (no se ejecutó). */
+export interface SimulatedTool {
+  name: string;
+  input: Record<string, unknown>;
+}
+
+/** Respuesta del chat de prueba del panel. */
+export interface TestChatReply {
+  text: string;
+  simulatedTools: SimulatedTool[];
+}

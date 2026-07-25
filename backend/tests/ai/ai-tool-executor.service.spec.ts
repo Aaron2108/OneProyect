@@ -84,6 +84,35 @@ describe('AiToolExecutorService', () => {
     expect(result).toContain('09:00');
   });
 
+  describe('describeWithoutExecuting (chat de prueba del panel)', () => {
+    const cita = { title: 'Corte', scheduled_at: '2026-08-03T16:00:00-05:00' };
+
+    it('no toca la base de datos', () => {
+      executor.describeWithoutExecuting('create_appointment', cita);
+      executor.describeWithoutExecuting('create_reminder', {
+        message: 'x',
+        remind_at: '2026-08-03T16:00:00-05:00',
+      });
+      executor.describeWithoutExecuting('update_contact', { name: 'Ana' });
+
+      expect(appointments.create).not.toHaveBeenCalled();
+      expect(prisma.reminder.create).not.toHaveBeenCalled();
+      expect(prisma.contact.update).not.toHaveBeenCalled();
+    });
+
+    it('devuelve exactamente el mismo texto que la ejecución real', async () => {
+      // Si divergieran, el dueño probaría una cosa y su cliente leería otra.
+      const real = await executor.execute('create_appointment', cita, ctx);
+      expect(executor.describeWithoutExecuting('create_appointment', cita)).toBe(real);
+    });
+
+    it('informa la fecha inválida igual que la ejecución real', () => {
+      expect(executor.describeWithoutExecuting('create_appointment', { title: 'X' })).toContain(
+        'inválida',
+      );
+    });
+  });
+
   it('rechaza una fecha de cita inválida sin tocar la BD', async () => {
     const result = await executor.execute(
       'create_appointment',

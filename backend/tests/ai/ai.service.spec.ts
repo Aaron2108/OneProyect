@@ -332,6 +332,75 @@ describe('AiService', () => {
       expect(toolsMock.execute).toHaveBeenCalledWith('create_appointment', { title: 'Corte' }, ctx);
     });
 
+    it('en el chat de prueba NO ejecuta herramientas y reporta lo que habría hecho', async () => {
+      const toolsMock = {
+        execute: jest.fn(),
+        describeWithoutExecuting: jest.fn().mockReturnValue('Cita creada para el lunes.'),
+      } as unknown as AiToolExecutorService;
+      const nvidia = {
+        isEnabled: () => true,
+        respond: jest.fn().mockImplementation(
+          async (
+            _system: string,
+            _history: unknown,
+            run: (n: string, i: unknown) => Promise<string>,
+          ) => {
+            const resultado = await run('create_appointment', {
+              title: 'Corte',
+              scheduled_at: '2026-08-03T11:00:00-05:00',
+            });
+            return { text: `Listo. ${resultado}`, actions: ['create_appointment'] };
+          },
+        ),
+      } as unknown as NvidiaChatService;
+      const service = new AiService(
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia,
+      );
+
+      const reply = await service.respond(
+        ctx, [{ role: 'user', text: 'quiero un corte' }], { simulateTools: true },
+      );
+
+      // Lo importante: probar el agente no puede crear una cita de verdad.
+      expect(toolsMock.execute).not.toHaveBeenCalled();
+      expect(reply.simulatedTools).toEqual([
+        {
+          name: 'create_appointment',
+          input: { title: 'Corte', scheduled_at: '2026-08-03T11:00:00-05:00' },
+        },
+      ]);
+      // El modelo igual recibe una confirmación creíble, para seguir el hilo.
+      expect(reply.text).toContain('Cita creada para el lunes.');
+    });
+
+    it('sin la opción sí ejecuta de verdad y no devuelve simulatedTools', async () => {
+      const toolsMock = {
+        execute: jest.fn().mockResolvedValue('Cita creada para el lunes.'),
+        describeWithoutExecuting: jest.fn(),
+      } as unknown as AiToolExecutorService;
+      const nvidia = {
+        isEnabled: () => true,
+        respond: jest.fn().mockImplementation(
+          async (
+            _system: string,
+            _history: unknown,
+            run: (n: string, i: unknown) => Promise<string>,
+          ) => {
+            await run('create_appointment', { title: 'Corte' });
+            return { text: 'Listo', actions: ['create_appointment'] };
+          },
+        ),
+      } as unknown as NvidiaChatService;
+      const service = new AiService(
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia,
+      );
+
+      const reply = await service.respond(ctx, [{ role: 'user', text: 'quiero un corte' }]);
+
+      expect(toolsMock.execute).toHaveBeenCalledWith('create_appointment', { title: 'Corte' }, ctx);
+      expect(reply.simulatedTools).toBeUndefined();
+    });
+
     it('aplica el respaldo de texto vacío igual que con Claude', async () => {
       const nvidia = {
         isEnabled: () => true,

@@ -10,7 +10,8 @@ import { AI_TOOLS, AiToolExecutorService } from './ai-tool-executor.service';
 import { MAX_OUTPUT_TOKENS, MAX_SUMMARY_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
 import { describeNow, resolveTimeZone } from './ai-datetime.util';
 import { NvidiaChatService } from './nvidia-chat.service';
-import { AgentReply, ConversationContext, HistoryTurn } from './ai.types';
+import { AgentReply, ConversationContext, HistoryTurn, ToolIntent } from './ai.types';
+import type { ToolRunner } from './nvidia-chat.service';
 
 @Injectable()
 export class AiService {
@@ -66,8 +67,17 @@ export class AiService {
   /**
    * Genera una respuesta contextual para el último mensaje del cliente,
    * ejecutando herramientas (citas/recordatorios/contacto) cuando corresponda.
+   *
+   * `simulateTools` es para el chat de prueba del panel: el agente razona y
+   * decide igual, pero las herramientas NO tocan la base de datos — se devuelve
+   * en `simulatedTools` lo que habría hecho. Probar el agente no puede crear
+   * citas reales en la agenda del negocio.
    */
-  async respond(ctx: ConversationContext, history: HistoryTurn[]): Promise<AgentReply> {
+  async respond(
+    ctx: ConversationContext,
+    history: HistoryTurn[],
+    options: { simulateTools?: boolean } = {},
+  ): Promise<AgentReply> {
     // Fase 4: recuerdos de conversaciones anteriores del mismo contacto,
     // relevantes para su último mensaje (nunca cruza tenants ni contactos).
     // Se calcula siempre (incluso en modo mock) para poder probar toda la
@@ -80,41 +90,50 @@ export class AiService {
     // cada mensaje (ver KnowledgeRetrievalService).
     const knowledgeLines = await this.knowledge.describe(ctx.tenantId, lastUserText);
 
-    if (this.provider === 'mock') {
-      return this.mockRespond(ctx, history);
-    }
+    // Un único punto de ejecución de herramientas para los tres proveedores: o
+    // se ejecutan de verdad, o se registran sin efecto para el chat de prueba.
+    const simulated: ToolIntent[] = [];
+    const runTool = options.simulateTools
+      ? async (name: string, input: Record<string, unknown>): Promise<string> => {
+          simulated.push({ name, input });
+          return this.tools.describeWithoutExecuting(name, input);
+        }
+      : (name: string, input: Record<string, unknown>): Promise<string> =>
+          this.tools.execute(name, input, ctx);
 
-    const system = this.buildSystemPrompt(ctx, recalled, profileLines, knowledgeLines);
-    // El proveedor de pruebas recibe el MISMO system prompt y las MISMAS
-    // herramientas; solo cambia el transporte (ver NvidiaChatService).
-    const reply =
-      this.provider === 'nvidia'
-        ? await this.nvidia.respond(system, history, (name, input) =>
-            this.tools.execute(name, input, ctx),
-          )
-        : await this.anthropicRespond(system, history, ctx);
+    let reply: AgentReply;
+    if (this.provider === 'mock') {
+      reply = await this.mockRespond(ctx, history, runTool);
+    } else {
+      const system = this.buildSystemPrompt(ctx, recalled, profileLines, knowledgeLines);
+      // El proveedor de pruebas recibe el MISMO system prompt y las MISMAS
+      // herramientas; solo cambia el transporte (ver NvidiaChatService).
+      reply =
+        this.provider === 'nvidia'
+          ? await this.nvidia.respond(system, history, runTool)
+          : await this.anthropicRespond(system, history, runTool);
+    }
 
     // Si el bucle se agota (o el modelo no devuelve texto), el cliente igual
     // recibe una respuesta de cierre. Al garantizar texto no vacío, el mensaje
     // se persiste y la guarda de costo cuenta esta llamada (corrige que una
     // respuesta vacía se pagara sin contar).
-    if (!reply.text) {
-      return {
-        text:
-          reply.actions.length > 0
-            ? 'Listo, ya lo registré. ¿Necesitas algo más?'
-            : '¿Podrías darme un poco más de detalle para ayudarte mejor?',
-        actions: reply.actions,
-      };
-    }
-    return reply;
+    const text =
+      reply.text ||
+      (reply.actions.length > 0
+        ? 'Listo, ya lo registré. ¿Necesitas algo más?'
+        : '¿Podrías darme un poco más de detalle para ayudarte mejor?');
+
+    return options.simulateTools
+      ? { text, actions: reply.actions, simulatedTools: simulated }
+      : { text, actions: reply.actions };
   }
 
   /** Bucle de tool-calling contra la API de Anthropic (proveedor de producción). */
   private async anthropicRespond(
     system: string,
     history: HistoryTurn[],
-    ctx: ConversationContext,
+    run: ToolRunner,
   ): Promise<AgentReply> {
     if (!this.client) {
       throw new Error('IA deshabilitada: falta ANTHROPIC_API_KEY');
@@ -153,11 +172,7 @@ export class AiService {
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type === 'tool_use') {
-          const result = await this.tools.execute(
-            block.name,
-            block.input as Record<string, unknown>,
-            ctx,
-          );
+          const result = await run(block.name, block.input as Record<string, unknown>);
           actions.push(block.name);
           toolResults.push({
             type: 'tool_result',
@@ -180,6 +195,7 @@ export class AiService {
   private async mockRespond(
     ctx: ConversationContext,
     history: HistoryTurn[],
+    run: ToolRunner,
   ): Promise<AgentReply> {
     const lastUser =
       [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
@@ -188,11 +204,10 @@ export class AiService {
 
     if (/\b(cita|agendar|agenda|turno|reservar)\b/i.test(lastUser)) {
       const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      const result = await this.tools.execute(
-        'create_appointment',
-        { title: 'Consulta (simulada)', scheduled_at: scheduledAt },
-        ctx,
-      );
+      const result = await run('create_appointment', {
+        title: 'Consulta (simulada)',
+        scheduled_at: scheduledAt,
+      });
       actions.push('create_appointment');
       return {
         text: `¡Claro, ${nombre}! Te dejé agendada una cita de ejemplo. ${result} [respuesta simulada — modo pruebas sin créditos]`.trim(),

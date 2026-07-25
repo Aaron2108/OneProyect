@@ -27,3 +27,19 @@ export interface AiContextPreview {
   /** Documentos activos del negocio. */
   documents: AiContextDocument[];
 }
+
+/** Herramienta que el agente habría usado, en el chat de prueba. */
+export interface SimulatedTool {
+  name: string;
+  input: Record<string, unknown>;
+}
+
+/**
+ * Respuesta del chat de prueba del panel. El agente razona y decide igual que
+ * con un cliente real, pero las herramientas no tocan la base de datos: lo que
+ * habría hecho viaja en `simulatedTools` para que el dueño lo vea.
+ */
+export interface TestChatReply {
+  text: string;
+  simulatedTools: SimulatedTool[];
+}
