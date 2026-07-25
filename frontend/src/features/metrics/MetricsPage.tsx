@@ -1,28 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from 'recharts';
+import { CalendarClock, MessageSquare, Send, Sparkles, Users } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useTheme } from '@/lib/theme-context';
+import { Select } from '@/components/ui/Input';
 import { CountUp } from '@/components/ui/CountUp';
 import { RadialGauge } from '@/components/ui/RadialGauge';
 import { KpiSkeleton } from '@/components/ui/Skeleton';
 import type { MetricsOverview } from '@/lib/types';
 
-const CHART_COLORS = {
-  light: { in: '#b26a00', human: '#0ca678', ai: '#6b5ce6' },
-  dark: { in: '#e6b155', human: '#2ee6a6', ai: '#9d8cff' },
-};
+const CHART_COLORS = { in: 'var(--warn)', human: 'var(--brand)', ai: 'var(--ai)' };
 
-function Kpi({ label, dot, value, sub }: { label: string; dot: string; value: number; sub: string }): JSX.Element {
+function Kpi({
+  label,
+  icon: Icon,
+  dot,
+  value,
+  sub,
+}: {
+  label: string;
+  icon: typeof MessageSquare;
+  dot: string;
+  value: number;
+  sub: string;
+}): JSX.Element {
   return (
-    <div className="reveal rounded bg-surface p-4 shadow-1">
-      <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-soft">
-        <span className="h-2.5 w-2.5 flex-shrink-0 rounded-[3px]" style={{ background: dot }} />
-        {label}
+    <div className="reveal kpi-card">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[12.5px] font-semibold text-ink-soft">
+          <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: dot }} />
+          {label}
+        </div>
+        <Icon size={16} strokeWidth={2} className="text-ink-disabled" />
       </div>
-      <div className="mt-1.5 font-display text-[31px] font-bold leading-none tracking-tight">
+      <div className="font-display text-[32px] font-bold leading-none tracking-tight">
         <CountUp value={value} />
       </div>
-      <div className="mt-1.5 text-xs text-ink-faint">{sub}</div>
+      <div className="mt-2 text-xs text-ink-faint">{sub}</div>
     </div>
   );
 }
@@ -43,8 +56,6 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>):
 }
 
 export function MetricsPage({ active }: { active: boolean }): JSX.Element {
-  const { theme } = useTheme();
-  const colors = CHART_COLORS[theme];
   const [range, setRange] = useState(7);
   const [data, setData] = useState<MetricsOverview | null>(null);
   const [showTable, setShowTable] = useState(false);
@@ -72,21 +83,17 @@ export function MetricsPage({ active }: { active: boolean }): JSX.Element {
   const autoPct = data ? Math.round(data.automationRate * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-[960px] p-5 sm:p-10">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3.5">
+    <div className="mx-auto max-w-[1040px] p-6 sm:p-10">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="mb-1 font-display text-2xl font-bold tracking-tight">Métricas</h2>
           <p className="m-0 text-sm text-ink-soft">Cómo está trabajando tu empleado digital, en el período elegido.</p>
         </div>
-        <select
-          value={range}
-          onChange={(e) => setRange(Number(e.target.value))}
-          className="flex-shrink-0 rounded-lg border border-line-strong bg-[var(--input-bg)] px-3 py-2 text-[13.5px]"
-        >
+        <Select value={range} onChange={(e) => setRange(Number(e.target.value))} className="w-auto flex-shrink-0 !py-2.5">
           <option value={7}>Últimos 7 días</option>
           <option value={30}>Últimos 30 días</option>
           <option value={90}>Últimos 90 días</option>
-        </select>
+        </Select>
       </div>
 
       {!loadedOnce || !data ? (
@@ -97,22 +104,42 @@ export function MetricsPage({ active }: { active: boolean }): JSX.Element {
         </div>
       ) : (
         <div className="bento-grid">
-          <Kpi label="Conversaciones" dot="var(--brand)" value={data.conversations.total} sub={`${data.conversations.open} abiertas · ${data.conversations.closed} cerradas`} />
-          <Kpi label="Mensajes" dot={colors.human} value={data.messages.total} sub={`${data.messages.inbound} recibidos · ${data.messages.outbound} enviados`} />
-          <Kpi label="Citas" dot="var(--warn)" value={data.appointments.total} sub={`${data.appointments.scheduled} agendadas · ${data.appointments.confirmed} confirmadas`} />
-          <Kpi label="Contactos" dot="var(--ink-soft)" value={data.contacts.total} sub="personas en tu WhatsApp" />
+          <Kpi
+            label="Conversaciones"
+            icon={MessageSquare}
+            dot="var(--brand)"
+            value={data.conversations.total}
+            sub={`${data.conversations.open} abiertas · ${data.conversations.closed} cerradas`}
+          />
+          <Kpi
+            label="Mensajes"
+            icon={Send}
+            dot="var(--brand-hover)"
+            value={data.messages.total}
+            sub={`${data.messages.inbound} recibidos · ${data.messages.outbound} enviados`}
+          />
+          <Kpi
+            label="Citas"
+            icon={CalendarClock}
+            dot="var(--warn)"
+            value={data.appointments.total}
+            sub={`${data.appointments.confirmed} confirmadas · ${data.reminders.pending} recordatorios pendientes`}
+          />
+          <Kpi label="Contactos" icon={Users} dot="var(--ink-soft)" value={data.contacts.total} sub="personas en tu WhatsApp" />
 
-          <div className="span-4 reveal flex flex-col items-center gap-6 rounded-lg bg-surface p-5 shadow-1 sm:flex-row">
+          <div className="span-4 reveal flex flex-col items-center gap-7 kpi-card sm:flex-row">
             <RadialGauge aiPct={autoPct} />
             <div className="flex-1">
-              <h3 className="mb-1 font-display text-base font-bold">Automatización</h3>
-              <p className="mb-3 text-[13px] text-ink-soft">De las respuestas enviadas, cuántas resolvió la IA sin intervención humana.</p>
-              <div className="flex gap-5 text-[13px]">
-                <span className="flex items-center gap-1.5">
+              <h3 className="mb-1.5 flex items-center gap-2 font-display text-base font-bold">
+                <Sparkles size={16} strokeWidth={2} className="text-ai" /> Automatización
+              </h3>
+              <p className="mb-4 text-[13px] text-ink-soft">De las respuestas enviadas, cuántas resolvió la IA sin intervención humana.</p>
+              <div className="flex gap-6 text-[13px]">
+                <span className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--ai)' }} />
                   IA <b>{data.messages.fromAi}</b>
                 </span>
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--brand)' }} />
                   Agente humano <b>{data.messages.fromHuman}</b>
                 </span>
@@ -120,10 +147,10 @@ export function MetricsPage({ active }: { active: boolean }): JSX.Element {
             </div>
           </div>
 
-          <div className="span-4 reveal rounded-lg bg-surface p-4 shadow-1 sm:p-5">
-            <h3 className="mb-3.5 font-display text-base font-bold">Actividad · últimos {chartData.length} días</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData} barGap={2}>
+          <div className="span-4 reveal kpi-card">
+            <h3 className="mb-4 font-display text-base font-bold">Actividad · últimos {chartData.length} días</h3>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={chartData} barGap={3}>
                 <CartesianGrid vertical={false} stroke="var(--line)" />
                 <XAxis
                   dataKey="label"
@@ -134,36 +161,36 @@ export function MetricsPage({ active }: { active: boolean }): JSX.Element {
                 />
                 <YAxis tick={{ fontSize: 10, fill: 'var(--ink-faint)' }} axisLine={false} tickLine={false} allowDecimals={false} width={26} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--hover-bg)' }} />
-                <Bar dataKey="inbound" name="Recibidos" fill={colors.in} radius={[3, 3, 0, 0]} maxBarSize={16} />
-                <Bar dataKey="outbound" name="Enviados" fill={colors.human} radius={[3, 3, 0, 0]} maxBarSize={16} />
+                <Bar dataKey="inbound" name="Recibidos" fill={CHART_COLORS.in} radius={[4, 4, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="outbound" name="Enviados" fill={CHART_COLORS.human} radius={[4, 4, 0, 0]} maxBarSize={18} />
               </BarChart>
             </ResponsiveContainer>
-            <div className="mt-2.5 flex gap-4 text-[12.5px] text-ink-soft">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: colors.in }} /> Recibidos
+            <div className="mt-3 flex gap-5 text-[12.5px] text-ink-soft">
+              <span className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_COLORS.in }} /> Recibidos
               </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: colors.human }} /> Enviados
+              <span className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_COLORS.human }} /> Enviados
               </span>
             </div>
-            <button onClick={() => setShowTable((s) => !s)} className="mt-3 text-[13px] font-semibold text-brand" aria-expanded={showTable}>
+            <button onClick={() => setShowTable((s) => !s)} className="mt-4 text-[13px] font-semibold text-brand" aria-expanded={showTable}>
               {showTable ? 'Ocultar datos' : 'Ver datos'}
             </button>
             {showTable && (
-              <table className="mt-2.5 w-full border-collapse text-[13px]">
+              <table className="mt-3 w-full border-collapse text-[13px]">
                 <thead>
                   <tr>
-                    <th className="border-b border-line py-1.5 text-left font-semibold text-ink-soft">Día</th>
-                    <th className="border-b border-line py-1.5 text-right font-semibold text-ink-soft">Recibidos</th>
-                    <th className="border-b border-line py-1.5 text-right font-semibold text-ink-soft">Enviados</th>
+                    <th className="border-b border-line py-2 text-left font-semibold text-ink-soft">Día</th>
+                    <th className="border-b border-line py-2 text-right font-semibold text-ink-soft">Recibidos</th>
+                    <th className="border-b border-line py-2 text-right font-semibold text-ink-soft">Enviados</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.activity.map((d) => (
                     <tr key={d.date}>
-                      <td className="border-b border-line py-1.5">{d.date}</td>
-                      <td className="tabular-nums border-b border-line py-1.5 text-right">{d.inbound}</td>
-                      <td className="tabular-nums border-b border-line py-1.5 text-right">{d.outbound}</td>
+                      <td className="border-b border-line py-2">{d.date}</td>
+                      <td className="tabular-nums border-b border-line py-2 text-right">{d.inbound}</td>
+                      <td className="tabular-nums border-b border-line py-2 text-right">{d.outbound}</td>
                     </tr>
                   ))}
                 </tbody>

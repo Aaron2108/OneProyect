@@ -1,3 +1,4 @@
+import { Bot } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -103,18 +104,20 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-[700px] p-5 sm:p-10">
-      <h2 className="mb-1 font-display text-2xl font-bold tracking-tight">Agente IA</h2>
-      <p className="mb-4 text-sm text-ink-soft">
+    <div className="mx-auto max-w-[720px] p-6 sm:p-10">
+      <h2 className="mb-1 flex items-center gap-2 font-display text-2xl font-bold tracking-tight">
+        <Bot size={22} strokeWidth={2} className="text-ai" /> Agente IA
+      </h2>
+      <p className="mb-6 text-sm text-ink-soft">
         Lo que la IA sabe de tu negocio antes de responder por WhatsApp. Cuanto más completo, más específicas
         (y menos genéricas) van a ser sus respuestas.
         {!isOwner && ' Solo el propietario puede editar esta configuración.'}
       </p>
 
       {loading ? (
-        <div className="rounded bg-surface p-6 text-center text-sm text-ink-soft shadow-1">Cargando…</div>
+        <div className="kpi-card text-center text-sm text-ink-soft">Cargando…</div>
       ) : (
-        <form onSubmit={save} className="rounded bg-surface p-4 shadow-1 sm:p-5">
+        <form onSubmit={save} className="kpi-card">
           {FIELDS.map((f) => (
             <Field key={f.key}>
               <Label htmlFor={f.key}>{f.label}</Label>
@@ -127,7 +130,7 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
                 rows={3}
                 disabled={!isOwner}
               />
-              <div className="mt-1 flex items-center justify-between text-[11.5px] text-ink-faint">
+              <div className="mt-1.5 flex items-center justify-between text-[11.5px] text-ink-faint">
                 <span>{f.hint}</span>
                 <span>{(form[f.key] ?? '').length}/{MAX_LENGTH}</span>
               </div>
@@ -139,7 +142,7 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
               <span className="text-[12px] text-ink-faint">
                 {updatedAt ? `Última actualización: ${new Date(updatedAt).toLocaleString('es')}` : 'Todavía sin configurar'}
               </span>
-              <Button type="submit" variant="brand" disabled={saving}>
+              <Button type="submit" disabled={saving}>
                 {saving ? 'Guardando…' : 'Guardar'}
               </Button>
             </div>

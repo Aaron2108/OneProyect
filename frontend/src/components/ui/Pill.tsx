@@ -17,15 +17,15 @@ export type PillKind =
   | 'completed';
 
 const CONFIG: Record<PillKind, { label: string; glyph: string; cls: string }> = {
-  ai: { label: 'IA', glyph: '◆', cls: 'bg-ai-tint text-ai-700' },
-  human: { label: 'Humano', glyph: '●', cls: 'bg-warn-tint text-warn' },
-  closed: { label: 'Cerrada', glyph: '▪', cls: 'bg-[var(--muted-bg)] text-[var(--muted-ink)]' },
-  owner: { label: 'Propietario', glyph: '★', cls: 'bg-brand-tint text-brand-700' },
-  agent: { label: 'Agente', glyph: '○', cls: 'bg-[var(--muted-bg)] text-[var(--muted-ink)]' },
+  ai: { label: 'IA', glyph: '◆', cls: 'bg-ai-tint text-ai' },
+  human: { label: 'Humano', glyph: '●', cls: 'bg-brand-tint text-brand' },
+  closed: { label: 'Cerrada', glyph: '▪', cls: 'bg-[var(--muted-bg)] text-ink-soft' },
+  owner: { label: 'Propietario', glyph: '★', cls: 'bg-brand-tint text-brand' },
+  agent: { label: 'Agente', glyph: '○', cls: 'bg-[var(--muted-bg)] text-ink-soft' },
   scheduled: { label: 'Agendada', glyph: '◷', cls: 'bg-warn-tint text-warn' },
-  confirmed: { label: 'Confirmada', glyph: '✓', cls: 'bg-brand-tint text-brand-700' },
+  confirmed: { label: 'Confirmada', glyph: '✓', cls: 'bg-brand-tint text-brand' },
   cancelled: { label: 'Cancelada', glyph: '✕', cls: 'bg-danger-tint text-danger' },
-  completed: { label: 'Completada', glyph: '●', cls: 'bg-[var(--muted-bg)] text-[var(--muted-ink)]' },
+  completed: { label: 'Completada', glyph: '●', cls: 'bg-[var(--muted-bg)] text-ink-soft' },
 };
 
 export function Pill({ kind, label }: { kind: PillKind; label?: string }): JSX.Element {
@@ -34,7 +34,7 @@ export function Pill({ kind, label }: { kind: PillKind; label?: string }): JSX.E
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide',
+        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide',
         c.cls,
       )}
     >

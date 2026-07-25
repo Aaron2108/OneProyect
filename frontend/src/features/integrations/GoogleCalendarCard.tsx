@@ -1,3 +1,4 @@
+import { CalendarCheck2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -69,7 +70,10 @@ export function GoogleCalendarCard({ active }: { active: boolean }): JSX.Element
   }
 
   return (
-    <div className="mb-5 flex flex-wrap items-center gap-3 rounded bg-surface p-3.5 shadow-1">
+    <div className="mb-6 flex flex-wrap items-center gap-4 kpi-card">
+      <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-sm bg-brand-tint text-brand">
+        <CalendarCheck2 size={18} strokeWidth={2} />
+      </div>
       <div className="flex-1">
         <div className="text-[14.5px] font-semibold">Google Calendar</div>
         <p className="text-[13px] text-ink-soft">

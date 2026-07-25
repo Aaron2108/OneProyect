@@ -1,4 +1,5 @@
 import * as RadixToast from '@radix-ui/react-toast';
+import { Bot, Check, TriangleAlert } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
 interface ToastItem {
@@ -39,11 +40,17 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
             <span
               className="tick"
               style={{
-                background: t.kind === 'ai' ? 'var(--ai)' : t.kind === 'error' ? 'var(--danger)' : '#37d69b',
-                color: t.kind === 'ai' ? '#fff' : '#06231a',
+                background: t.kind === 'ai' ? 'var(--ai)' : t.kind === 'error' ? 'var(--danger)' : 'var(--brand)',
+                color: t.kind === 'ai' ? '#fff' : t.kind === 'error' ? '#fff' : 'var(--on-brand)',
               }}
             >
-              {t.kind === 'error' ? '!' : '✓'}
+              {t.kind === 'error' ? (
+                <TriangleAlert size={11} strokeWidth={2.5} />
+              ) : t.kind === 'ai' ? (
+                <Bot size={11} strokeWidth={2.5} />
+              ) : (
+                <Check size={11} strokeWidth={3} />
+              )}
             </span>
             <RadixToast.Description>{t.message}</RadixToast.Description>
           </RadixToast.Root>

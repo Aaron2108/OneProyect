@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, downloadFile } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import type { ConversationDetail, ConversationStatus, ConversationHandler, Page, ConversationSummary } from '@/lib/types';
+import { ContactPanel } from './ContactPanel';
 import { Roster } from './Roster';
 import { Thread } from './Thread';
 
@@ -111,6 +112,7 @@ export function InboxPage({ active }: { active: boolean }): JSX.Element {
         onReopen={() => act('/reopen', 'Conversación reabierta')}
         onNotesChanged={refreshConversation}
       />
+      <ContactPanel conversation={conversation} onChanged={refreshConversation} />
     </div>
   );
 }

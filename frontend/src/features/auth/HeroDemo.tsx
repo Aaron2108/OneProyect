@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Bot, Calendar, Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const CYCLE_MS = 7000;
@@ -13,7 +14,7 @@ export function HeroDemo(): JSX.Element {
 
   return (
     <div className="auth-demo" aria-hidden="true" key={cycle}>
-      <div className="mb-3 flex items-center gap-2 text-[12.5px] text-[#a9ccbd]">
+      <div className="mb-3 flex items-center gap-2 text-[12.5px] text-ink-soft">
         <span className="auth-demo__dot" /> Conversación en vivo
       </div>
 
@@ -23,7 +24,7 @@ export function HeroDemo(): JSX.Element {
         transition={{ delay: 0.3, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="mb-2 flex"
       >
-        <div className="auth-demo__bubble" style={{ background: '#f4f7f3', color: '#16241d', borderBottomLeftRadius: 4 }}>
+        <div className="auth-demo__bubble" style={{ background: '#eef4f1', color: '#0d1c17', borderBottomLeftRadius: 4 }}>
           Hola, ¿tienen cita para el martes?
         </div>
       </motion.div>
@@ -51,11 +52,13 @@ export function HeroDemo(): JSX.Element {
         transition={{ delay: 2.2, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="flex justify-end"
       >
-        <div className="auth-demo__bubble" style={{ background: '#9d8cff', color: '#fff', borderBottomRightRadius: 4 }}>
-          <span className="mb-0.5 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide opacity-85">
-            ◆ IA
+        <div className="auth-demo__bubble" style={{ background: 'var(--ai)', color: '#fff', borderBottomRightRadius: 4 }}>
+          <span className="mb-1 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide opacity-85">
+            <Bot size={11} strokeWidth={2.5} /> IA
           </span>
-          ¡Claro! Te dejé agendada el martes a las 4:00&nbsp;p.m. 📅
+          <span className="flex items-center gap-1.5">
+            ¡Claro! Te dejé agendada el martes a las 4:00&nbsp;p.m. <Calendar size={13} strokeWidth={2} />
+          </span>
         </div>
       </motion.div>
 
@@ -63,9 +66,9 @@ export function HeroDemo(): JSX.Element {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 2.7, duration: 0.4 }}
-        className="mt-2.5 flex items-center gap-1.5 text-xs text-[#9ec9b7]"
+        className="mt-3 flex items-center gap-1.5 text-xs text-ink-disabled"
       >
-        ✓ Cita creada automáticamente · sin intervención humana
+        <Check size={13} strokeWidth={2.5} className="text-brand" /> Cita creada automáticamente · sin intervención humana
       </motion.div>
     </div>
   );

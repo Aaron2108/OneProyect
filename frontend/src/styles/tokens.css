@@ -1,123 +1,89 @@
 /**
- * Sistema de diseño de WhatsFlow AI.
- * Tesis: la tri-voz — teal (marca/agente humano) · índigo (IA) · neutro (cliente).
- * Futurismo sobrio: profundidad por capas, vidrio con criterio, glow como
- * energía (no ruido), mesh muy desaturado, motion con intención.
+ * Sistema de diseño de WhatsFlow AI — v2 (2026).
+ * Tesis: un SaaS de IA premium, un solo modo (oscuro), una sola voz de marca.
+ * Verde menta (#35F0A3) para la acción y lo que resuelve la IA por su cuenta,
+ * índigo (#6C7BFF) para la presencia de la IA en sí. Vidrio muy sutil,
+ * sombras suaves sin negro puro, motion corto y con intención.
  */
 
 :root {
-  /* ---- Modo claro (refinado) ---- */
-  --ink: #16241d;
-  --ink-soft: #5c6b62;
-  --ink-faint: #606c64; /* AA >= 4.5:1 sobre --surface y --canvas */
-  --muted-ink: #5c6b62; /* AA >= 4.5:1 sobre --muted-bg */
+  /* ---- Superficies ---- */
+  --canvas: #07130f;
+  --surface: #0d1c17;
+  --surface-glass: rgba(13, 28, 23, 0.72);
+  --sidebar-bg: #091612;
+  --topbar-bg: rgba(8, 21, 17, 0.82);
+  --input-bg: rgba(255, 255, 255, 0.035);
+  --hover-bg: rgba(255, 255, 255, 0.045);
+  --muted-bg: rgba(255, 255, 255, 0.05);
+  --row-hover: rgba(255, 255, 255, 0.035);
+  --overlay: rgba(3, 8, 6, 0.72);
 
-  --canvas: #e9efe6;
-  --surface: #ffffff;
-  --surface-glass: rgba(255, 255, 255, 0.78);
-  --input-bg: #fcfdfc;
-  --hover-bg: #f2f5f1;
-  --muted-bg: #eef1ee;
-  --row-hover: #f7faf6;
-  --overlay: rgba(16, 40, 30, 0.44);
+  --line: rgba(255, 255, 255, 0.05);
+  --line-strong: rgba(255, 255, 255, 0.1);
 
-  --line: #e5eae4;
-  --line-strong: #d3dbcf;
+  /* ---- Texto ---- */
+  --ink: #f8fafc;
+  --ink-soft: #a0a8b5;
+  --ink-faint: #77808c; /* AA sobre --surface/--canvas para texto secundario pequeño */
+  --ink-disabled: #5c6570;
+  --muted-ink: #a0a8b5;
 
-  --brand: #0f6b52;
-  --brand-700: #0a5541;
-  --brand-900: #063a2c;
-  --brand-tint: #e7f1ec;
-  --brand-glow: rgba(15, 107, 82, 0.16);
+  /* ---- Marca ---- */
+  --brand: #35f0a3;
+  --brand-700: #22c78e; /* usado sobre fondos claros/hover donde #35F0A3 solo no alcanza contraste */
+  --brand-hover: #52f7b5;
+  --brand-tint: rgba(53, 240, 163, 0.14);
+  --brand-glow: rgba(53, 240, 163, 0.32);
+  --on-brand: #052a1d; /* texto sobre fondo --brand: oscuro, no negro puro */
 
-  --ai: #6b5ce6;
-  --ai-700: #574ad0;
-  --ai-tint: #efedfd;
-  --ai-glow: rgba(107, 92, 230, 0.18);
+  --ai: #6c7bff;
+  --ai-700: #5867f0;
+  --ai-hover: #8793ff;
+  --ai-tint: rgba(108, 123, 255, 0.16);
+  --ai-glow: rgba(108, 123, 255, 0.34);
 
-  --warn: #8a5100; /* AA >= 4.5:1 sobre --warn-tint (más oscuro que el acento decorativo) */
-  --warn-tint: #fbedd6;
-  --danger: #b3261e;
-  --danger-tint: #fdecea;
+  --success: #3de67b;
+  --success-tint: rgba(61, 230, 123, 0.16);
+  --warn: #f6c453;
+  --warn-tint: rgba(246, 196, 83, 0.16);
+  --danger: #ff6b6b;
+  --danger-tint: rgba(255, 107, 107, 0.16);
 
-  /* Gráficos (CVD-safe, validados con el skill dataviz) */
-  --chart-human: #0ca678;
-  --chart-in: #b26a00;
-  --chart-ai: #6b5ce6;
+  /* Gráficos (mismo trío tri-voz de siempre, hex nuevos) */
+  --chart-human: #35f0a3;
+  --chart-in: #f6c453;
+  --chart-ai: #6c7bff;
 
-  --radius-sm: 10px;
-  --radius: 13px;
+  /* ---- Radios: escala de 4 pasos, 20px para tarjetas ---- */
+  --radius-xs: 10px;
+  --radius-sm: 12px;
+  --radius: 16px;
   --radius-lg: 20px;
 
-  --shadow-1: 0 1px 2px rgba(6, 58, 44, 0.06), 0 4px 12px rgba(6, 58, 44, 0.06);
-  --shadow-2: 0 8px 24px rgba(6, 58, 44, 0.1), 0 2px 6px rgba(6, 58, 44, 0.06);
-  --shadow-lg: 0 24px 60px -20px rgba(6, 58, 44, 0.3);
+  /* ---- Sombras suaves, sin negro puro ---- */
+  --shadow-1: 0 1px 2px rgba(2, 6, 4, 0.3), 0 6px 16px rgba(2, 6, 4, 0.22);
+  --shadow-2: 0 12px 32px rgba(2, 6, 4, 0.36), 0 2px 8px rgba(2, 6, 4, 0.24);
+  --shadow-lg: 0 32px 80px -24px rgba(2, 6, 4, 0.6);
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 180ms;
 
-  --mesh: radial-gradient(60% 70% at 15% 10%, rgba(15, 107, 82, 0.08), transparent 60%),
-    radial-gradient(55% 65% at 90% 15%, rgba(107, 92, 230, 0.07), transparent 60%);
+  /* Atmósfera muy sutil — nunca ruido, nunca brillo cyberpunk */
+  --mesh: radial-gradient(50% 60% at 12% 0%, rgba(53, 240, 163, 0.05), transparent 60%),
+    radial-gradient(45% 55% at 92% 10%, rgba(108, 123, 255, 0.06), transparent 60%);
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-
-  color-scheme: light;
-}
-
-:root[data-theme='dark'] {
-  /* ---- Modo oscuro cinematográfico ---- */
-  --ink: #eaf3ee;
-  --ink-soft: #9fb3aa;
-  --ink-faint: #86988f; /* AA >= 4.5:1 sobre --surface/--canvas oscuros */
-  --muted-ink: #9fb3aa;
-
-  --canvas: #0b1a15;
-  --surface: #0f221c;
-  --surface-glass: rgba(14, 32, 26, 0.66);
-  --input-bg: #0c1f19;
-  --hover-bg: rgba(255, 255, 255, 0.05);
-  --muted-bg: rgba(255, 255, 255, 0.06);
-  --row-hover: rgba(255, 255, 255, 0.045);
-  --overlay: rgba(3, 10, 8, 0.64);
-
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.16);
-
-  --brand: #2ee6a6;
-  --brand-700: #22c78e;
-  --brand-900: #0c3327;
-  --brand-tint: rgba(46, 230, 166, 0.14);
-  --brand-glow: rgba(46, 230, 166, 0.26);
-
-  --ai: #9d8cff;
-  --ai-700: #8172f2;
-  --ai-tint: rgba(157, 140, 255, 0.16);
-  --ai-glow: rgba(157, 140, 255, 0.28);
-
-  --warn: #e6b155;
-  --warn-tint: rgba(230, 177, 85, 0.16);
-  --danger: #ff8383;
-  --danger-tint: rgba(255, 131, 131, 0.16);
-
-  --chart-human: #2ee6a6;
-  --chart-in: #e6b155;
-  --chart-ai: #9d8cff;
-
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.3);
-  --shadow-2: 0 10px 28px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 28px 80px -20px rgba(0, 0, 0, 0.7);
-
-  --mesh: radial-gradient(60% 80% at 20% 10%, rgba(46, 230, 166, 0.14), transparent 60%),
-    radial-gradient(50% 70% at 90% 20%, rgba(157, 140, 255, 0.16), transparent 60%);
 
   color-scheme: dark;
 }
 
-/* ---- Vidrio (glassmorphism con criterio — solo topbar/composer/popovers/modales) ---- */
+/* ---- Vidrio (glassmorphism sutil — sidebar/topbar/popovers/modales) ---- */
 .glass {
   background: var(--surface-glass);
-  backdrop-filter: saturate(160%) blur(16px);
-  -webkit-backdrop-filter: saturate(160%) blur(16px);
-  border: 1px solid var(--line-strong);
+  backdrop-filter: saturate(140%) blur(18px);
+  -webkit-backdrop-filter: saturate(140%) blur(18px);
+  border: 1px solid var(--line);
   position: relative;
 }
 .glass::before {
@@ -125,11 +91,8 @@
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
   pointer-events: none;
-}
-:root[data-theme='dark'] .glass::before {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
 }
 
 /* ---- Mesh + grain (atmósfera de superficies clave, no ruido) ---- */
@@ -142,8 +105,34 @@
   position: absolute;
   inset: 0;
   background-image: var(--grain);
-  opacity: 0.03;
+  opacity: 0.025;
   mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/*
+ * Aura de la IA — el único gesto decorativo que se repite a propósito
+ * (avatar/burbuja de la IA, ítem activo del sidebar, gauge de automatización):
+ * un resplandor de dos tonos (marca + índigo) que respira muy despacio.
+ * Nunca parpadea, nunca es intenso — es presencia, no ruido.
+ */
+@keyframes auraBreathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.ai-aura {
+  position: relative;
+}
+.ai-aura::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--brand-glow), var(--ai-glow));
+  filter: blur(10px);
+  opacity: 0.55;
+  animation: auraBreathe 4.5s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -158,19 +147,19 @@ body,
 }
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 500;
   color: var(--ink);
   background: var(--canvas);
   -webkit-font-smoothing: antialiased;
-  transition: background 0.25s var(--ease-out), color 0.25s var(--ease-out);
 }
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 :focus-visible {
-  outline: 2.5px solid var(--ai);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
-  border-radius: 5px;
+  border-radius: 6px;
 }
 
 @media (prefers-reduced-motion: reduce) {

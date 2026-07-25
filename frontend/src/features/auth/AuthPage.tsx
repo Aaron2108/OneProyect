@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Lock } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api, ApiError } from '@/lib/api';
@@ -151,7 +152,7 @@ export function AuthPage(): JSX.Element {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="m-0 max-w-[34ch] text-base text-[#b9d8cb]"
+            className="m-0 max-w-[34ch] text-base text-ink-soft"
           >
             La IA atiende tu WhatsApp con el contexto de tu negocio, agenda citas y le pasa el turno a tu equipo
             cuando hace falta.
@@ -168,13 +169,13 @@ export function AuthPage(): JSX.Element {
           transition={{ delay: 0.15, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="auth-card"
         >
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em]" style={{ color: '#7be8bf' }}>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-brand-hover">
             {isRegister ? 'Empieza gratis' : 'Bienvenido de vuelta'}
           </p>
-          <h2 className="mb-1 font-display text-[27px] font-bold tracking-tight" style={{ color: '#eaf3ee' }}>
+          <h2 className="mb-1 font-display text-[27px] font-bold tracking-tight text-ink">
             {isRegister ? 'Crea tu empresa' : 'Entra a tu panel'}
           </h2>
-          <p className="mb-6 text-[14.5px]" style={{ color: '#9fb3aa' }}>
+          <p className="mb-7 text-[14.5px] text-ink-soft">
             {isRegister
               ? 'Tu empleado digital de WhatsApp listo en un minuto.'
               : 'Gestiona tus conversaciones de WhatsApp en un solo lugar.'}
@@ -183,48 +184,39 @@ export function AuthPage(): JSX.Element {
           {error && (
             <div
               role="alert"
-              className="mb-3.5 animate-[popIn_.25s_var(--ease-out)] rounded-sm px-3.5 py-2.5 text-[13.5px]"
-              style={{ background: 'rgba(255,131,131,.16)', color: '#ff8383' }}
+              className="mb-4 animate-[popIn_.25s_var(--ease-out)] rounded-sm bg-danger-tint px-3.5 py-2.5 text-[13.5px] text-danger"
             >
               {error}
             </div>
           )}
 
-          <form onSubmit={onSubmit} noValidate className="auth-form-dark">
+          <form onSubmit={onSubmit} noValidate>
             {isRegister && (
               <>
                 <Field>
-                  <Label htmlFor="f_tenant" style={{ color: '#9fb3aa' }}>
-                    Nombre de tu empresa
-                  </Label>
+                  <Label htmlFor="f_tenant">Nombre de tu empresa</Label>
                   <Input
                     id="f_tenant"
                     placeholder="Mi Negocio"
                     autoComplete="organization"
                     value={tenantName}
                     onChange={(e) => setTenantName(e.target.value)}
-                    style={AUTH_INPUT_STYLE}
                   />
                 </Field>
                 <Field>
-                  <Label htmlFor="f_name" style={{ color: '#9fb3aa' }}>
-                    Tu nombre
-                  </Label>
+                  <Label htmlFor="f_name">Tu nombre</Label>
                   <Input
                     id="f_name"
                     placeholder="¿Cómo te llamas?"
                     autoComplete="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    style={AUTH_INPUT_STYLE}
                   />
                 </Field>
               </>
             )}
             <Field>
-              <Label htmlFor="f_email" style={{ color: '#9fb3aa' }}>
-                Email
-              </Label>
+              <Label htmlFor="f_email">Email</Label>
               <Input
                 id="f_email"
                 type="email"
@@ -232,13 +224,10 @@ export function AuthPage(): JSX.Element {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={AUTH_INPUT_STYLE}
               />
             </Field>
             <Field>
-              <Label htmlFor="f_pass" style={{ color: '#9fb3aa' }}>
-                Contraseña
-              </Label>
+              <Label htmlFor="f_pass">Contraseña</Label>
               <Input
                 id="f_pass"
                 type="password"
@@ -246,53 +235,37 @@ export function AuthPage(): JSX.Element {
                 autoComplete={isRegister ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={AUTH_INPUT_STYLE}
               />
             </Field>
-            <Button
-              type="submit"
-              fullWidth
-              loading={loading}
-              disabled={loading}
-              className="!bg-[linear-gradient(135deg,#2ee6a6,#17a67f)] !text-[#06231a] !shadow-[0_8px_24px_-8px_rgba(46,230,166,.5)] hover:brightness-105"
-            >
+            <Button type="submit" fullWidth loading={loading} disabled={loading}>
               {isRegister ? 'Crear mi empresa' : 'Entrar'}
             </Button>
           </form>
 
-          <div className="my-4 flex items-center gap-3" style={{ color: '#6d8177' }}>
-            <span className="h-px flex-1" style={{ background: 'rgba(255,255,255,.12)' }} />
+          <div className="my-5 flex items-center gap-3 text-ink-disabled">
+            <span className="h-px flex-1 bg-line-strong" />
             <span className="text-xs">o</span>
-            <span className="h-px flex-1" style={{ background: 'rgba(255,255,255,.12)' }} />
+            <span className="h-px flex-1 bg-line-strong" />
           </div>
 
-          <Button
-            type="button"
-            variant="ghost"
-            fullWidth
-            loading={googleLoading}
-            disabled={googleLoading}
-            onClick={continueWithGoogle}
-            className="!border-[rgba(255,255,255,.2)] !text-[#eaf3ee] hover:!border-[#7be8bf] hover:!text-[#7be8bf]"
-          >
+          <Button type="button" variant="ghost" fullWidth loading={googleLoading} disabled={googleLoading} onClick={continueWithGoogle}>
             <span aria-hidden="true" className="font-bold">G</span> Continuar con Google
           </Button>
 
-          <p className="mt-4 text-center text-sm" style={{ color: '#9fb3aa' }}>
+          <p className="mt-5 text-center text-sm text-ink-soft">
             {isRegister ? '¿Ya tienes cuenta? ' : '¿Aún no tienes cuenta? '}
             <a
               role="button"
               tabIndex={0}
               onClick={() => setMode(isRegister ? 'login' : 'register')}
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setMode(isRegister ? 'login' : 'register')}
-              className="cursor-pointer font-semibold"
-              style={{ color: '#7be8bf' }}
+              className="cursor-pointer font-semibold text-brand-hover"
             >
               {isRegister ? 'Inicia sesión' : 'Crea tu empresa'}
             </a>
           </p>
-          <p className="mt-5 flex items-center justify-center gap-1.5 text-xs" style={{ color: '#7e9188' }}>
-            🔒 Conexión oficial con la Meta Cloud API de WhatsApp
+          <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-ink-disabled">
+            <Lock size={12} strokeWidth={2} /> Conexión oficial con la Meta Cloud API de WhatsApp
           </p>
         </motion.div>
       </section>
@@ -335,9 +308,3 @@ export function AuthPage(): JSX.Element {
     </div>
   );
 }
-
-const AUTH_INPUT_STYLE: React.CSSProperties = {
-  background: 'rgba(255,255,255,.07)',
-  borderColor: 'rgba(255,255,255,.2)',
-  color: '#eaf3ee',
-};

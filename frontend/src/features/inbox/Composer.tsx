@@ -31,7 +31,7 @@ export function Composer({ onSend }: { onSend: (text: string) => Promise<void> }
         placeholder="Escribe tu respuesta..."
         aria-label="Mensaje"
         autoComplete="off"
-        className="flex-1 rounded-full border border-line-strong bg-[var(--input-bg)] px-4 py-3 focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-tint)] focus:outline-none"
+        className="flex-1 rounded-full border border-line-strong bg-[var(--input-bg)] px-4 py-3 text-[14.5px] transition-[border-color,box-shadow] duration-fast focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-tint)] focus:outline-none"
       />
       <Button variant="brand" onClick={send} disabled={sending} className="!rounded-full !px-6" style={{ minWidth: 108 }}>
         {sending ? <Spinner /> : 'Enviar'}

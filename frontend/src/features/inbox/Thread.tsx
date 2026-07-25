@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { Bot, Check, ChevronLeft, CircleCheck, MessageCircle, RotateCcw, StickyNote, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/components/ui/Pill';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -21,6 +22,15 @@ interface ThreadProps {
   onNotesChanged: () => void;
 }
 
+const HeadBtn = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+  <button
+    onClick={onClick}
+    className="flex items-center gap-1.5 rounded-sm border border-line-strong px-3 py-2 text-[12.5px] font-semibold text-ink-soft transition-colors duration-fast hover:border-brand/50 hover:text-brand"
+  >
+    {children}
+  </button>
+);
+
 function Turn({ m, contactName, index }: { m: Message; contactName: string | null; index: number }): JSX.Element {
   const inbound = m.direction === 'INBOUND';
   const kind = inbound ? 'inbound' : m.sender === 'AI' ? 'ai' : 'human';
@@ -29,17 +39,17 @@ function Turn({ m, contactName, index }: { m: Message; contactName: string | nul
       initial={{ opacity: 0, y: 10, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: Math.min(index * 0.03, 0.3), duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`mt-2.5 flex max-w-[74%] flex-col ${inbound ? 'items-start self-start' : 'items-end self-end'}`}
+      className={`mt-3 flex max-w-[74%] flex-col ${inbound ? 'items-start self-start' : 'items-end self-end'}`}
     >
-      <span className="mb-1 mx-1 inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-faint">
+      <span className="mb-1 mx-1 inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-disabled">
         {kind === 'ai' && (
-          <span className="grid h-3.5 w-3.5 place-items-center rounded text-[8px] font-extrabold text-white" style={{ background: 'var(--ai)' }}>
-            ◆
+          <span className="grid h-3.5 w-3.5 place-items-center rounded text-white" style={{ background: 'var(--ai)' }}>
+            <Bot size={9} strokeWidth={2.5} />
           </span>
         )}
         {kind === 'human' && (
-          <span className="grid h-3.5 w-3.5 place-items-center rounded text-[8px] font-extrabold text-white" style={{ background: 'var(--brand)' }}>
-            ✓
+          <span className="grid h-3.5 w-3.5 place-items-center rounded text-brand-on" style={{ background: 'var(--brand)' }}>
+            <Check size={9} strokeWidth={3} />
           </span>
         )}
         {kind === 'ai' ? 'IA' : kind === 'human' ? 'Agente' : contactName || 'Cliente'}
@@ -47,7 +57,7 @@ function Turn({ m, contactName, index }: { m: Message; contactName: string | nul
       <div className={`bubble bubble--${kind === 'inbound' ? 'in' : kind} ${kind === 'ai' && index === -1 ? 'is-new' : ''}`}>
         {m.content}
       </div>
-      <span className="mx-1 mt-1 text-[10.5px] text-ink-faint">{timeShort(m.createdAt)}</span>
+      <span className="mx-1 mt-1 text-[10.5px] text-ink-disabled">{timeShort(m.createdAt)}</span>
     </motion.div>
   );
 }
@@ -65,7 +75,7 @@ export function Thread(props: ThreadProps): JSX.Element {
     return (
       <div className="thread-panel thread-canvas">
         <div className="m-auto">
-          <EmptyState icon="💬" title="Elige una conversación" description="Selecciona un chat de la izquierda para ver el hilo y responder." />
+          <EmptyState icon={MessageCircle} title="Elige una conversación" description="Selecciona un chat de la izquierda para ver el hilo y responder." />
         </div>
       </div>
     );
@@ -76,13 +86,13 @@ export function Thread(props: ThreadProps): JSX.Element {
 
   return (
     <div className="thread-panel thread-canvas">
-      <div className="thread-head flex flex-shrink-0 items-center gap-3 px-4 py-2.5">
+      <div className="thread-head flex flex-shrink-0 items-center gap-2.5 px-4 py-3">
         <button className="back-btn" onClick={props.onBack} aria-label="Volver a la lista">
-          ‹
+          <ChevronLeft size={18} strokeWidth={2.25} />
         </button>
         <div>
           <div className="text-[15.5px] font-bold">{c.contact.name || c.contact.phone}</div>
-          <div className="font-mono text-xs text-ink-faint">{c.contact.phone}</div>
+          <div className="font-mono text-xs text-ink-disabled">{c.contact.phone}</div>
         </div>
         <div className="flex-1" />
         <AnimatePresence mode="wait">
@@ -96,40 +106,37 @@ export function Thread(props: ThreadProps): JSX.Element {
             <Pill kind={closed ? 'closed' : c.handledBy === 'AI' ? 'ai' : 'human'} />
           </motion.span>
         </AnimatePresence>
-        <button
-          onClick={() => setNotesOpen(true)}
-          className="rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-semibold transition-colors hover:border-brand hover:text-brand"
-        >
-          Notas{c._count.notes ? ` (${c._count.notes})` : ''}
-        </button>
+        <HeadBtn onClick={() => setNotesOpen(true)}>
+          <StickyNote size={14} strokeWidth={2} /> Notas{c._count.notes ? ` (${c._count.notes})` : ''}
+        </HeadBtn>
         {isHuman ? (
-          <button onClick={props.onHandback} className="rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-semibold transition-colors hover:border-ai hover:text-ai">
-            Devolver a la IA
-          </button>
+          <HeadBtn onClick={props.onHandback}>
+            <Bot size={14} strokeWidth={2} /> Devolver a la IA
+          </HeadBtn>
         ) : (
-          <button onClick={props.onHandoff} className="rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-semibold transition-colors hover:border-brand hover:text-brand">
-            Tomar la conversación
-          </button>
+          <HeadBtn onClick={props.onHandoff}>
+            <UserRound size={14} strokeWidth={2} /> Tomar la conversación
+          </HeadBtn>
         )}
         {closed ? (
-          <button onClick={props.onReopen} className="rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-semibold transition-colors hover:border-brand hover:text-brand">
-            Reabrir
-          </button>
+          <HeadBtn onClick={props.onReopen}>
+            <RotateCcw size={14} strokeWidth={2} /> Reabrir
+          </HeadBtn>
         ) : (
-          <button onClick={props.onClose} className="rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-semibold transition-colors hover:border-brand hover:text-brand">
-            Cerrar
-          </button>
+          <HeadBtn onClick={props.onClose}>
+            <CircleCheck size={14} strokeWidth={2} /> Cerrar
+          </HeadBtn>
         )}
       </div>
 
-      <div ref={streamRef} className="flex flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-10" aria-live="polite">
+      <div ref={streamRef} className="flex flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-10" aria-live="polite">
         {c.messages.map((m, i) => (
           <Turn key={m.id} m={m} contactName={c.contact.name} index={i} />
         ))}
       </div>
 
       {closed ? (
-        <div className="composer-bar flex-shrink-0 px-4 py-4 text-center text-[13.5px] text-ink-faint">
+        <div className="composer-bar flex-shrink-0 px-4 py-4 text-center text-[13.5px] text-ink-disabled">
           Esta conversación está cerrada. Reábrela para responder.
         </div>
       ) : (

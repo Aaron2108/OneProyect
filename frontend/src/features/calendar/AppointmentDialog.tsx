@@ -3,7 +3,7 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import { Field, Input, Label, Textarea } from '@/components/ui/Input';
+import { Field, Input, Label, Select, Textarea } from '@/components/ui/Input';
 import type { Appointment, AppointmentStatus, Contact, Page } from '@/lib/types';
 import { toDateKey, toTimeInputValue } from './calendar.util';
 
@@ -225,17 +225,12 @@ export function AppointmentDialog({
       {isEdit && (
         <Field>
           <Label htmlFor="ap_status">Estado</Label>
-          <select
-            id="ap_status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
-            className="w-full rounded-sm border border-line-strong bg-[var(--input-bg)] px-3 py-2.5 text-ink focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-tint)] focus:outline-none"
-          >
+          <Select id="ap_status" value={status} onChange={(e) => setStatus(e.target.value as AppointmentStatus)}>
             <option value="SCHEDULED">Agendada</option>
             <option value="CONFIRMED">Confirmada</option>
             <option value="COMPLETED">Completada</option>
             <option value="CANCELLED">Cancelada</option>
-          </select>
+          </Select>
         </Field>
       )}
 

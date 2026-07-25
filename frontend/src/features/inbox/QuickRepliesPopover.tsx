@@ -1,4 +1,5 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
+import { X, Zap } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
@@ -49,9 +50,9 @@ export function QuickRepliesPopover({ onInsert }: { onInsert: (body: string) => 
           type="button"
           title="Respuestas rápidas"
           aria-label="Respuestas rápidas"
-          className="flex-shrink-0 rounded-full border border-line-strong bg-surface px-4 text-[17px] transition-colors hover:border-ai hover:bg-ai-tint"
+          className="grid flex-shrink-0 place-items-center rounded-full border border-line-strong bg-surface px-4 text-ai transition-colors duration-fast hover:border-ai/60 hover:bg-ai-tint"
         >
-          ⚡
+          <Zap size={16} strokeWidth={2} />
         </button>
       }
     >
@@ -68,9 +69,9 @@ export function QuickRepliesPopover({ onInsert }: { onInsert: (body: string) => 
               onClick={() => remove(q.id)}
               aria-label="Eliminar"
               title="Eliminar"
-              className="flex-shrink-0 px-1 text-[17px] leading-none text-ink-faint hover:text-danger"
+              className="flex-shrink-0 px-1 text-ink-faint transition-colors duration-fast hover:text-danger"
             >
-              ×
+              <X size={14} strokeWidth={2} />
             </button>
           </div>
         ))}
