@@ -1,5 +1,5 @@
 import * as RadixTabs from '@radix-ui/react-tabs';
-import { Bot, Calendar, Contact, LayoutGrid, MessageSquare, Users, type LucideIcon } from 'lucide-react';
+import { Bot, Calendar, Contact, LayoutGrid, MessageSquare, Package, Users, type LucideIcon } from 'lucide-react';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
@@ -9,6 +9,7 @@ import { ContactsPage } from '@/features/contacts/ContactsPage';
 import { TeamPage } from '@/features/team/TeamPage';
 import { CalendarPage } from '@/features/calendar/CalendarPage';
 import { AiAgentPage } from '@/features/ai-agent/AiAgentPage';
+import { ProductsPage } from '@/features/products/ProductsPage';
 
 // Recharts es el mayor contribuyente al peso del bundle; se carga solo cuando
 // se visita Métricas (no es la primera pantalla tras entrar) en vez de en el
@@ -20,6 +21,7 @@ const TABS: Array<{ value: string; label: string; icon: LucideIcon }> = [
   { value: 'metrics', label: 'Métricas', icon: LayoutGrid },
   { value: 'contacts', label: 'Contactos', icon: Contact },
   { value: 'calendar', label: 'Calendario', icon: Calendar },
+  { value: 'products', label: 'Productos', icon: Package },
   { value: 'agent', label: 'Agente IA', icon: Bot },
   { value: 'team', label: 'Equipo', icon: Users },
 ];
@@ -95,6 +97,9 @@ export function AppShell(): JSX.Element {
           </RadixTabs.Content>
           <RadixTabs.Content value="calendar" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
             <CalendarPage active={tab === 'calendar'} />
+          </RadixTabs.Content>
+          <RadixTabs.Content value="products" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
+            <ProductsPage active={tab === 'products'} />
           </RadixTabs.Content>
           <RadixTabs.Content value="agent" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
             <AiAgentPage active={tab === 'agent'} />

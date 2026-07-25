@@ -84,24 +84,25 @@ enum KnowledgeExtractionMethod {
 // ---------------------------------------------------------------------------
 
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
+  id                    String   @id @default(uuid())
+  name                  String
   // ID del número de WhatsApp en Meta — enruta cada webhook entrante a su tenant
-  whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  whatsappPhoneNumberId String?  @unique @map("whatsapp_phone_number_id")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
-  users         User[]
-  contacts      Contact[]
-  conversations Conversation[]
-  appointments  Appointment[]
-  reminders     Reminder[]
-  quickReplies  QuickReply[]
+  users                     User[]
+  contacts                  Contact[]
+  conversations             Conversation[]
+  appointments              Appointment[]
+  reminders                 Reminder[]
+  quickReplies              QuickReply[]
   googleCalendarIntegration GoogleCalendarIntegration?
   googleCalendarSyncJobs    GoogleCalendarSyncJob[]
   aiContextMemories         AiContextMemory[]
   businessProfile           BusinessProfile?
   knowledgeDocuments        KnowledgeDocument[]
+  products                  Product[]
 
   @@map("tenants")
 }
@@ -220,11 +221,11 @@ model Contact {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
-  appointments  Appointment[]
-  reminders     Reminder[]
-  consent       ContactConsent?
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations     Conversation[]
+  appointments      Appointment[]
+  reminders         Reminder[]
+  consent           ContactConsent?
   aiContextMemories AiContextMemory[]
 
   @@unique([tenantId, phone])
@@ -233,29 +234,29 @@ model Contact {
 }
 
 model Conversation {
-  id        String              @id @default(uuid())
-  tenantId  String              @map("tenant_id")
-  contactId String              @map("contact_id")
-  status    ConversationStatus  @default(OPEN)
-  handledBy ConversationHandler @default(AI) @map("handled_by") // RF-11: quién responde ahora
+  id             String              @id @default(uuid())
+  tenantId       String              @map("tenant_id")
+  contactId      String              @map("contact_id")
+  status         ConversationStatus  @default(OPEN)
+  handledBy      ConversationHandler @default(AI) @map("handled_by") // RF-11: quién responde ahora
   // Contador denormalizado de mensajes entrantes sin leer por el equipo: lo
   // incrementa el worker al recibir un entrante y se pone a 0 al abrir el hilo.
   // Denormalizado para no recalcularlo en cada listado (escala).
-  unreadCount Int               @default(0) @map("unread_count")
+  unreadCount    Int                 @default(0) @map("unread_count")
   // RF-10: la ventana de 24h se calcula desde el último mensaje entrante
-  lastInboundAt DateTime?       @map("last_inbound_at")
-  lastMessageAt DateTime?       @map("last_message_at")
+  lastInboundAt  DateTime?           @map("last_inbound_at")
+  lastMessageAt  DateTime?           @map("last_message_at")
   // Fase 4 (seguimiento automático): cuántos seguimientos automáticos van
   // enviados desde que el contacto respondió por última vez (se resetea a 0
   // en cada entrante — ver InboundMessageProcessor) y cuándo se envió el
   // último. Ver ConversationFollowUpService.
-  followUpCount  Int       @default(0) @map("follow_up_count")
-  lastFollowUpAt DateTime? @map("last_follow_up_at")
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
+  followUpCount  Int                 @default(0) @map("follow_up_count")
+  lastFollowUpAt DateTime?           @map("last_follow_up_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact  Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
   messages Message[]
   notes    ConversationNote[]
 
@@ -282,16 +283,16 @@ model ConversationNote {
 }
 
 model Message {
-  id             String           @id @default(uuid())
-  tenantId       String           @map("tenant_id")
-  conversationId String           @map("conversation_id")
-  direction      MessageDirection
-  sender         MessageSender
+  id                String           @id @default(uuid())
+  tenantId          String           @map("tenant_id")
+  conversationId    String           @map("conversation_id")
+  direction         MessageDirection
+  sender            MessageSender
   // ID del mensaje en Meta — único por tenant para deduplicar reenvíos (guarda NFR)
-  whatsappMessageId String?       @map("whatsapp_message_id")
-  type           String           @default("text") // text | template | image | ...
-  content        String
-  createdAt      DateTime         @default(now()) @map("created_at")
+  whatsappMessageId String?          @map("whatsapp_message_id")
+  type              String           @default("text") // text | template | image | ...
+  content           String
+  createdAt         DateTime         @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -301,22 +302,22 @@ model Message {
 }
 
 model Appointment {
-  id          String            @id @default(uuid())
-  tenantId    String            @map("tenant_id")
-  contactId   String            @map("contact_id")
-  title       String
-  scheduledAt DateTime          @map("scheduled_at")
-  status      AppointmentStatus @default(SCHEDULED)
-  notes       String?
+  id            String            @id @default(uuid())
+  tenantId      String            @map("tenant_id")
+  contactId     String            @map("contact_id")
+  title         String
+  scheduledAt   DateTime          @map("scheduled_at")
+  status        AppointmentStatus @default(SCHEDULED)
+  notes         String?
   // ID del evento en Google Calendar si el tenant tiene la integración conectada
   // (Fase 3); null si no está sincronizada o si el tenant no la usa.
-  googleEventId String?         @map("google_event_id")
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
+  googleEventId String?           @map("google_event_id")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contact   Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  reminders Reminder[]
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact               Contact                @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  reminders             Reminder[]
   googleCalendarSyncJob GoogleCalendarSyncJob?
 
   @@index([tenantId])
@@ -357,14 +358,14 @@ model Reminder {
 
 // RF-12: consentimiento (opt-in) del contacto para recibir mensajes
 model ContactConsent {
-  id         String        @id @default(uuid())
-  tenantId   String        @map("tenant_id")
-  contactId  String        @unique @map("contact_id")
-  status     ConsentStatus @default(UNKNOWN)
-  source     String? // cómo se obtuvo el opt-in (ej. "primer mensaje entrante")
-  grantedAt  DateTime?     @map("granted_at")
-  createdAt  DateTime      @default(now()) @map("created_at")
-  updatedAt  DateTime      @updatedAt @map("updated_at")
+  id        String        @id @default(uuid())
+  tenantId  String        @map("tenant_id")
+  contactId String        @unique @map("contact_id")
+  status    ConsentStatus @default(UNKNOWN)
+  source    String? // cómo se obtuvo el opt-in (ej. "primer mensaje entrante")
+  grantedAt DateTime?     @map("granted_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
 
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
@@ -385,15 +386,15 @@ model ContactConsent {
 // (AiContextMemoryService), nunca con el Prisma Client normal. `content` se
 // cifra en reposo igual que Message.content/ConversationNote.body (PII).
 model AiContextMemory {
-  id             String   @id @default(uuid())
-  tenantId       String   @map("tenant_id")
-  contactId      String   @map("contact_id")
-  conversationId String?  @map("conversation_id")
+  id             String                       @id @default(uuid())
+  tenantId       String                       @map("tenant_id")
+  contactId      String                       @map("contact_id")
+  conversationId String?                      @map("conversation_id")
   content        String // resumen cifrado (AES-256-GCM, ver common/pii-crypto.service.ts)
   // Opcional: puede estar sin vector mientras espera reindexado (ver la
   // migración `embeddings_1024`). El recall descarta las filas sin vector.
   embedding      Unsupported("vector(1024)")?
-  createdAt      DateTime @default(now()) @map("created_at")
+  createdAt      DateTime                     @default(now()) @map("created_at")
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -444,9 +445,9 @@ model KnowledgeDocument {
 // docs/DECISIONS.md). Mismo patrón que AiContextMemory: `embedding` es
 // `Unsupported` y se maneja con SQL crudo parametrizado; `content` va cifrado.
 model KnowledgeChunk {
-  id         String @id @default(uuid())
-  tenantId   String @map("tenant_id")
-  documentId String @map("document_id")
+  id         String                       @id @default(uuid())
+  tenantId   String                       @map("tenant_id")
+  documentId String                       @map("document_id")
   // Posición dentro del documento — permite mostrar los fragmentos en orden.
   position   Int
   content    String // fragmento cifrado (AES-256-GCM, ver common/pii-crypto.service.ts)
@@ -459,4 +460,38 @@ model KnowledgeChunk {
   @@index([tenantId])
   @@index([documentId])
   @@map("knowledge_chunks")
+}
+
+// Catálogo de productos del negocio. A diferencia de la documentación
+// (`KnowledgeDocument`), el stock NO se resuelve inyectando un archivo en el
+// prompt: un PDF o un CSV es una foto de un momento, y la IA acabaría
+// prometiendo existencias que ya no hay. La IA lo consulta en vivo con la
+// herramienta `consultar_producto` (tool-calling contra esta tabla), igual que
+// hace con las citas. Ver docs/DECISIONS.md.
+model Product {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  // Código del negocio. Es la clave con la que la importación actualiza en vez
+  // de duplicar; opcional porque muchos negocios pequeños no lo usan.
+  sku         String?
+  name        String
+  description String?
+  // Precio en la unidad mínima de la moneda (céntimos) y como entero: en dinero,
+  // el punto flotante arrastra errores de redondeo.
+  priceCents  Int?     @map("price_cents")
+  // Moneda ISO-4217 si el negocio la indicó. Opcional a propósito: no se inventa
+  // una moneda que el propietario no haya declarado.
+  currency    String?
+  stock       Int      @default(0)
+  // Un producto descatalogado se desactiva en vez de borrarse, para no perder el
+  // histórico; la IA solo ve los activos.
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, active])
+  @@map("products")
 }

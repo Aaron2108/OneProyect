@@ -166,6 +166,25 @@ export interface AiContextPreview {
   documents: Array<{ filename: string; charCount: number }>;
 }
 
+/** Producto del catálogo. El precio va en céntimos: en dinero, el float redondea mal. */
+export interface Product {
+  id: string;
+  sku: string | null;
+  name: string;
+  description: string | null;
+  priceCents: number | null;
+  currency: string | null;
+  stock: number;
+  active: boolean;
+}
+
+/** Resultado de importar un CSV de productos, con los errores por fila. */
+export interface ImportReport {
+  created: number;
+  updated: number;
+  errors: Array<{ row: number; reason: string }>;
+}
+
 /** Herramienta que el agente habría usado en el chat de prueba (no se ejecutó). */
 export interface SimulatedTool {
   name: string;

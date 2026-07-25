@@ -21,6 +21,7 @@ import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { BusinessProfileModule } from './business-profile/business-profile.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { AiContextModule } from './ai-context/ai-context.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { AiContextModule } from './ai-context/ai-context.module';
     BusinessProfileModule,
     KnowledgeModule,
     AiContextModule,
+    ProductsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

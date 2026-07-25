@@ -19,6 +19,7 @@ const API_PREFIXES = [
   '/business-profile',
   '/knowledge',
   '/ai-context',
+  '/products',
 ];
 
 export default defineConfig({
