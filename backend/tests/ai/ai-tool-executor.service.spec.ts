@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { AppointmentsService } from '../../src/appointments/appointments.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -31,6 +32,9 @@ describe('AiToolExecutorService', () => {
       prisma as unknown as PrismaService,
       makeTestPiiCrypto(),
       appointments as unknown as AppointmentsService,
+      // Zona fija: si dependiera de la del servidor, el test pasaría o fallaría
+      // según la máquina que lo corra.
+      { get: () => 'America/Lima' } as unknown as ConfigService,
     );
   });
 
@@ -47,6 +51,37 @@ describe('AiToolExecutorService', () => {
     expect(dto.contactId).toBe('contact-1');
     expect(dto.title).toBe('Consulta');
     expect(result).toContain('Cita creada');
+  });
+
+  it('el resultado no filtra el id interno: el modelo lo repite tal cual al cliente', async () => {
+    const result = await executor.execute(
+      'create_appointment',
+      { title: 'Corte', scheduled_at: '2026-08-03T16:00:00-05:00' },
+      ctx,
+    );
+    expect(result).not.toContain('appt-1');
+    expect(result).not.toMatch(/\bid\b/i);
+  });
+
+  it('confirma la hora en la zona del negocio, no en UTC', async () => {
+    // Si se confirmara en UTC, el cliente que pidió las 16:00 leería "21:00".
+    const result = await executor.execute(
+      'create_appointment',
+      { title: 'Corte', scheduled_at: '2026-08-03T16:00:00-05:00' },
+      ctx,
+    );
+    expect(result).toContain('16:00');
+    expect(result).toContain('agosto');
+  });
+
+  it('un recordatorio tampoco filtra su id', async () => {
+    const result = await executor.execute(
+      'create_reminder',
+      { message: 'Recordar la cita', remind_at: '2026-08-02T09:00:00-05:00' },
+      ctx,
+    );
+    expect(result).not.toContain('rem-1');
+    expect(result).toContain('09:00');
   });
 
   it('rechaza una fecha de cita inválida sin tocar la BD', async () => {

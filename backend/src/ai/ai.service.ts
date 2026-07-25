@@ -8,6 +8,7 @@ import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.serv
 import { AiContextMemoryService } from './ai-context-memory.service';
 import { AI_TOOLS, AiToolExecutorService } from './ai-tool-executor.service';
 import { MAX_OUTPUT_TOKENS, MAX_SUMMARY_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
+import { describeNow, resolveTimeZone } from './ai-datetime.util';
 import { NvidiaChatService } from './nvidia-chat.service';
 import { AgentReply, ConversationContext, HistoryTurn } from './ai.types';
 
@@ -18,6 +19,7 @@ export class AiService {
   private readonly provider: string;
   private readonly model: string;
   private readonly maxCallsPerHour: number;
+  private readonly timeZone: string;
 
   constructor(
     private readonly config: ConfigService,
@@ -33,6 +35,7 @@ export class AiService {
     this.model = this.config.get<string>('ai.model') ?? 'claude-haiku-4-5';
     this.maxCallsPerHour =
       this.config.get<number>('ai.maxCallsPerConversationPerHour') ?? 20;
+    this.timeZone = resolveTimeZone(this.config.get<string>('business.timeZone'));
     // Sin API key la IA queda deshabilitada (arranque local sin credenciales).
     this.client = apiKey ? new Anthropic({ apiKey }) : null;
   }
@@ -214,10 +217,14 @@ export class AiService {
     recalled: string[] = [],
     profileLines: string[] = [],
     knowledgeLines: string[] = [],
+    // Parámetro y no `new Date()` interno para que la función siga siendo pura
+    // sobre sus argumentos (los tests fijan la fecha; el panel muestra la real).
+    now: Date = new Date(),
   ): string {
     const lines = [
       `Eres el asistente de IA de la empresa "${ctx.tenantName}", atendiendo por WhatsApp.`,
       `Hablas con el contacto ${ctx.contactName ?? 'sin nombre'} (teléfono ${ctx.contactPhone}).`,
+      ...describeNow(now, this.timeZone),
       'Responde en español, de forma breve, cordial y útil.',
       'Usa las herramientas disponibles para programar citas, crear recordatorios o actualizar los datos del contacto cuando el cliente lo pida.',
       'No inventes información del negocio que no conozcas; si no puedes resolver algo, indícalo con claridad.',

@@ -15,6 +15,8 @@ describe('AiService', () => {
           'ai.apiKey': apiKey,
           'ai.model': 'claude-haiku-4-5',
           'ai.maxCallsPerConversationPerHour': maxCalls,
+          // Zona fija: sin esto los tests dependerían de la zona de la máquina.
+          'business.timeZone': 'America/Lima',
         })[key],
     }) as unknown as ConfigService;
 
@@ -96,6 +98,26 @@ describe('AiService', () => {
     expect(reply.text).not.toBe(''); // el cliente siempre recibe respuesta
     expect(reply.text).toContain('registré');
     expect(reply.actions.length).toBeGreaterThan(0);
+  });
+
+  it('el system prompt le dice al modelo qué día es hoy y en qué zona agendar', () => {
+    const service = new AiService(
+      makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+    );
+
+    const prompt = service.buildSystemPrompt(
+      { tenantId: 't', tenantName: 'E', contactId: 'c', contactName: 'Ana', contactPhone: '1', conversationId: 'cv' },
+      [],
+      [],
+      [],
+      new Date('2026-08-03T21:00:00Z'),
+    );
+
+    // Sin la fecha, el modelo adivinaba el año; sin la zona, escribía la hora en
+    // UTC y la cita quedaba corrida (aquí, 5 horas).
+    expect(prompt).toContain('3 de agosto de 2026');
+    expect(prompt).toContain('America/Lima');
+    expect(prompt).toMatch(/nunca en UTC/i);
   });
 
   describe('memoria de contexto (Fase 4)', () => {
@@ -244,7 +266,8 @@ describe('AiService', () => {
       conversationId: 'cv',
     };
     const nvidiaConfig = {
-      get: (key: string) => (key === 'ai.provider' ? 'nvidia' : undefined),
+      get: (key: string) =>
+        ({ 'ai.provider': 'nvidia', 'business.timeZone': 'America/Lima' })[key],
     } as unknown as ConfigService;
 
     it('isEnabled depende de las credenciales de NVIDIA, no de las de Anthropic', () => {

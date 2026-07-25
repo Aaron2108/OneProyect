@@ -61,6 +61,11 @@ export interface AppConfig {
     // relativa (mismo origen que Nest en producción); en dev es http://localhost:5173.
     baseUrl: string;
   };
+  business: {
+    // Zona horaria en la que la IA interpreta y agenda ("America/Lima"). Vacío =
+    // la del servidor. Es global, no por tenant: ver DECISIONS.md.
+    timeZone: string;
+  };
 }
 
 export default (): AppConfig => ({
@@ -120,5 +125,8 @@ export default (): AppConfig => ({
   },
   frontend: {
     baseUrl: process.env.FRONTEND_BASE_URL ?? '',
+  },
+  business: {
+    timeZone: process.env.BUSINESS_TIME_ZONE ?? '',
   },
 });

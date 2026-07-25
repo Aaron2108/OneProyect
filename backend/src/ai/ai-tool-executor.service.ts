@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type Anthropic from '@anthropic-ai/sdk';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { formatBusinessDateTime, resolveTimeZone } from './ai-datetime.util';
 import {
   TOOL_CREATE_APPOINTMENT,
   TOOL_CREATE_REMINDER,
@@ -27,7 +29,8 @@ export const AI_TOOLS: Anthropic.Tool[] = [
         title: { type: 'string', description: 'Motivo o título de la cita' },
         scheduled_at: {
           type: 'string',
-          description: 'Fecha y hora de la cita en formato ISO 8601 (ej. 2026-08-01T15:00:00Z)',
+          description:
+            'Fecha y hora de la cita en ISO 8601 con el desplazamiento de la zona del negocio, indicado en el contexto (ej. 2026-08-01T15:00:00-05:00). No la escribas en UTC.',
         },
         notes: { type: 'string', description: 'Notas opcionales' },
       },
@@ -44,7 +47,8 @@ export const AI_TOOLS: Anthropic.Tool[] = [
         message: { type: 'string', description: 'Texto del recordatorio' },
         remind_at: {
           type: 'string',
-          description: 'Fecha y hora del recordatorio en formato ISO 8601',
+          description:
+            'Fecha y hora del recordatorio en ISO 8601 con el desplazamiento de la zona del negocio (ej. 2026-08-01T09:00:00-05:00). No la escribas en UTC.',
         },
       },
       required: ['message', 'remind_at'],
@@ -68,11 +72,16 @@ export const AI_TOOLS: Anthropic.Tool[] = [
 export class AiToolExecutorService {
   private readonly logger = new Logger(AiToolExecutorService.name);
 
+  private readonly timeZone: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly pii: PiiCryptoService,
     private readonly appointments: AppointmentsService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.timeZone = resolveTimeZone(config.get<string>('business.timeZone'));
+  }
 
   /**
    * Ejecuta una herramienta invocada por el modelo, ligando tenant/contacto
@@ -116,7 +125,11 @@ export class AiToolExecutorService {
       scheduledAt: scheduledAt.toISOString(),
       notes: input.notes ? String(input.notes) : undefined,
     });
-    return `Cita creada (id ${appt.id}) para ${scheduledAt.toISOString()}.`;
+    // El id queda en el log del servidor (auditoría) y NO en el resultado: el
+    // modelo repite este texto al cliente, y un UUID interno no debe salir por
+    // WhatsApp. La fecha va en la zona del negocio, no en UTC, por lo mismo.
+    this.logger.log(`Cita ${appt.id} creada por la IA (tenant ${ctx.tenantId})`);
+    return `Cita creada para el ${formatBusinessDateTime(scheduledAt, this.timeZone)}.`;
   }
 
   private async createReminder(
@@ -133,7 +146,8 @@ export class AiToolExecutorService {
         remindAt,
       },
     });
-    return `Recordatorio creado (id ${reminder.id}) para ${remindAt.toISOString()}.`;
+    this.logger.log(`Recordatorio ${reminder.id} creado por la IA (tenant ${ctx.tenantId})`);
+    return `Recordatorio creado para el ${formatBusinessDateTime(remindAt, this.timeZone)}.`;
   }
 
   private async updateContact(

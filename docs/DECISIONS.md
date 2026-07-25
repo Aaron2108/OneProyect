@@ -241,3 +241,15 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 
 **Embeddings siguen en `mock`**: los modelos de embedding de NVIDIA devuelven 1024 o 2048 dimensiones y las columnas `vector(512)` (`ai_context_memory`, `knowledge_chunks`) están fijadas a la dimensión de `voyage-3-lite`. Aprovecharlos exigiría una migración de ambas columnas, que no se justifica por una credencial de prueba.
 
+## 2026-07-25 — La IA recibe la fecha de hoy y la zona horaria del negocio
+
+**Decisión**: el system prompt incluye la fecha actual y la zona horaria del negocio (`BUSINESS_TIME_ZONE`, o la del servidor si no está), y las herramientas con fecha exigen ISO 8601 **con desplazamiento**, no en UTC.
+
+**Motivo**: se detectó agendando citas de verdad. El prompt no decía qué día era, así que el modelo **adivinaba el año**; y como el ejemplo de las herramientas usaba `Z`, escribía la hora en UTC: un cliente que pedía "las 4 de la tarde" terminaba con la cita a las 11:00 en un servidor en `America/Lima` (5 horas de corrimiento). Las dos cosas afectaban igual a Claude y al proveedor de pruebas.
+
+**Los identificadores internos no salen en el resultado de la herramienta**: el modelo repite ese texto al cliente, y estaba mandando el UUID de la cita por WhatsApp. Ahora el id va al log del servidor (auditoría) y el resultado confirma la fecha en la zona del negocio, en texto legible.
+
+**La zona es global, no por tenant**: es un límite conocido. Con negocios en husos distintos hay que moverla a una columna de `tenants` y pasarla por `ConversationContext`; se deja como variable de entorno porque hoy no hay forma de que el dueño la configure y un valor global correcto es mejor que la zona del servidor por accidente.
+
+**Zona inválida degrada, no rompe**: una zona mal escrita haría fallar a `Intl` en cada mensaje entrante, así que `resolveTimeZone` valida y cae a la del servidor.
+
