@@ -5,6 +5,8 @@ import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
 import { Field, Label, Textarea } from '@/components/ui/Input';
+import { AiContextPanel } from './AiContextPanel';
+import { KnowledgeDocuments } from './KnowledgeDocuments';
 import type { BusinessProfile } from '@/lib/types';
 
 const MAX_LENGTH = 1000;
@@ -60,6 +62,9 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Se incrementa al guardar el perfil o cambiar la documentación, para que el
+  // panel de contexto no siga mostrando un estado viejo.
+  const [contextKey, setContextKey] = useState(0);
 
   useEffect(() => {
     if (!active) return;
@@ -95,6 +100,7 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
     try {
       const profile = await api<BusinessProfile>('/business-profile', { method: 'PUT', body: form });
       setUpdatedAt(profile.updatedAt);
+      setContextKey((k) => k + 1);
       toast.show('Configuración del agente guardada');
     } catch (e) {
       toast.show(e instanceof Error ? e.message : 'No se pudo guardar', 'error');
@@ -148,6 +154,16 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
             </div>
           )}
         </form>
+      )}
+
+      {!loading && (
+        <div className="mt-6 flex flex-col gap-6">
+          <KnowledgeDocuments
+            isOwner={isOwner}
+            onChanged={() => setContextKey((k) => k + 1)}
+          />
+          <AiContextPanel reloadKey={contextKey} />
+        </div>
       )}
     </div>
   );

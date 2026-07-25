@@ -195,3 +195,34 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **Decisión**: el backend NestJS pasa de la raíz a `/backend`; `/frontend` se mantiene donde estaba. Cada carpeta es una aplicación independiente con su propio `package.json`, `.env` y despliegue, pensadas como repositorios de GitHub separados. `docker-compose.yml` (Postgres + Redis) y `/docs` quedan en la raíz porque son infraestructura y documentación compartidas.
 **Motivo**: solicitado por el propietario para publicar frontend y backend como repos independientes.
 **Consecuencia**: el backend ya **no sirve** el build de React como estático (se quitó `useStaticAssets` de `main.ts`) y expone solo la API con CORS habilitado hacia `FRONTEND_BASE_URL`. El frontend usa `VITE_API_URL` cuando no hay proxy de desarrollo de por medio.
+
+## 2026-07-25 — Conocimiento del negocio a partir de documentos (RAG por tenant)
+
+**Decisión**: el negocio puede subir documentación (PDF con texto, PDF escaneado, Word `.docx`, texto plano y Markdown) en el apartado "Agente IA". El texto se extrae, se parte en fragmentos con solape, se generan embeddings y se recuperan **solo los fragmentos relevantes** al mensaje del cliente para inyectarlos en el system prompt.
+
+**Motivo**: sin esto la IA solo conocía los campos libres del perfil de negocio, y las PyMEs ya tienen sus políticas y servicios escritos en documentos.
+
+**Tabla propia (`knowledge_documents` + `knowledge_chunks`), no reutilizar `ai_context_memory`**: esa tabla es memoria **por contacto** (`contact_id` obligatorio); el conocimiento del negocio es **del tenant** y aplica a cualquier conversación.
+
+**Por qué recuperación y no inyectar los documentos completos**: el system prompt se paga en **cada** mensaje de WhatsApp. Inyectar 20 páginas por respuesta multiplicaría el costo por conversación y dejaría corta la guarda de costo de `AiService`. Se recuperan 4 fragmentos como máximo.
+
+**Revisión obligatoria antes de activar**: al subir, el documento queda en `PENDING_REVIEW` con su texto extraído a la vista; la IA solo lo usa cuando el dueño confirma. Sin ese paso, el dueño no tendría forma de ver qué entendió el sistema de su PDF antes de que el agente empiece a responderles a sus clientes con eso.
+
+**Aislamiento y cifrado**: el recall filtra siempre por `tenantId` y por estado `ACTIVE`, con SQL parametrizado (nunca interpolado). Los fragmentos se cifran en reposo con `PiiCryptoService`, igual que los mensajes y notas (SECURITY.md §10). No se guarda el archivo original: la IA no lo necesita y no almacenarlo reduce la superficie de datos.
+
+## 2026-07-25 — OCR de PDFs escaneados con la visión nativa de Claude
+
+**Decisión**: cuando un PDF no tiene capa de texto, se transcribe mandándolo como bloque `document` a la API de Anthropic (Claude procesa las páginas también como imagen), en vez de integrar un motor de OCR.
+
+**Motivo**: Tesseract exigiría además renderizar PDF→imagen, lo que en Windows arrastra dependencias nativas (GraphicsMagick/Ghostscript) con calidad variable. El SDK de Anthropic ya está en el proyecto y acepta el PDF directo.
+
+**Cascada, no OCR por defecto**: primero se intenta la extracción nativa (gratis) y **solo si no hay texto** se paga la transcripción. Es un costo de una sola vez al subir —se guarda el texto resultante—, no por cada mensaje.
+
+**El umbral se mide por página, no en total**: un mínimo absoluto confundía "documento corto" con "escaneo" y mandaba a visión una lista de precios de una página, gastando créditos sin necesidad. Una página escaneada devuelve ~0 caracteres; una con texto real, cientos (`MIN_CHARS_PER_PAGE`).
+
+**Límites**: 100 páginas por PDF (el tope de la API con `claude-haiku-4-5`, de 200K de contexto; los modelos de 1M llegan a 600) y 15 MB por archivo (base64 infla ~1.37x sobre el límite de 32 MB por request).
+
+## 2026-07-25 — `EmbeddingsModule` y `AiContextModule` para evitar dependencias circulares
+
+**Decisión**: `EmbeddingsService` se extrae a `EmbeddingsModule`, y el endpoint que compone el contexto de la IA vive en un `AiContextModule` propio (`GET /ai-context`).
+**Motivo**: `AiModule` necesita el recall del conocimiento y `KnowledgeModule` necesita los embeddings; dejar `EmbeddingsService` dentro de `AiModule` habría forzado `Knowledge → Ai → Knowledge`. El endpoint de contexto compone perfil + conocimiento + motor de IA, así que ponerlo en cualquiera de esos módulos también cerraba un ciclo: su módulo no lo importa nadie.

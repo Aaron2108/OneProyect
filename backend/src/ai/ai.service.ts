@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessageSender } from '@prisma/client';
 import { BusinessProfileService } from '../business-profile/business-profile.service';
+import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
 import { AiContextMemoryService } from './ai-context-memory.service';
 import { AI_TOOLS, AiToolExecutorService } from './ai-tool-executor.service';
 import { MAX_OUTPUT_TOKENS, MAX_SUMMARY_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
@@ -23,6 +24,7 @@ export class AiService {
     private readonly tools: AiToolExecutorService,
     private readonly contextMemory: AiContextMemoryService,
     private readonly businessProfile: BusinessProfileService,
+    private readonly knowledge: KnowledgeRetrievalService,
   ) {
     const apiKey = this.config.get<string>('ai.apiKey') ?? '';
     this.provider = this.config.get<string>('ai.provider') ?? 'anthropic';
@@ -66,6 +68,10 @@ export class AiService {
     const lastUserText = [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
     const recalled = await this.contextMemory.recall(ctx.tenantId, ctx.contactId, lastUserText);
     const profileLines = await this.businessProfile.describe(ctx.tenantId);
+    // Documentación del negocio relevante a este mensaje: solo los fragmentos
+    // más parecidos, no los documentos completos — el system prompt se paga en
+    // cada mensaje (ver KnowledgeRetrievalService).
+    const knowledgeLines = await this.knowledge.describe(ctx.tenantId, lastUserText);
 
     if (this.provider === 'mock') {
       return this.mockRespond(ctx, history);
@@ -86,7 +92,7 @@ export class AiService {
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: this.buildSystemPrompt(ctx, recalled, profileLines),
+        system: this.buildSystemPrompt(ctx, recalled, profileLines, knowledgeLines),
         tools: AI_TOOLS,
         messages,
       });
@@ -171,10 +177,17 @@ export class AiService {
     };
   }
 
-  private buildSystemPrompt(
+  /**
+   * Arma el system prompt con todo el contexto del negocio. Es una función pura
+   * sobre sus argumentos a propósito: el panel "Agente IA" la usa (vía
+   * `previewSystemPrompt`) para mostrarle al dueño exactamente el contexto que
+   * va a recibir la IA, sin tener que duplicar la lógica en otro lado.
+   */
+  buildSystemPrompt(
     ctx: ConversationContext,
     recalled: string[] = [],
     profileLines: string[] = [],
+    knowledgeLines: string[] = [],
   ): string {
     const lines = [
       `Eres el asistente de IA de la empresa "${ctx.tenantName}", atendiendo por WhatsApp.`,
@@ -186,6 +199,9 @@ export class AiService {
     if (profileLines.length > 0) {
       lines.push('Esto es lo que el negocio configuró para que lo tengas en cuenta:', ...profileLines);
     }
+    if (knowledgeLines.length > 0) {
+      lines.push(...knowledgeLines);
+    }
     if (recalled.length > 0) {
       lines.push(
         'Esto es lo que sabes de conversaciones anteriores con este mismo cliente (puede ayudarte a dar continuidad, pero no lo repitas textualmente ni asumas que sigue siendo exacto):',
@@ -193,6 +209,65 @@ export class AiService {
       );
     }
     return lines.join('\n');
+  }
+
+  /**
+   * System prompt de ejemplo para el panel: mismo armado que en una respuesta
+   * real, con un contacto de muestra y una consulta de prueba para que se vea qué
+   * documentación se recupera. Sirve para que el dueño entienda —y audite— qué
+   * sabe la IA antes de que atienda a un cliente real.
+   */
+  async previewSystemPrompt(
+    tenantId: string,
+    tenantName: string,
+    sampleQuery: string,
+  ): Promise<{ prompt: string; knowledgeUsed: number }> {
+    const profileLines = await this.businessProfile.describe(tenantId);
+    const knowledgeLines = await this.knowledge.describe(tenantId, sampleQuery);
+    const prompt = this.buildSystemPrompt(
+      {
+        tenantId,
+        tenantName,
+        contactId: 'preview',
+        contactName: 'Cliente de ejemplo',
+        contactPhone: '+00000000000',
+        conversationId: 'preview',
+      },
+      [],
+      profileLines,
+      knowledgeLines,
+    );
+    // La primera línea del bloque es el encabezado, el resto son fragmentos.
+    const knowledgeUsed = knowledgeLines.length > 0 ? knowledgeLines.length - 1 : 0;
+    return { prompt, knowledgeUsed };
+  }
+
+  /**
+   * Tokens de un prompt. Usa el endpoint de conteo de Anthropic cuando hay API
+   * key (no consume tokens de facturación, solo una llamada) y cae a una
+   * estimación local si no.
+   *
+   * `estimated: true` viaja hasta la interfaz para mostrarlo como aproximado:
+   * presentar una cuenta local como si fuera exacta sería engañar al dueño sobre
+   * lo que le va a costar cada mensaje.
+   */
+  async countPromptTokens(prompt: string): Promise<{ tokens: number; estimated: boolean }> {
+    if (this.client) {
+      try {
+        const result = await this.client.messages.countTokens({
+          model: this.model,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        return { tokens: result.input_tokens, estimated: false };
+      } catch (err) {
+        this.logger.warn(
+          `No se pudo contar tokens con la API, se estima localmente: ${(err as Error).message}`,
+        );
+      }
+    }
+    // ~4 caracteres por token es la regla gruesa habitual para español/inglés.
+    // Es una estimación, y como tal se etiqueta.
+    return { tokens: Math.ceil(prompt.length / 4), estimated: true };
   }
 
   /**

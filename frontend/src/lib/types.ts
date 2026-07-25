@@ -128,3 +128,40 @@ export interface MetricsOverview {
   automationRate: number;
   activity: ActivityPoint[];
 }
+
+export type KnowledgeDocumentStatus =
+  | 'EXTRACTING'
+  | 'PENDING_REVIEW'
+  | 'ACTIVE'
+  | 'FAILED';
+
+export type KnowledgeExtractionMethod = 'TEXT_LAYER' | 'VISION';
+
+export interface KnowledgeDocument {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: KnowledgeDocumentStatus;
+  extractionMethod: KnowledgeExtractionMethod | null;
+  pageCount: number | null;
+  charCount: number | null;
+  visionTokensUsed: number;
+  extractionError: string | null;
+  createdAt: string;
+}
+
+export interface KnowledgeUploadResult extends KnowledgeDocument {
+  preview: string;
+  previewTruncated: boolean;
+}
+
+export interface AiContextPreview {
+  prompt: string;
+  sampleQuery: string;
+  tokens: number;
+  /** true = estimación local (sin API key); se muestra como aproximado. */
+  tokensEstimated: boolean;
+  knowledgeChunksUsed: number;
+  documents: Array<{ filename: string; charCount: number }>;
+}

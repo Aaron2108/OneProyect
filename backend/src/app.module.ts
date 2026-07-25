@@ -19,6 +19,8 @@ import { QuickRepliesModule } from './quick-replies/quick-replies.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { BusinessProfileModule } from './business-profile/business-profile.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
+import { AiContextModule } from './ai-context/ai-context.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { BusinessProfileModule } from './business-profile/business-profile.modul
     WhatsappModule,
     GoogleCalendarModule,
     BusinessProfileModule,
+    KnowledgeModule,
+    AiContextModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -62,6 +62,23 @@ enum ConsentStatus {
   UNKNOWN
 }
 
+// Estado de un documento de conocimiento del negocio (ver KnowledgeDocument).
+// El dueño confirma el texto extraído (PENDING_REVIEW -> ACTIVE) antes de que la
+// IA lo use: así nunca responde con contenido que el negocio no revisó.
+enum KnowledgeDocumentStatus {
+  EXTRACTING // subido, extrayendo texto
+  PENDING_REVIEW // texto extraído, esperando confirmación del dueño
+  ACTIVE // confirmado: la IA lo usa para responder
+  FAILED // no se pudo extraer texto legible (ver extractionError)
+}
+
+// Cómo se obtuvo el texto del documento — se muestra en el panel porque cambia
+// la confianza en el resultado y, en el caso de VISION, tiene un costo en tokens.
+enum KnowledgeExtractionMethod {
+  TEXT_LAYER // texto nativo del archivo (gratis)
+  VISION // PDF escaneado transcrito por la visión de Claude (cuesta tokens)
+}
+
 // ---------------------------------------------------------------------------
 // Modelos
 // ---------------------------------------------------------------------------
@@ -84,6 +101,7 @@ model Tenant {
   googleCalendarSyncJobs    GoogleCalendarSyncJob[]
   aiContextMemories         AiContextMemory[]
   businessProfile           BusinessProfile?
+  knowledgeDocuments        KnowledgeDocument[]
 
   @@map("tenants")
 }
@@ -380,4 +398,61 @@ model AiContextMemory {
 
   @@index([tenantId, contactId])
   @@map("ai_context_memory")
+}
+
+// Documentos que el negocio sube para que la IA conozca su operación (PDF con
+// texto, PDF escaneado, Word, texto plano/Markdown). A diferencia de
+// AiContextMemory —que es memoria POR CONTACTO— este conocimiento es DEL TENANT:
+// aplica a cualquier conversación, así que necesita su propia tabla en vez de
+// reutilizar `ai_context_memory` (cuyo `contact_id` es obligatorio).
+//
+// Deliberadamente NO guarda el archivo original, solo el texto extraído: la IA
+// nunca necesita el binario y no almacenarlo reduce la superficie de datos en
+// reposo. El nombre se conserva para que el dueño reconozca qué subió.
+model KnowledgeDocument {
+  id               String                     @id @default(uuid())
+  tenantId         String                     @map("tenant_id")
+  filename         String
+  mimeType         String                     @map("mime_type")
+  sizeBytes        Int                        @map("size_bytes")
+  status           KnowledgeDocumentStatus    @default(EXTRACTING)
+  extractionMethod KnowledgeExtractionMethod? @map("extraction_method")
+  pageCount        Int?                       @map("page_count")
+  // Caracteres del texto extraído — el panel lo usa para estimar cuánto pesa
+  // este documento en el contexto de la IA.
+  charCount        Int?                       @map("char_count")
+  // Tokens gastados si hizo falta transcribir con visión (0 en TEXT_LAYER).
+  // Es un costo de una sola vez al subir, no por cada mensaje de WhatsApp.
+  visionTokensUsed Int                        @default(0) @map("vision_tokens_used")
+  // Motivo legible cuando status = FAILED (p. ej. PDF escaneado ilegible).
+  extractionError  String?                    @map("extraction_error")
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  chunks KnowledgeChunk[]
+
+  @@index([tenantId, status])
+  @@map("knowledge_documents")
+}
+
+// Fragmento de un documento con su embedding, para recuperar por similitud solo
+// lo relevante a la pregunta del cliente en vez de inyectar el documento entero
+// en cada mensaje (el system prompt se paga en CADA mensaje — ver
+// docs/DECISIONS.md). Mismo patrón que AiContextMemory: `embedding` es
+// `Unsupported` y se maneja con SQL crudo parametrizado; `content` va cifrado.
+model KnowledgeChunk {
+  id         String @id @default(uuid())
+  tenantId   String @map("tenant_id")
+  documentId String @map("document_id")
+  // Posición dentro del documento — permite mostrar los fragmentos en orden.
+  position   Int
+  content    String // fragmento cifrado (AES-256-GCM, ver common/pii-crypto.service.ts)
+  embedding  Unsupported("vector(512)")
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([documentId])
+  @@map("knowledge_chunks")
 }

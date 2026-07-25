@@ -17,6 +17,8 @@ const API_PREFIXES = [
   '/health',
   '/integrations',
   '/business-profile',
+  '/knowledge',
+  '/ai-context',
 ];
 
 export default defineConfig({

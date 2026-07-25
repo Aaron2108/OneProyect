@@ -71,6 +71,33 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
   return data as T;
 }
 
+/**
+ * Sube un archivo con `multipart/form-data`.
+ *
+ * No reusa `api()` porque ahí se fija `Content-Type: application/json`: en una
+ * subida el navegador tiene que poner él mismo el `Content-Type` con su
+ * `boundary`, y si se lo pisamos el backend no puede parsear el cuerpo.
+ */
+export async function uploadFile<T = unknown>(path: string, file: File): Promise<T> {
+  const token = getToken();
+  const body = new FormData();
+  body.append('file', file);
+
+  const res = await fetch(resolveUrl(path), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body,
+  });
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const raw = (data as { message?: string | string[] } | null)?.message;
+    const message = Array.isArray(raw) ? raw.join('. ') : raw || `Error ${res.status}`;
+    throw new ApiError(message, res.status);
+  }
+  return data as T;
+}
+
 /** Descarga un archivo (CSV) autenticado — un <a href> normal no llevaría el token. */
 export async function downloadFile(path: string, filename: string): Promise<void> {
   const token = getToken();

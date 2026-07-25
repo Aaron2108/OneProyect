@@ -3,6 +3,7 @@ import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
 import { AiService } from '../../src/ai/ai.service';
 import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { BusinessProfileService } from '../../src/business-profile/business-profile.service';
+import { KnowledgeRetrievalService } from '../../src/knowledge/knowledge-retrieval.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('AiService', () => {
@@ -19,16 +20,17 @@ describe('AiService', () => {
   const tools = {} as AiToolExecutorService;
   const noMemory = { recall: jest.fn().mockResolvedValue([]) } as unknown as AiContextMemoryService;
   const noProfile = { describe: jest.fn().mockResolvedValue([]) } as unknown as BusinessProfileService;
+  const noKnowledge = { describe: jest.fn().mockResolvedValue([]) } as unknown as KnowledgeRetrievalService;
 
   it('isEnabled es false sin API key', () => {
     const prisma = {} as PrismaService;
-    const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile);
+    const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile, noKnowledge);
     expect(service.isEnabled()).toBe(false);
   });
 
   it('isEnabled es true con API key', () => {
     const prisma = {} as PrismaService;
-    const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile);
+    const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge);
     expect(service.isEnabled()).toBe(true);
   });
 
@@ -37,7 +39,7 @@ describe('AiService', () => {
       const prisma = {
         message: { count: jest.fn().mockResolvedValue(5) },
       } as unknown as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile);
+      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile, noKnowledge);
       expect(await service.withinRateLimit('conv-1')).toBe(true);
     });
 
@@ -45,13 +47,13 @@ describe('AiService', () => {
       const prisma = {
         message: { count: jest.fn().mockResolvedValue(20) },
       } as unknown as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile);
+      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile, noKnowledge);
       expect(await service.withinRateLimit('conv-1')).toBe(false);
     });
 
     it('respond lanza si la IA está deshabilitada', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile);
+      const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile, noKnowledge);
       await expect(
         service.respond(
           {
@@ -71,7 +73,7 @@ describe('AiService', () => {
   it('devuelve un texto de cierre si el bucle de tools se agota sin texto (RF-NFR)', async () => {
     const prisma = {} as PrismaService;
     const toolsMock = { execute: jest.fn().mockResolvedValue('ok') } as unknown as AiToolExecutorService;
-    const service = new AiService(makeConfig('sk-ant-test'), prisma, toolsMock, noMemory, noProfile);
+    const service = new AiService(makeConfig('sk-ant-test'), prisma, toolsMock, noMemory, noProfile, noKnowledge);
     // El modelo siempre pide tool_use y nunca devuelve texto → agota el bucle.
     const create = jest.fn().mockResolvedValue({
       stop_reason: 'tool_use',
@@ -95,7 +97,7 @@ describe('AiService', () => {
       const contextMemory = {
         recall: jest.fn().mockResolvedValue(['El cliente preguntó por precios de envío.']),
       } as unknown as AiContextMemoryService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, contextMemory, noProfile);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, contextMemory, noProfile, noKnowledge);
       const create = jest.fn().mockResolvedValue({
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hola de nuevo' }],
@@ -114,7 +116,7 @@ describe('AiService', () => {
 
     it('summarize en modo real pide un resumen corto a Claude', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge);
       const create = jest.fn().mockResolvedValue({
         content: [{ type: 'text', text: 'El cliente agendó una cita para el jueves.' }],
       });
@@ -130,7 +132,7 @@ describe('AiService', () => {
     });
 
     it('summarize devuelve vacío sin historial', async () => {
-      const service = new AiService(makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile);
+      const service = new AiService(makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge);
       expect(await service.summarize([])).toBe('');
     });
   });
@@ -141,7 +143,7 @@ describe('AiService', () => {
       const profile = {
         describe: jest.fn().mockResolvedValue(['Horario de atención: lunes a viernes 9-18h.']),
       } as unknown as BusinessProfileService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge);
       const create = jest.fn().mockResolvedValue({
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hola' }],
@@ -160,7 +162,7 @@ describe('AiService', () => {
 
     it('sin perfil configurado, no añade nada extra al prompt', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge);
       const create = jest.fn().mockResolvedValue({
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hola' }],
@@ -192,7 +194,7 @@ describe('AiService', () => {
       const profile = {
         describe: jest.fn().mockResolvedValue(['Tono/estilo con el que debes responder: Cercano.']),
       } as unknown as BusinessProfileService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge);
       const create = jest.fn().mockResolvedValue({
         content: [{ type: 'text', text: 'Hola Ana, ¿seguís por ahí?' }],
       });
@@ -213,6 +215,7 @@ describe('AiService', () => {
         tools,
         noMemory,
         noProfile,
+        noKnowledge,
       );
       (service as unknown as { provider: string }).provider = 'mock';
 

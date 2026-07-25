@@ -27,6 +27,15 @@ export class BusinessProfileService {
     return this.toDto(profile);
   }
 
+  /** Nombre de la empresa — lo necesita el system prompt de la IA. */
+  async tenantName(tenantId: string): Promise<string> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+    return tenant?.name ?? '';
+  }
+
   /** Reemplaza el perfil completo del tenant (PUT: lo que no se envía queda vacío). Solo OWNER. */
   async upsert(tenantId: string, dto: UpdateBusinessProfileDto): Promise<BusinessProfileDto> {
     const data = {
