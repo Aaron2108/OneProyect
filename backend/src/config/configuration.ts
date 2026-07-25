@@ -29,6 +29,14 @@ export interface AppConfig {
     apiKey: string;
     model: string;
     maxCallsPerConversationPerHour: number;
+    // Proveedor alternativo compatible con la API de OpenAI, solo para probar el
+    // agente sin créditos de Anthropic (`AI_PROVIDER=nvidia`). Temporal: el
+    // agente de producción es Claude.
+    nvidia: {
+      apiKey: string;
+      model: string;
+      baseUrl: string;
+    };
   };
   embeddings: {
     // 'voyage' (real, recomendado por Anthropic) | 'mock' (pruebas locales)
@@ -79,7 +87,7 @@ export default (): AppConfig => ({
     graphApiVersion: process.env.WHATSAPP_GRAPH_API_VERSION ?? 'v21.0',
   },
   ai: {
-    // 'anthropic' (real) | 'mock' (pruebas locales sin gastar créditos)
+    // 'anthropic' (real) | 'nvidia' (real, gratuito, solo pruebas) | 'mock'
     provider: process.env.AI_PROVIDER ?? 'anthropic',
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
     // Modelo más económico de Anthropic por defecto (pruebas). Ver DECISIONS.md.
@@ -88,6 +96,13 @@ export default (): AppConfig => ({
       process.env.AI_MAX_CALLS_PER_CONVERSATION_PER_HOUR ?? '20',
       10,
     ),
+    nvidia: {
+      apiKey: process.env.NVIDIA_API_KEY ?? '',
+      // Verificado con tool-calling y respuestas en español; no todos los modelos
+      // del catálogo de NVIDIA están aprovisionados ni soportan herramientas.
+      model: process.env.NVIDIA_MODEL ?? 'nvidia/nvidia-nemotron-nano-9b-v2',
+      baseUrl: process.env.NVIDIA_BASE_URL ?? 'https://integrate.api.nvidia.com/v1',
+    },
   },
   embeddings: {
     provider: process.env.EMBEDDINGS_PROVIDER ?? 'mock',

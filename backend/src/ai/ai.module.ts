@@ -6,6 +6,7 @@ import { AiContextMemoryService } from './ai-context-memory.service';
 import { AiToolExecutorService } from './ai-tool-executor.service';
 import { AiService } from './ai.service';
 import { EmbeddingsModule } from './embeddings.module';
+import { NvidiaChatService } from './nvidia-chat.service';
 
 @Module({
   // AppointmentsModule: para que create_appointment (tool-calling) pase por
@@ -16,7 +17,7 @@ import { EmbeddingsModule } from './embeddings.module';
   // KnowledgeModule: para recuperar los fragmentos de la documentación del
   // negocio relevantes al mensaje del cliente e inyectarlos en el system prompt.
   imports: [BusinessProfileModule, AppointmentsModule, EmbeddingsModule, KnowledgeModule],
-  providers: [AiService, AiToolExecutorService, AiContextMemoryService],
+  providers: [AiService, AiToolExecutorService, AiContextMemoryService, NvidiaChatService],
   exports: [AiService, AiContextMemoryService],
 })
 export class AiModule {}

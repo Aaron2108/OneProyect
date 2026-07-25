@@ -8,6 +8,7 @@ import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.serv
 import { AiContextMemoryService } from './ai-context-memory.service';
 import { AI_TOOLS, AiToolExecutorService } from './ai-tool-executor.service';
 import { MAX_OUTPUT_TOKENS, MAX_SUMMARY_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
+import { NvidiaChatService } from './nvidia-chat.service';
 import { AgentReply, ConversationContext, HistoryTurn } from './ai.types';
 
 @Injectable()
@@ -25,6 +26,7 @@ export class AiService {
     private readonly contextMemory: AiContextMemoryService,
     private readonly businessProfile: BusinessProfileService,
     private readonly knowledge: KnowledgeRetrievalService,
+    private readonly nvidia: NvidiaChatService,
   ) {
     const apiKey = this.config.get<string>('ai.apiKey') ?? '';
     this.provider = this.config.get<string>('ai.provider') ?? 'anthropic';
@@ -35,9 +37,11 @@ export class AiService {
     this.client = apiKey ? new Anthropic({ apiKey }) : null;
   }
 
-  /** La IA opera si es modo mock, o si hay API key configurada. */
+  /** La IA opera si es modo mock, o si el proveedor activo tiene credenciales. */
   isEnabled(): boolean {
-    return this.provider === 'mock' || this.client !== null;
+    if (this.provider === 'mock') return true;
+    if (this.provider === 'nvidia') return this.nvidia.isEnabled();
+    return this.client !== null;
   }
 
   /**
@@ -76,6 +80,39 @@ export class AiService {
     if (this.provider === 'mock') {
       return this.mockRespond(ctx, history);
     }
+
+    const system = this.buildSystemPrompt(ctx, recalled, profileLines, knowledgeLines);
+    // El proveedor de pruebas recibe el MISMO system prompt y las MISMAS
+    // herramientas; solo cambia el transporte (ver NvidiaChatService).
+    const reply =
+      this.provider === 'nvidia'
+        ? await this.nvidia.respond(system, history, (name, input) =>
+            this.tools.execute(name, input, ctx),
+          )
+        : await this.anthropicRespond(system, history, ctx);
+
+    // Si el bucle se agota (o el modelo no devuelve texto), el cliente igual
+    // recibe una respuesta de cierre. Al garantizar texto no vacío, el mensaje
+    // se persiste y la guarda de costo cuenta esta llamada (corrige que una
+    // respuesta vacía se pagara sin contar).
+    if (!reply.text) {
+      return {
+        text:
+          reply.actions.length > 0
+            ? 'Listo, ya lo registré. ¿Necesitas algo más?'
+            : '¿Podrías darme un poco más de detalle para ayudarte mejor?',
+        actions: reply.actions,
+      };
+    }
+    return reply;
+  }
+
+  /** Bucle de tool-calling contra la API de Anthropic (proveedor de producción). */
+  private async anthropicRespond(
+    system: string,
+    history: HistoryTurn[],
+    ctx: ConversationContext,
+  ): Promise<AgentReply> {
     if (!this.client) {
       throw new Error('IA deshabilitada: falta ANTHROPIC_API_KEY');
     }
@@ -92,7 +129,7 @@ export class AiService {
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: this.buildSystemPrompt(ctx, recalled, profileLines, knowledgeLines),
+        system,
         tools: AI_TOOLS,
         messages,
       });
@@ -127,17 +164,6 @@ export class AiService {
         }
       }
       messages.push({ role: 'user', content: toolResults });
-    }
-
-    // Si el bucle se agota (o el modelo no devuelve texto), el cliente igual
-    // recibe una respuesta de cierre. Al garantizar texto no vacío, el mensaje
-    // se persiste y la guarda de costo cuenta esta llamada (corrige que una
-    // respuesta vacía se pagara sin contar).
-    if (!replyText) {
-      replyText =
-        actions.length > 0
-          ? 'Listo, ya lo registré. ¿Necesitas algo más?'
-          : '¿Podrías darme un poco más de detalle para ayudarte mejor?';
     }
 
     return { text: replyText, actions };

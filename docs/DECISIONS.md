@@ -226,3 +226,18 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 
 **Decisión**: `EmbeddingsService` se extrae a `EmbeddingsModule`, y el endpoint que compone el contexto de la IA vive en un `AiContextModule` propio (`GET /ai-context`).
 **Motivo**: `AiModule` necesita el recall del conocimiento y `KnowledgeModule` necesita los embeddings; dejar `EmbeddingsService` dentro de `AiModule` habría forzado `Knowledge → Ai → Knowledge`. El endpoint de contexto compone perfil + conocimiento + motor de IA, así que ponerlo en cualquiera de esos módulos también cerraba un ciclo: su módulo no lo importa nadie.
+
+## 2026-07-25 — Proveedor de IA de pruebas compatible con OpenAI (NVIDIA NIM)
+
+**Decisión**: se añade `AI_PROVIDER=nvidia`, que enruta las respuestas del agente a NVIDIA NIM (API compatible con OpenAI) en vez de a Anthropic. Vive en `NvidiaChatService`, aparte del camino de producción.
+
+**Es temporal y su alcance es el testeo**: permite ejercitar el agente **real** —incluido el tool-calling contra la BD— mientras no hay API key de Anthropic. El agente de producción sigue siendo Claude; el modo `mock` sigue existiendo para pruebas sin red.
+
+**Por qué un servicio aparte y no un `if` dentro de `AiService`**: los formatos difieren (herramientas bajo `function.parameters` en vez de `input_schema`; resultados como mensajes `role: 'tool'` en vez de bloques `tool_result`). Aislarlo deja el camino de Claude intacto y hace que borrar el proveedor sea quitar un archivo y una rama del `if`.
+
+**Lo que NO se duplica**: el system prompt, la lista de herramientas (`AI_TOOLS`, definida una sola vez y traducida al vuelo), la inyección del contexto de confianza por el ejecutor y el respaldo de texto vacío son los mismos para los dos proveedores. Cambiar de proveedor para probar no cambia lo que la IA sabe ni lo que puede hacer.
+
+**Guardas propias**: límite de espera con `AbortController` (sus modelos arrancan en frío y pueden tardar minutos; sin esto el worker de WhatsApp se quedaría colgado), descarte del razonamiento `<think>` para que nunca llegue al cliente, y argumentos de herramienta ilegibles se le devuelven al modelo como error en vez de ejecutar nada contra la BD.
+
+**Embeddings siguen en `mock`**: los modelos de embedding de NVIDIA devuelven 1024 o 2048 dimensiones y las columnas `vector(512)` (`ai_context_memory`, `knowledge_chunks`) están fijadas a la dimensión de `voyage-3-lite`. Aprovecharlos exigiría una migración de ambas columnas, que no se justifica por una credencial de prueba.
+

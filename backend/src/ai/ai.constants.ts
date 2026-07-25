@@ -11,3 +11,10 @@ export const MAX_OUTPUT_TOKENS = 1024;
 
 /** Tokens máximos al resumir una conversación cerrada (Fase 4, memoria de contexto). */
 export const MAX_SUMMARY_TOKENS = 200;
+
+/**
+ * Límite de espera del proveedor de pruebas NVIDIA. Sus modelos pueden tardar en
+ * arrancar en frío, pero el worker de WhatsApp no puede quedarse colgado: si se
+ * agota, el mensaje se reintenta por la cola en vez de bloquear.
+ */
+export const NVIDIA_REQUEST_TIMEOUT_MS = 60_000;
