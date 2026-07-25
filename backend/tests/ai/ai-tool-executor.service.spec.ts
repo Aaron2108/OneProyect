@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { AppointmentsService } from '../../src/appointments/appointments.service';
+import { ProductsService } from '../../src/products/products.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationContext } from '../../src/ai/ai.types';
 import { makeTestPiiCrypto } from '../helpers/pii-crypto.stub';
@@ -12,6 +13,7 @@ describe('AiToolExecutorService', () => {
     contact: { update: jest.Mock };
   };
   let appointments: { create: jest.Mock };
+  let products: { searchForAi: jest.Mock };
 
   const ctx: ConversationContext = {
     tenantId: 'tenant-1',
@@ -28,10 +30,12 @@ describe('AiToolExecutorService', () => {
       contact: { update: jest.fn().mockResolvedValue({}) },
     };
     appointments = { create: jest.fn().mockResolvedValue({ id: 'appt-1' }) };
+    products = { searchForAi: jest.fn().mockResolvedValue([]) };
     executor = new AiToolExecutorService(
       prisma as unknown as PrismaService,
       makeTestPiiCrypto(),
       appointments as unknown as AppointmentsService,
+      products as unknown as ProductsService,
       // Zona fija: si dependiera de la del servidor, el test pasaría o fallaría
       // según la máquina que lo corra.
       { get: () => 'America/Lima' } as unknown as ConfigService,
@@ -149,6 +153,74 @@ describe('AiToolExecutorService', () => {
     expect(arg.where).toEqual({ id: 'contact-1' });
     expect(arg.data.notes).not.toBe('Alérgico al polen');
     expect(arg.data.notes).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
+  });
+
+  describe('consultar_producto', () => {
+    it('consulta el catálogo del tenant del contexto, no del que diga el modelo', async () => {
+      products.searchForAi.mockResolvedValue([
+        { name: 'Remera azul', sku: 'A-1', priceCents: 1990, currency: 'PEN', stock: 4 },
+      ]);
+
+      const result = await executor.execute(
+        'consultar_producto',
+        { consulta: 'remera', tenantId: 'HACK' },
+        ctx,
+      );
+
+      expect(products.searchForAi).toHaveBeenCalledWith('tenant-1', 'remera', expect.any(Number));
+      expect(result).toContain('Remera azul');
+      expect(result).toContain('19.90 PEN');
+      expect(result).toContain('4 disponibles');
+    });
+
+    it('marca claramente lo que no tiene existencias', async () => {
+      products.searchForAi.mockResolvedValue([
+        { name: 'Gorra', sku: null, priceCents: 2500, currency: null, stock: 0 },
+      ]);
+      const result = await executor.execute('consultar_producto', { consulta: 'gorra' }, ctx);
+      expect(result).toContain('SIN STOCK');
+    });
+
+    it('sin moneda configurada le prohíbe al modelo inventarse una', async () => {
+      // Caso real: el negocio no declaró moneda y el agente dijo "COP".
+      products.searchForAi.mockResolvedValue([
+        { name: 'Remera', sku: null, priceCents: 1990, currency: null, stock: 2 },
+      ]);
+      const result = await executor.execute('consultar_producto', { consulta: 'remera' }, ctx);
+      expect(result).toContain('19.90');
+      expect(result).toMatch(/no configuró la moneda/i);
+    });
+
+    it('sin precio no inventa uno', async () => {
+      products.searchForAi.mockResolvedValue([
+        { name: 'Servicio', sku: null, priceCents: null, currency: null, stock: 1 },
+      ]);
+      const result = await executor.execute('consultar_producto', { consulta: 'servicio' }, ctx);
+      expect(result).toContain('precio no indicado');
+    });
+
+    it('si no encuentra nada, pide confirmar con el equipo en vez de negarlo', async () => {
+      // "No lo encontré" y "no lo vendemos" no son lo mismo: el producto puede
+      // estar guardado con otro nombre.
+      products.searchForAi.mockResolvedValue([]);
+      const result = await executor.execute('consultar_producto', { consulta: 'zapatos' }, ctx);
+      expect(result).toContain('zapatos');
+      expect(result).toMatch(/confirmar|equipo/i);
+    });
+
+    it('no escribe nada en la base de datos: es solo de lectura', async () => {
+      products.searchForAi.mockResolvedValue([]);
+      await executor.execute('consultar_producto', { consulta: 'algo' }, ctx);
+      expect(appointments.create).not.toHaveBeenCalled();
+      expect(prisma.reminder.create).not.toHaveBeenCalled();
+      expect(prisma.contact.update).not.toHaveBeenCalled();
+    });
+
+    it('sin consulta no busca', async () => {
+      const result = await executor.execute('consultar_producto', { consulta: '  ' }, ctx);
+      expect(products.searchForAi).not.toHaveBeenCalled();
+      expect(result).toContain('Falta indicar');
+    });
   });
 
   it('devuelve mensaje para herramienta desconocida', async () => {

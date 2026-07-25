@@ -373,6 +373,41 @@ describe('AiService', () => {
       expect(reply.text).toContain('Cita creada para el lunes.');
     });
 
+    it('en el chat de prueba, consultar el catálogo SÍ se ejecuta (es solo lectura)', async () => {
+      // Simularlo devolvería productos inventados y el dueño no podría
+      // comprobar si su agente responde bien sobre el stock.
+      const toolsMock = {
+        execute: jest.fn().mockResolvedValue('Resultado del catálogo: Remera, 4 disponibles.'),
+        describeWithoutExecuting: jest.fn(),
+      } as unknown as AiToolExecutorService;
+      const nvidia = {
+        isEnabled: () => true,
+        respond: jest.fn().mockImplementation(
+          async (
+            _system: string,
+            _history: unknown,
+            run: (n: string, i: unknown) => Promise<string>,
+          ) => {
+            const resultado = await run('consultar_producto', { consulta: 'remera' });
+            return { text: resultado, actions: ['consultar_producto'] };
+          },
+        ),
+      } as unknown as NvidiaChatService;
+      const service = new AiService(
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia,
+      );
+
+      const reply = await service.respond(
+        ctx, [{ role: 'user', text: '¿tienen remeras?' }], { simulateTools: true },
+      );
+
+      expect(toolsMock.execute).toHaveBeenCalledWith('consultar_producto', { consulta: 'remera' }, ctx);
+      expect(toolsMock.describeWithoutExecuting).not.toHaveBeenCalled();
+      expect(reply.text).toContain('4 disponibles');
+      // No es una acción simulada: se ejecutó de verdad y no modificó nada.
+      expect(reply.simulatedTools).toEqual([]);
+    });
+
     it('sin la opción sí ejecuta de verdad y no devuelve simulatedTools', async () => {
       const toolsMock = {
         execute: jest.fn().mockResolvedValue('Cita creada para el lunes.'),

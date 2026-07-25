@@ -282,3 +282,19 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **La columna pasa a aceptar NULL**: hacía falta para migrar sin borrar el texto, y de paso elimina un apaño — el texto pendiente de revisión se guardaba con un vector de ceros solo para satisfacer `NOT NULL`. Las consultas filtran `embedding IS NOT NULL`: un fragmento sin vector no tiene distancia que ordenar y devolverlo sería dar contexto elegido al azar.
 
 **Se restablece el índice HNSW de `ai_context_memory`**, que la migración `business_profile` había borrado sin recrear (Prisma no conoce los índices de pgvector, creados con SQL crudo). Desde entonces esas búsquedas hacían escaneo secuencial.
+
+## 2026-07-25 — Catálogo de productos con stock (tabla propia + tool-calling)
+
+**Decisión**: el stock vive en una tabla `products` y la IA lo consulta con la herramienta `consultar_producto` (tool-calling contra la BD en vivo). **No** se resuelve subiendo un PDF o un CSV al conocimiento del negocio.
+
+**Motivo**: un archivo es una foto de un momento. Inyectado en el prompt, el agente seguiría prometiendo existencias vendidas hace semanas — y en una tienda eso es una venta perdida y un cliente enfadado. El proyecto ya resuelve bien este patrón con las citas: la IA no "sabe" la agenda, la consulta.
+
+**Solo lectura**: la herramienta informa disponibilidad; nunca reserva ni descuenta. Descontar desde una conversación exigiría bloqueos y una noción de pedido que no existe, y sin eso dos clientes podrían llevarse la misma última unidad.
+
+**Precios en céntimos y como entero**: en dinero, el punto flotante arrastra errores de redondeo. La moneda es opcional y no se inventa — y cuando falta, el resultado de la herramienta se lo dice explícitamente al modelo: en una prueba real, con la moneda vacía, el agente respondió "19.90 COP" a un negocio que nunca declaró pesos colombianos.
+
+**La búsqueda parte la consulta en palabras y recorta el plural**: un cliente pregunta "¿tienen pantalones negros?" y el producto se llama "Pantalon negro". Buscando la frase entera, el agente respondía "no lo encontramos" sobre un producto que sí estaba en el catálogo. Limitación conocida: no ignora tildes; resolverlo bien pide `unaccent`/`pg_trgm`.
+
+**Importación CSV que actualiza por SKU**: volver a subir el archivo del negocio con el stock nuevo es el caso normal, no la excepción — si duplicara, el catálogo se llenaría de copias. Detecta el separador `;` porque es lo que exporta Excel en español, y las filas con error no detienen la importación: se informan con el número de fila tal como se ve en Excel.
+
+**No se distingue "no lo encontré" de "no lo vendemos"**: cuando no hay coincidencias, la herramienta le pide al modelo que ofrezca confirmarlo con el equipo, en vez de afirmar que el negocio no lo vende.

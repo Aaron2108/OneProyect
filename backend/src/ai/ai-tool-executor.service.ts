@@ -5,7 +5,10 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { formatBusinessDateTime, resolveTimeZone } from './ai-datetime.util';
+import { ProductsService } from '../products/products.service';
 import {
+  PRODUCT_SEARCH_LIMIT,
+  TOOL_CHECK_PRODUCT,
   TOOL_CREATE_APPOINTMENT,
   TOOL_CREATE_REMINDER,
   TOOL_UPDATE_CONTACT,
@@ -55,6 +58,22 @@ export const AI_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: TOOL_CHECK_PRODUCT,
+    description:
+      'Consulta el catálogo del negocio para saber si un producto existe, a qué precio y cuánto stock queda. Úsala SIEMPRE que el cliente pregunte por disponibilidad, precio o existencias: nunca respondas de memoria, porque el stock cambia.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        consulta: {
+          type: 'string',
+          description:
+            'Lo que busca el cliente: nombre del producto o código. Ej. "remera azul", "SKU-123".',
+        },
+      },
+      required: ['consulta'],
+    },
+  },
+  {
     name: TOOL_UPDATE_CONTACT,
     description:
       'Actualiza los datos del contacto actual (nombre o notas). Úsala cuando el cliente proporcione o corrija su información.',
@@ -78,6 +97,7 @@ export class AiToolExecutorService {
     private readonly prisma: PrismaService,
     private readonly pii: PiiCryptoService,
     private readonly appointments: AppointmentsService,
+    private readonly products: ProductsService,
     config: ConfigService,
   ) {
     this.timeZone = resolveTimeZone(config.get<string>('business.timeZone'));
@@ -101,6 +121,8 @@ export class AiToolExecutorService {
           return await this.createReminder(input, ctx);
         case TOOL_UPDATE_CONTACT:
           return await this.updateContact(input, ctx);
+        case TOOL_CHECK_PRODUCT:
+          return await this.checkProduct(input, ctx);
         default:
           return `Herramienta desconocida: ${toolName}`;
       }
@@ -136,6 +158,47 @@ export class AiToolExecutorService {
       default:
         return `Herramienta desconocida: ${toolName}`;
     }
+  }
+
+  /**
+   * Consulta el catálogo en vivo. Es de SOLO LECTURA a propósito: la IA informa
+   * disponibilidad, nunca reserva ni descuenta stock. Descontar desde una
+   * conversación exigiría bloqueos y una noción de pedido que no existe todavía,
+   * y sin eso dos clientes podrían llevarse la misma última unidad.
+   */
+  private async checkProduct(
+    input: Record<string, unknown>,
+    ctx: ConversationContext,
+  ): Promise<string> {
+    const consulta = typeof input.consulta === 'string' ? input.consulta : '';
+    if (!consulta.trim()) return 'Falta indicar qué producto buscar.';
+
+    const encontrados = await this.products.searchForAi(
+      ctx.tenantId,
+      consulta,
+      PRODUCT_SEARCH_LIMIT,
+    );
+    if (encontrados.length === 0) {
+      // Importa distinguir "no lo tenemos" de "no lo encontré": el modelo debe
+      // ofrecer confirmar con una persona, no afirmar que no existe.
+      return `No hay ningún producto que coincida con "${consulta}" en el catálogo. Puede que no lo vendamos o que esté guardado con otro nombre: ofrécele confirmarlo con el equipo.`;
+    }
+
+    const lineas = encontrados.map((p) => {
+      let precio: string;
+      if (p.priceCents == null) {
+        precio = 'precio no indicado';
+      } else if (p.currency) {
+        precio = `${(p.priceCents / 100).toFixed(2)} ${p.currency}`;
+      } else {
+        // Sin esta advertencia el modelo se inventa la moneda: en una prueba
+        // real dijo "COP" para un negocio que nunca declaró ninguna.
+        precio = `${(p.priceCents / 100).toFixed(2)} (el negocio no configuró la moneda: di solo la cifra, sin símbolo ni nombre de moneda)`;
+      }
+      const stock = p.stock > 0 ? `${p.stock} disponibles` : 'SIN STOCK';
+      return `- ${p.name}${p.sku ? ` (${p.sku})` : ''}: ${precio}, ${stock}.`;
+    });
+    return `Resultado del catálogo para "${consulta}":\n${lineas.join('\n')}`;
   }
 
   private async createAppointment(

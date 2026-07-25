@@ -7,7 +7,12 @@ import { BusinessProfileService } from '../business-profile/business-profile.ser
 import { KnowledgeRetrievalService } from '../knowledge/knowledge-retrieval.service';
 import { AiContextMemoryService } from './ai-context-memory.service';
 import { AI_TOOLS, AiToolExecutorService } from './ai-tool-executor.service';
-import { MAX_OUTPUT_TOKENS, MAX_SUMMARY_TOKENS, MAX_TOOL_ITERATIONS } from './ai.constants';
+import {
+  MAX_OUTPUT_TOKENS,
+  MAX_SUMMARY_TOKENS,
+  MAX_TOOL_ITERATIONS,
+  READ_ONLY_TOOLS,
+} from './ai.constants';
 import { describeNow, resolveTimeZone } from './ai-datetime.util';
 import { NvidiaChatService } from './nvidia-chat.service';
 import { AgentReply, ConversationContext, HistoryTurn, ToolIntent } from './ai.types';
@@ -95,6 +100,9 @@ export class AiService {
     const simulated: ToolIntent[] = [];
     const runTool = options.simulateTools
       ? async (name: string, input: Record<string, unknown>): Promise<string> => {
+          // Las de solo lectura se ejecutan igual: simular una consulta al
+          // catálogo devolvería productos inventados (ver READ_ONLY_TOOLS).
+          if (READ_ONLY_TOOLS.has(name)) return this.tools.execute(name, input, ctx);
           simulated.push({ name, input });
           return this.tools.describeWithoutExecuting(name, input);
         }
