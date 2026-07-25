@@ -267,3 +267,18 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 
 **Contacto ficticio y solo OWNER**: el `contactId` es una constante que no existe en la BD, así que la memoria de contexto no devuelve recuerdos de un cliente real. Lleva un límite propio de 15/min: cada mensaje es una llamada pagada al modelo y el límite global de 100/min sería demasiado caro.
 
+## 2026-07-25 — Búsqueda semántica real: embeddings de 1024 dimensiones
+
+**Decisión**: las columnas `knowledge_chunks.embedding` y `ai_context_memory.embedding` pasan de `vector(512)` a `vector(1024)`, y se añade el proveedor `nvidia` a `EmbeddingsService`.
+
+**Motivo, medido**: hasta aquí el único proveedor en uso era el simulado, que suma códigos de carácter y **no representa significado**. Con tres fragmentos reales (cancelaciones, horarios, servicios) y la pregunta *"me surgió un imprevisto y aviso sobre la hora, ¿me cobran algo?"*, el simulado puso el fragmento de cancelaciones **último**, con puntajes de 0.874/0.872/0.820 —indistinguibles entre sí, es ruido—; el proveedor real lo puso **primero** con 0.443 frente a 0.310. La función existía y parecía funcionar porque con un solo documento siempre se devuelve el único fragmento.
+
+**Por qué 1024 y no otra**: es la dimensión de `nv-embedqa-e5-v5` (el proveedor gratuito que se usa mientras no hay créditos) **y** de `voyage-3` (el destino de producción). Migrar a 512 (`voyage-3-lite`) o a 2048 habría obligado a una segunda migración al cambiar de proveedor.
+
+**`query` y `passage` son obligatorios**: los modelos de recuperación son asimétricos —codifican distinto la pregunta y el texto donde se busca— y equivocarse degrada el ranking sin dar ningún error. Por eso `embed()` exige el tipo en vez de asumir uno por defecto.
+
+**Se re-vectoriza, no se vuelve a fragmentar** (`npm run embeddings:reindex`): al activar un documento se borran todos sus fragmentos, incluido el de posición -1 que guardaba el texto completo, y los fragmentos que quedan se solapan. Reconstruir el texto desde ellos para volver a partirlo duplicaría contenido. Cada fila conserva su texto, así que se le recalcula el vector en su sitio.
+
+**La columna pasa a aceptar NULL**: hacía falta para migrar sin borrar el texto, y de paso elimina un apaño — el texto pendiente de revisión se guardaba con un vector de ceros solo para satisfacer `NOT NULL`. Las consultas filtran `embedding IS NOT NULL`: un fragmento sin vector no tiene distancia que ordenar y devolverlo sería dar contexto elegido al azar.
+
+**Se restablece el índice HNSW de `ai_context_memory`**, que la migración `business_profile` había borrado sin recrear (Prisma no conoce los índices de pgvector, creados con SQL crudo). Desde entonces esas búsquedas hacían escaneo secuencial.

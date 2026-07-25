@@ -29,7 +29,7 @@ export interface RecalledChunk {
  * en estado ACTIVE (revisados por el dueño). Nunca cruza tenants, mismo
  * principio transversal que el resto del producto.
  *
- * `embedding` es `Unsupported("vector(512)")` en el esquema, así que esta clase
+ * `embedding` es `Unsupported("vector(1024)")` en el esquema, así que esta clase
  * es la única que la toca, siempre con SQL parametrizado ($queryRaw) — nunca
  * interpolando strings.
  */
@@ -60,7 +60,7 @@ export class KnowledgeRetrievalService {
   ): Promise<RecalledChunk[]> {
     if (!this.isEnabled() || !queryText.trim()) return [];
     try {
-      const embedding = await this.embeddings.embed(queryText);
+      const embedding = await this.embeddings.embed(queryText, 'query');
       const literal = toVectorLiteral(embedding);
       const rows = await this.prisma.$queryRaw<ChunkRow[]>`
         SELECT c.content, d.filename
@@ -68,6 +68,9 @@ export class KnowledgeRetrievalService {
         JOIN knowledge_documents d ON d.id = c.document_id
         WHERE c.tenant_id = ${tenantId}
           AND d.status = ${KnowledgeDocumentStatus.ACTIVE}::"KnowledgeDocumentStatus"
+          -- Sin vector no hay distancia que ordenar: son fragmentos pendientes
+          -- de reindexar, y devolverlos daría contexto elegido al azar.
+          AND c.embedding IS NOT NULL
         ORDER BY c.embedding <=> ${literal}::vector
         LIMIT ${topK}
       `;

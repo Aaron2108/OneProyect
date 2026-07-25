@@ -187,7 +187,7 @@ export class KnowledgeService {
     await this.prisma.knowledgeChunk.deleteMany({ where: { documentId } });
 
     for (const [position, piece] of pieces.entries()) {
-      const embedding = await this.embeddings.embed(piece);
+      const embedding = await this.embeddings.embed(piece, 'passage');
       await this.insertChunk(tenantId, documentId, position, piece, embedding);
     }
 
@@ -246,16 +246,15 @@ export class KnowledgeService {
 
   /**
    * Guarda el texto completo sin indexar (posición -1) mientras el documento
-   * espera revisión. Necesita un embedding porque la columna es NOT NULL: se usa
-   * un vector nulo, que nunca se consulta porque el recall filtra por ACTIVE.
+   * espera revisión. Va sin vector: no se busca hasta que el dueño lo active, y
+   * un vector de ceros sería un dato falso ocupando el índice.
    */
   private async storePendingText(
     tenantId: string,
     documentId: string,
     text: string,
   ): Promise<void> {
-    const zeroVector = new Array(EMBEDDING_DIMENSIONS).fill(0);
-    await this.insertChunk(tenantId, documentId, -1, text, zeroVector);
+    await this.insertChunk(tenantId, documentId, -1, text, null);
   }
 
   private async insertChunk(
@@ -263,13 +262,14 @@ export class KnowledgeService {
     documentId: string,
     position: number,
     content: string,
-    embedding: number[],
+    embedding: number[] | null,
   ): Promise<void> {
     const id = randomUUID();
     const encrypted = this.pii.encrypt(content);
+    const vector = embedding ? toVectorLiteral(embedding) : null;
     await this.prisma.$executeRaw`
       INSERT INTO knowledge_chunks (id, tenant_id, document_id, position, content, embedding)
-      VALUES (${id}, ${tenantId}, ${documentId}, ${position}, ${encrypted}, ${toVectorLiteral(embedding)}::vector)
+      VALUES (${id}, ${tenantId}, ${documentId}, ${position}, ${encrypted}, ${vector}::vector)
     `;
   }
 

@@ -39,10 +39,12 @@ export interface AppConfig {
     };
   };
   embeddings: {
-    // 'voyage' (real, recomendado por Anthropic) | 'mock' (pruebas locales)
+    // 'voyage' (destino de producción) | 'nvidia' (real, gratuito) | 'mock' (tests)
     provider: string;
     apiKey: string;
     model: string;
+    // Solo para proveedores compatibles con OpenAI (nvidia).
+    baseUrl: string;
   };
   google: {
     clientId: string;
@@ -111,8 +113,12 @@ export default (): AppConfig => ({
   },
   embeddings: {
     provider: process.env.EMBEDDINGS_PROVIDER ?? 'mock',
-    apiKey: process.env.VOYAGE_API_KEY ?? '',
-    model: process.env.VOYAGE_EMBEDDING_MODEL ?? 'voyage-3-lite',
+    // Una sola variable para la credencial: cuál se usa depende del proveedor
+    // activo, y así no hay dos claves compitiendo por el mismo campo.
+    apiKey: process.env.EMBEDDINGS_API_KEY ?? process.env.VOYAGE_API_KEY ?? '',
+    // Vacío = el modelo por defecto de cada proveedor (ver EmbeddingsService).
+    model: process.env.EMBEDDINGS_MODEL ?? '',
+    baseUrl: process.env.EMBEDDINGS_BASE_URL ?? 'https://integrate.api.nvidia.com/v1',
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',

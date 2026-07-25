@@ -18,7 +18,7 @@ interface MemoryRow {
  * `contactId` concretos (nunca cruza tenants ni contactos, mismo principio de
  * seguridad transversal que el resto del producto).
  *
- * La columna `embedding` es `Unsupported("vector(512)")` en el esquema de
+ * La columna `embedding` es `Unsupported("vector(1024)")` en el esquema de
  * Prisma (no representable en el Client), así que esta clase es la única que
  * la toca, siempre con SQL parametrizado ($executeRaw/$queryRaw — nunca
  * interpolación de strings).
@@ -47,7 +47,7 @@ export class AiContextMemoryService {
   ): Promise<void> {
     if (!this.isEnabled() || !text.trim()) return;
     try {
-      const embedding = await this.embeddings.embed(text);
+      const embedding = await this.embeddings.embed(text, 'passage');
       const id = randomUUID();
       const encrypted = this.pii.encrypt(text);
       await this.prisma.$executeRaw`
@@ -68,11 +68,12 @@ export class AiContextMemoryService {
   ): Promise<string[]> {
     if (!this.isEnabled() || !queryText.trim()) return [];
     try {
-      const embedding = await this.embeddings.embed(queryText);
+      const embedding = await this.embeddings.embed(queryText, 'query');
       const literal = toVectorLiteral(embedding);
       const rows = await this.prisma.$queryRaw<MemoryRow[]>`
         SELECT content FROM ai_context_memory
         WHERE tenant_id = ${tenantId} AND contact_id = ${contactId}
+          AND embedding IS NOT NULL
         ORDER BY embedding <=> ${literal}::vector
         LIMIT ${topK}
       `;

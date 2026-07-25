@@ -390,7 +390,9 @@ model AiContextMemory {
   contactId      String   @map("contact_id")
   conversationId String?  @map("conversation_id")
   content        String // resumen cifrado (AES-256-GCM, ver common/pii-crypto.service.ts)
-  embedding      Unsupported("vector(512)")
+  // Opcional: puede estar sin vector mientras espera reindexado (ver la
+  // migración `embeddings_1024`). El recall descarta las filas sin vector.
+  embedding      Unsupported("vector(1024)")?
   createdAt      DateTime @default(now()) @map("created_at")
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -448,7 +450,9 @@ model KnowledgeChunk {
   // Posición dentro del documento — permite mostrar los fragmentos en orden.
   position   Int
   content    String // fragmento cifrado (AES-256-GCM, ver common/pii-crypto.service.ts)
-  embedding  Unsupported("vector(512)")
+  // Opcional: el texto pendiente de revisión (posición -1) no se indexa, y un
+  // fragmento puede estar sin vector mientras espera reindexado.
+  embedding  Unsupported("vector(1024)")?
 
   document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
