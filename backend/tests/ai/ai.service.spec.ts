@@ -22,7 +22,11 @@ describe('AiService', () => {
 
   const tools = {} as AiToolExecutorService;
   const noMemory = { recall: jest.fn().mockResolvedValue([]) } as unknown as AiContextMemoryService;
-  const noProfile = { describe: jest.fn().mockResolvedValue([]) } as unknown as BusinessProfileService;
+  const noProfile = {
+    describe: jest.fn().mockResolvedValue([]),
+    // Sin zona propia: la IA cae al respaldo global (BUSINESS_TIME_ZONE).
+    timeZoneOf: jest.fn().mockResolvedValue(null),
+  } as unknown as BusinessProfileService;
   const noKnowledge = { describe: jest.fn().mockResolvedValue([]) } as unknown as KnowledgeRetrievalService;
   // Proveedor de pruebas NVIDIA sin credenciales: estos casos ejercitan el
   // camino de Anthropic, así que nunca debe usarse.
@@ -120,6 +124,87 @@ describe('AiService', () => {
     expect(prompt).toMatch(/nunca en UTC/i);
   });
 
+  describe('zona horaria por negocio', () => {
+    const ctx = {
+      tenantId: 't1',
+      tenantName: 'Empresa',
+      contactId: 'c1',
+      contactName: 'Ana',
+      contactPhone: '52155',
+      conversationId: 'cv1',
+    };
+    const mockConfig = {
+      get: (key: string) =>
+        ({ 'ai.provider': 'mock', 'business.timeZone': 'America/Lima' })[key],
+    } as unknown as ConfigService;
+
+    /** Perfil de un negocio que eligió (o no) su propia zona. */
+    const profileCon = (timeZone: string | null) =>
+      ({
+        describe: jest.fn().mockResolvedValue([]),
+        timeZoneOf: jest.fn().mockResolvedValue(timeZone),
+      }) as unknown as BusinessProfileService;
+
+    it('usa la zona del negocio, no la global de la plataforma', async () => {
+      // El caso que motiva el cambio: con un unico valor global, un negocio en
+      // Madrid agendaba con las horas de Lima.
+      const toolsMock = {
+        execute: jest.fn().mockResolvedValue('ok'),
+        describeWithoutExecuting: jest.fn(),
+      } as unknown as AiToolExecutorService;
+      const service = new AiService(
+        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon('Europe/Madrid'), noKnowledge, noNvidia,
+      );
+
+      await service.respond(ctx, [{ role: 'user', text: 'quiero una cita' }]);
+
+      expect((toolsMock.execute as jest.Mock).mock.calls[0][2].timeZone).toBe('Europe/Madrid');
+    });
+
+    it('si el negocio no eligió ninguna, cae al valor global', async () => {
+      const toolsMock = {
+        execute: jest.fn().mockResolvedValue('ok'),
+        describeWithoutExecuting: jest.fn(),
+      } as unknown as AiToolExecutorService;
+      const service = new AiService(
+        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon(null), noKnowledge, noNvidia,
+      );
+
+      await service.respond(ctx, [{ role: 'user', text: 'quiero una cita' }]);
+
+      expect((toolsMock.execute as jest.Mock).mock.calls[0][2].timeZone).toBe('America/Lima');
+    });
+
+    it('una zona guardada inválida no rompe la conversación', async () => {
+      // No deberia llegar (el panel la valida), pero si llegara, `Intl` fallaria
+      // en cada mensaje y el cliente se quedaria sin respuesta.
+      const toolsMock = {
+        execute: jest.fn().mockResolvedValue('ok'),
+        describeWithoutExecuting: jest.fn(),
+      } as unknown as AiToolExecutorService;
+      const service = new AiService(
+        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon('Marte/Olympus'), noKnowledge, noNvidia,
+      );
+
+      await service.respond(ctx, [{ role: 'user', text: 'quiero una cita' }]);
+
+      expect((toolsMock.execute as jest.Mock).mock.calls[0][2].timeZone).toBe('America/Lima');
+    });
+
+    it('el system prompt anuncia la zona del negocio', () => {
+      const service = new AiService(
+        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+      );
+
+      const prompt = service.buildSystemPrompt(
+        { ...ctx, timeZone: 'Europe/Madrid' }, [], [], [], new Date('2026-08-03T21:00:00Z'),
+      );
+
+      expect(prompt).toContain('Europe/Madrid');
+      expect(prompt).not.toContain('America/Lima');
+    });
+  });
+
   describe('escalado por baja confianza (RF-11)', () => {
     const ctx = {
       tenantId: 't1',
@@ -172,7 +257,9 @@ describe('AiService', () => {
       const reply = await service.respond(ctx, [{ role: 'user', text: 'quiero hacer un reclamo' }]);
 
       expect(toolsMock.execute).toHaveBeenCalledWith(
-        'escalar_a_humano', expect.objectContaining({ motivo: expect.any(String) }), ctx,
+        'escalar_a_humano',
+        expect.objectContaining({ motivo: expect.any(String) }),
+        { ...ctx, timeZone: expect.any(String) },
       );
       expect(reply.actions).toContain('escalar_a_humano');
     });
@@ -246,6 +333,7 @@ describe('AiService', () => {
       const prisma = {} as PrismaService;
       const profile = {
         describe: jest.fn().mockResolvedValue(['Horario de atención: lunes a viernes 9-18h.']),
+        timeZoneOf: jest.fn().mockResolvedValue(null),
       } as unknown as BusinessProfileService;
       const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge, noNvidia);
       const create = jest.fn().mockResolvedValue({
@@ -297,6 +385,7 @@ describe('AiService', () => {
       const prisma = {} as PrismaService;
       const profile = {
         describe: jest.fn().mockResolvedValue(['Tono/estilo con el que debes responder: Cercano.']),
+        timeZoneOf: jest.fn().mockResolvedValue(null),
       } as unknown as BusinessProfileService;
       const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge, noNvidia);
       const create = jest.fn().mockResolvedValue({
@@ -360,6 +449,7 @@ describe('AiService', () => {
     it('delega en NVIDIA con el MISMO system prompt que usaría Claude', async () => {
       const profile = {
         describe: jest.fn().mockResolvedValue(['Horario: lunes a viernes 9-18h.']),
+        timeZoneOf: jest.fn().mockResolvedValue(null),
       } as unknown as BusinessProfileService;
       const knowledge = {
         describe: jest.fn().mockResolvedValue(['Documentación: cancelaciones con 24h.']),
@@ -404,7 +494,11 @@ describe('AiService', () => {
       await service.respond(ctx, [{ role: 'user', text: 'Quiero un turno' }]);
 
       // El ctx lo agrega AiService: el modelo nunca puede elegir tenant/contacto.
-      expect(toolsMock.execute).toHaveBeenCalledWith('create_appointment', { title: 'Corte' }, ctx);
+      expect(toolsMock.execute).toHaveBeenCalledWith(
+        'create_appointment',
+        { title: 'Corte' },
+        { ...ctx, timeZone: expect.any(String) },
+      );
     });
 
     it('en el chat de prueba NO ejecuta herramientas y reporta lo que habría hecho', async () => {
@@ -476,7 +570,11 @@ describe('AiService', () => {
         ctx, [{ role: 'user', text: '¿tienen remeras?' }], { simulateTools: true },
       );
 
-      expect(toolsMock.execute).toHaveBeenCalledWith('consultar_producto', { consulta: 'remera' }, ctx);
+      expect(toolsMock.execute).toHaveBeenCalledWith(
+        'consultar_producto',
+        { consulta: 'remera' },
+        { ...ctx, timeZone: expect.any(String) },
+      );
       expect(toolsMock.describeWithoutExecuting).not.toHaveBeenCalled();
       expect(reply.text).toContain('4 disponibles');
       // No es una acción simulada: se ejecutó de verdad y no modificó nada.
@@ -507,7 +605,11 @@ describe('AiService', () => {
 
       const reply = await service.respond(ctx, [{ role: 'user', text: 'quiero un corte' }]);
 
-      expect(toolsMock.execute).toHaveBeenCalledWith('create_appointment', { title: 'Corte' }, ctx);
+      expect(toolsMock.execute).toHaveBeenCalledWith(
+        'create_appointment',
+        { title: 'Corte' },
+        { ...ctx, timeZone: expect.any(String) },
+      );
       expect(reply.simulatedTools).toBeUndefined();
     });
 

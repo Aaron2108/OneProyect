@@ -104,6 +104,8 @@ export interface BusinessProfile {
   policies: string | null;
   tone: string | null;
   customInstructions: string | null;
+  /** Zona IANA elegida por el negocio; null = se usa la del servidor. */
+  timeZone: string | null;
   updatedAt: string | null;
 }
 

@@ -2,14 +2,27 @@ import { BusinessProfileService } from '../../src/business-profile/business-prof
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('BusinessProfileService', () => {
-  function makePrisma(overrides: Partial<Record<string, unknown>> = {}) {
-    return {
+  /** `tenantTimeZone` simula la zona ya elegida por el negocio (columna `tenants`). */
+  function makePrisma(
+    overrides: Partial<Record<string, unknown>> = {},
+    tenantTimeZone: string | null = null,
+  ) {
+    const tenantUpdate = jest.fn().mockResolvedValue({});
+    const prisma = {
       businessProfile: {
         findUnique: jest.fn().mockResolvedValue(null),
         upsert: jest.fn(),
         ...overrides,
       },
-    } as unknown as PrismaService;
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ timeZone: tenantTimeZone }),
+        update: tenantUpdate,
+      },
+      // El upsert del perfil y la zona van en la misma transacción: no puede
+      // quedar la zona guardada y el perfil no, ni al revés.
+      $transaction: jest.fn().mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    return prisma as unknown as PrismaService & { tenant: { update: jest.Mock } };
   }
 
   describe('get', () => {
@@ -22,6 +35,7 @@ describe('BusinessProfileService', () => {
         policies: null,
         tone: null,
         customInstructions: null,
+        timeZone: null,
         updatedAt: null,
       });
     });
@@ -44,6 +58,7 @@ describe('BusinessProfileService', () => {
         policies: null,
         tone: 'Cercano',
         customInstructions: null,
+        timeZone: null,
         updatedAt: updatedAt.toISOString(),
       });
     });
@@ -81,6 +96,73 @@ describe('BusinessProfileService', () => {
           customInstructions: null,
         },
       });
+    });
+  });
+
+  describe('zona horaria del negocio', () => {
+    const okUpsert = () =>
+      jest.fn().mockResolvedValue({
+        businessHours: null,
+        services: null,
+        policies: null,
+        tone: null,
+        customInstructions: null,
+        updatedAt: new Date('2026-07-23T00:00:00.000Z'),
+      });
+
+    it('la guarda en el tenant, no en el perfil', async () => {
+      // La usan las citas y los recordatorios, no solo la IA: vive en `tenants`.
+      const prisma = makePrisma({ upsert: okUpsert() });
+      const service = new BusinessProfileService(prisma);
+
+      const result = await service.upsert('t1', { timeZone: 'Europe/Madrid' });
+
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: 't1' },
+        data: { timeZone: 'Europe/Madrid' },
+      });
+      expect(result.timeZone).toBe('Europe/Madrid');
+    });
+
+    it('rechaza una zona que no existe en vez de guardarla', async () => {
+      // Guardarla haría fallar a Intl en CADA mensaje, y el dueño no se
+      // enteraría hasta que un cliente escribiera.
+      const prisma = makePrisma({ upsert: okUpsert() });
+      const service = new BusinessProfileService(prisma);
+
+      await expect(service.upsert('t1', { timeZone: 'America/Limaa' })).rejects.toThrow(
+        /no es una zona horaria válida/i,
+      );
+      expect(prisma.tenant.update).not.toHaveBeenCalled();
+    });
+
+    it('vaciarla es válido: se vuelve a la zona por defecto', async () => {
+      const prisma = makePrisma({ upsert: okUpsert() });
+      const service = new BusinessProfileService(prisma);
+
+      await service.upsert('t1', { timeZone: '   ' });
+
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: 't1' },
+        data: { timeZone: null },
+      });
+    });
+
+    it('timeZoneOf devuelve null si el negocio no eligió ninguna', async () => {
+      // Devolver una por defecto haría indistinguible "eligió Lima" de "no
+      // eligió nada", y quien llama no podría aplicar su propio respaldo.
+      const service = new BusinessProfileService(makePrisma());
+      expect(await service.timeZoneOf('t1')).toBeNull();
+    });
+
+    it('timeZoneOf devuelve la elegida', async () => {
+      const service = new BusinessProfileService(makePrisma({}, 'Europe/Madrid'));
+      expect(await service.timeZoneOf('t1')).toBe('Europe/Madrid');
+    });
+
+    it('get la expone junto al resto del perfil', async () => {
+      const service = new BusinessProfileService(makePrisma({}, 'America/Bogota'));
+      expect((await service.get('t1')).timeZone).toBe('America/Bogota');
     });
   });
 

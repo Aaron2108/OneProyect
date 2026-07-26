@@ -30,7 +30,11 @@ describe('AiService (modo mock)', () => {
   };
 
   const noMemory = { recall: jest.fn().mockResolvedValue([]) } as unknown as AiContextMemoryService;
-  const noProfile = { describe: jest.fn().mockResolvedValue([]) } as unknown as BusinessProfileService;
+  const noProfile = {
+    describe: jest.fn().mockResolvedValue([]),
+    // Sin zona propia: la IA cae al respaldo global (BUSINESS_TIME_ZONE).
+    timeZoneOf: jest.fn().mockResolvedValue(null),
+  } as unknown as BusinessProfileService;
   const noKnowledge = { describe: jest.fn().mockResolvedValue([]) } as unknown as KnowledgeRetrievalService;
   const noNvidia = {
     isEnabled: () => false,
@@ -56,7 +60,8 @@ describe('AiService (modo mock)', () => {
     expect((tools.execute as jest.Mock)).toHaveBeenCalledWith(
       'create_appointment',
       expect.objectContaining({ title: expect.any(String), scheduled_at: expect.any(String) }),
-      ctx,
+      // El contexto llega a las herramientas con la zona del negocio resuelta.
+      { ...ctx, timeZone: expect.any(String) },
     );
     expect(reply.text).toContain('Ana');
   });

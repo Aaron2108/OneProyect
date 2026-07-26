@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { isValidTimeZone } from '../ai/ai-datetime.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
 
@@ -8,6 +9,8 @@ export interface BusinessProfileDto {
   policies: string | null;
   tone: string | null;
   customInstructions: string | null;
+  /** Zona IANA elegida por el negocio; null = se usa la del servidor. */
+  timeZone: string | null;
   updatedAt: string | null;
 }
 
@@ -23,8 +26,11 @@ export class BusinessProfileService {
   constructor(private readonly prisma: PrismaService) {}
 
   async get(tenantId: string): Promise<BusinessProfileDto> {
-    const profile = await this.prisma.businessProfile.findUnique({ where: { tenantId } });
-    return this.toDto(profile);
+    const [profile, tenant] = await Promise.all([
+      this.prisma.businessProfile.findUnique({ where: { tenantId } }),
+      this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { timeZone: true } }),
+    ]);
+    return this.toDto(profile, tenant?.timeZone ?? null);
   }
 
   /** Nombre de la empresa — lo necesita el system prompt de la IA. */
@@ -36,8 +42,32 @@ export class BusinessProfileService {
     return tenant?.name ?? '';
   }
 
+  /**
+   * Zona horaria elegida por el negocio, o `null` si no eligió ninguna. Quien
+   * llama decide el respaldo (`resolveTimeZone`): aquí no se inventa una zona,
+   * porque devolver una por defecto haría indistinguible "eligió Lima" de "no
+   * eligió nada".
+   */
+  async timeZoneOf(tenantId: string): Promise<string | null> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { timeZone: true },
+    });
+    return tenant?.timeZone ?? null;
+  }
+
   /** Reemplaza el perfil completo del tenant (PUT: lo que no se envía queda vacío). Solo OWNER. */
   async upsert(tenantId: string, dto: UpdateBusinessProfileDto): Promise<BusinessProfileDto> {
+    const timeZone = dto.timeZone?.trim() || null;
+    // Se valida antes de guardar: una zona con un error de tipeo haría fallar a
+    // `Intl` en cada mensaje, y el dueño no vería el error hasta que un cliente
+    // escribiera. Mejor rechazarlo en el panel, donde puede corregirlo.
+    if (timeZone && !isValidTimeZone(timeZone)) {
+      throw new BadRequestException(
+        `"${timeZone}" no es una zona horaria válida. Usa el formato IANA, por ejemplo "America/Lima".`,
+      );
+    }
+
     const data = {
       businessHours: dto.businessHours?.trim() || null,
       services: dto.services?.trim() || null,
@@ -45,12 +75,15 @@ export class BusinessProfileService {
       tone: dto.tone?.trim() || null,
       customInstructions: dto.customInstructions?.trim() || null,
     };
-    const profile = await this.prisma.businessProfile.upsert({
-      where: { tenantId },
-      create: { tenantId, ...data },
-      update: data,
-    });
-    return this.toDto(profile);
+    const [profile] = await this.prisma.$transaction([
+      this.prisma.businessProfile.upsert({
+        where: { tenantId },
+        create: { tenantId, ...data },
+        update: data,
+      }),
+      this.prisma.tenant.update({ where: { id: tenantId }, data: { timeZone } }),
+    ]);
+    return this.toDto(profile, timeZone);
   }
 
   /**
@@ -79,6 +112,7 @@ export class BusinessProfileService {
       customInstructions: string | null;
       updatedAt: Date;
     } | null,
+    timeZone: string | null,
   ): BusinessProfileDto {
     return {
       businessHours: profile?.businessHours ?? null,
@@ -86,6 +120,10 @@ export class BusinessProfileService {
       policies: profile?.policies ?? null,
       tone: profile?.tone ?? null,
       customInstructions: profile?.customInstructions ?? null,
+      // Vive en `tenants`, no en el perfil: la usan las citas y los
+      // recordatorios, no solo la IA. Viaja aquí porque es donde el dueño la
+      // configura (ver DECISIONS.md).
+      timeZone,
       updatedAt: profile?.updatedAt?.toISOString() ?? null,
     };
   }

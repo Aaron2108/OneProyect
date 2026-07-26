@@ -26,4 +26,13 @@ export class UpdateBusinessProfileDto {
   @IsString()
   @MaxLength(1000)
   customInstructions?: string;
+
+  /**
+   * Zona horaria IANA del negocio (ej. "America/Lima"). No es texto libre como
+   * el resto: el servicio comprueba que `Intl` la acepte antes de guardarla.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timeZone?: string;
 }

@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
-import { Field, Label, Textarea } from '@/components/ui/Input';
+import { Field, Label, Select, Textarea } from '@/components/ui/Input';
 import { AiContextPanel } from './AiContextPanel';
 import { AiTestChat } from './AiTestChat';
 import { KnowledgeDocuments } from './KnowledgeDocuments';
@@ -45,7 +45,10 @@ const FIELDS: Array<{ key: keyof FormState; label: string; placeholder: string; 
   },
 ];
 
-type FormState = Pick<BusinessProfile, 'businessHours' | 'services' | 'policies' | 'tone' | 'customInstructions'>;
+type FormState = Pick<
+  BusinessProfile,
+  'businessHours' | 'services' | 'policies' | 'tone' | 'customInstructions' | 'timeZone'
+>;
 
 const EMPTY_FORM: FormState = {
   businessHours: '',
@@ -53,7 +56,21 @@ const EMPTY_FORM: FormState = {
   policies: '',
   tone: '',
   customInstructions: '',
+  timeZone: '',
 };
+
+/**
+ * Zonas horarias que ofrece el desplegable. Se piden al navegador en vez de
+ * mantener una lista a mano: así está siempre completa y al día. Si el navegador
+ * no lo soporta, queda al menos la suya detectada, para no dejar el campo vacío.
+ */
+function timeZoneOptions(): string[] {
+  const propia = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const soportadas = (
+    Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
+  ).supportedValuesOf?.('timeZone');
+  return soportadas?.length ? soportadas : [propia].filter(Boolean);
+}
 
 export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
   const { user } = useAuth();
@@ -66,6 +83,8 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
   // Se incrementa al guardar el perfil o cambiar la documentación, para que el
   // panel de contexto no siga mostrando un estado viejo.
   const [contextKey, setContextKey] = useState(0);
+  // La lista es larga y no cambia: se calcula una vez, no en cada render.
+  const [zonas] = useState(timeZoneOptions);
 
   useEffect(() => {
     if (!active) return;
@@ -81,6 +100,7 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
           policies: profile.policies ?? '',
           tone: profile.tone ?? '',
           customInstructions: profile.customInstructions ?? '',
+          timeZone: profile.timeZone ?? '',
         });
         setUpdatedAt(profile.updatedAt);
       } catch (e) {
@@ -125,6 +145,27 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
         <div className="kpi-card text-center text-sm text-ink-soft">Cargando…</div>
       ) : (
         <form onSubmit={save} className="kpi-card">
+          <Field>
+            <Label htmlFor="timeZone">Zona horaria del negocio</Label>
+            <Select
+              id="timeZone"
+              value={form.timeZone ?? ''}
+              onChange={(e) => setForm((prev) => ({ ...prev, timeZone: e.target.value }))}
+              disabled={!isOwner}
+            >
+              <option value="">Usar la del servidor</option>
+              {zonas.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </Select>
+            <div className="mt-1.5 text-[11.5px] text-ink-faint">
+              En qué horario agenda la IA. Si dice una hora, será esta: sin la zona correcta las
+              citas quedan corridas.
+            </div>
+          </Field>
+
           {FIELDS.map((f) => (
             <Field key={f.key}>
               <Label htmlFor={f.key}>{f.label}</Label>

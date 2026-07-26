@@ -6,6 +6,12 @@ export interface ConversationContext {
   contactName: string | null;
   contactPhone: string;
   conversationId: string;
+  /**
+   * Zona horaria del negocio, ya resuelta. La rellena `AiService` antes de
+   * ejecutar herramientas: quien construye el contexto (el worker de WhatsApp,
+   * el chat de prueba) no tiene por qué saber de husos horarios.
+   */
+  timeZone?: string;
 }
 
 /** Un turno del historial que se le pasa a la IA. */

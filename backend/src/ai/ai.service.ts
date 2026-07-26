@@ -91,6 +91,14 @@ export class AiService {
     const lastUserText = [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
     const recalled = await this.contextMemory.recall(ctx.tenantId, ctx.contactId, lastUserText);
     const profileLines = await this.businessProfile.describe(ctx.tenantId);
+    // La zona es de ESTE negocio, no de la plataforma: dos clientes en husos
+    // distintos agendarían a horas distintas con un único valor global.
+    // Se resuelve una vez por respuesta y viaja en el contexto hasta las
+    // herramientas, que confirman la hora al cliente.
+    const ctxConZona: ConversationContext = {
+      ...ctx,
+      timeZone: resolveTimeZone(await this.businessProfile.timeZoneOf(ctx.tenantId), this.timeZone),
+    };
     // Documentación del negocio relevante a este mensaje: solo los fragmentos
     // más parecidos, no los documentos completos — el system prompt se paga en
     // cada mensaje (ver KnowledgeRetrievalService).
@@ -103,18 +111,18 @@ export class AiService {
       ? async (name: string, input: Record<string, unknown>): Promise<string> => {
           // Las de solo lectura se ejecutan igual: simular una consulta al
           // catálogo devolvería productos inventados (ver READ_ONLY_TOOLS).
-          if (READ_ONLY_TOOLS.has(name)) return this.tools.execute(name, input, ctx);
+          if (READ_ONLY_TOOLS.has(name)) return this.tools.execute(name, input, ctxConZona);
           simulated.push({ name, input });
-          return this.tools.describeWithoutExecuting(name, input);
+          return this.tools.describeWithoutExecuting(name, input, ctxConZona.timeZone);
         }
       : (name: string, input: Record<string, unknown>): Promise<string> =>
-          this.tools.execute(name, input, ctx);
+          this.tools.execute(name, input, ctxConZona);
 
     let reply: AgentReply;
     if (this.provider === 'mock') {
-      reply = await this.mockRespond(ctx, history, runTool);
+      reply = await this.mockRespond(ctxConZona, history, runTool);
     } else {
-      const system = this.buildSystemPrompt(ctx, recalled, profileLines, knowledgeLines);
+      const system = this.buildSystemPrompt(ctxConZona, recalled, profileLines, knowledgeLines);
       // El proveedor de pruebas recibe el MISMO system prompt y las MISMAS
       // herramientas; solo cambia el transporte (ver NvidiaChatService).
       reply =
@@ -261,7 +269,9 @@ export class AiService {
     const lines = [
       `Eres el asistente de IA de la empresa "${ctx.tenantName}", atendiendo por WhatsApp.`,
       `Hablas con el contacto ${ctx.contactName ?? 'sin nombre'} (teléfono ${ctx.contactPhone}).`,
-      ...describeNow(now, this.timeZone),
+      // La zona viene resuelta en el contexto (la del negocio); `this.timeZone`
+      // es solo el respaldo global para quien llame sin ella.
+      ...describeNow(now, ctx.timeZone ?? this.timeZone),
       'Responde en español, de forma breve, cordial y útil.',
       'Usa las herramientas disponibles para programar citas, crear recordatorios o actualizar los datos del contacto cuando el cliente lo pida.',
       'No inventes información del negocio que no conozcas.',
@@ -308,6 +318,9 @@ export class AiService {
         contactName: 'Cliente de ejemplo',
         contactPhone: '+00000000000',
         conversationId: 'preview',
+        // Con la zona real del negocio: la vista previa existe para que el dueño
+        // audite lo que sabe su agente, y mostrarle otra hora sería engañarlo.
+        timeZone: resolveTimeZone(await this.businessProfile.timeZoneOf(tenantId), this.timeZone),
       },
       [],
       profileLines,

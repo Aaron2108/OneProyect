@@ -71,6 +71,33 @@ describe('AiToolExecutorService', () => {
     expect(result).not.toMatch(/\bid\b/i);
   });
 
+  it('confirma la hora en la zona que trae el contexto, no en la global', async () => {
+    // Dos negocios en husos distintos: el mismo instante se le confirma a cada
+    // cliente en SU hora local. Con una zona global, uno de los dos leía mal.
+    const enMadrid = await executor.execute(
+      'create_appointment',
+      { title: 'Corte', scheduled_at: '2026-08-03T16:00:00-05:00' },
+      { ...ctx, timeZone: 'Europe/Madrid' },
+    );
+    expect(enMadrid).toContain('23:00'); // 16:00 en Lima = 23:00 en Madrid
+
+    const enLima = await executor.execute(
+      'create_appointment',
+      { title: 'Corte', scheduled_at: '2026-08-03T16:00:00-05:00' },
+      { ...ctx, timeZone: 'America/Lima' },
+    );
+    expect(enLima).toContain('16:00');
+  });
+
+  it('sin zona en el contexto usa la global de respaldo', async () => {
+    const result = await executor.execute(
+      'create_appointment',
+      { title: 'Corte', scheduled_at: '2026-08-03T16:00:00-05:00' },
+      ctx, // sin timeZone
+    );
+    expect(result).toContain('16:00'); // America/Lima, la del ConfigService
+  });
+
   it('confirma la hora en la zona del negocio, no en UTC', async () => {
     // Si se confirmara en UTC, el cliente que pidió las 16:00 leería "21:00".
     const result = await executor.execute(

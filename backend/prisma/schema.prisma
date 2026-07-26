@@ -88,6 +88,10 @@ model Tenant {
   name                  String
   // ID del número de WhatsApp en Meta — enruta cada webhook entrante a su tenant
   whatsappPhoneNumberId String?  @unique @map("whatsapp_phone_number_id")
+  // Zona horaria IANA del negocio (ej. "America/Lima"). Es de la empresa y no
+  // del perfil de IA: la usan las citas y los recordatorios, no solo el agente.
+  // Nula = se cae a BUSINESS_TIME_ZONE y, si tampoco está, a la del servidor.
+  timeZone              String?  @map("time_zone")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 

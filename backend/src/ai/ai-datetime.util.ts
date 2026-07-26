@@ -11,9 +11,9 @@
  *    (`16:00:00Z`), así que un cliente que pedía las 4 de la tarde terminaba con
  *    la cita corrida tantas horas como el desplazamiento de su zona.
  *
- * La zona se toma de `BUSINESS_TIME_ZONE`; si no está, la del servidor. Es un
- * valor **global**, no por tenant: cuando la plataforma tenga negocios en husos
- * distintos habrá que moverlo a una columna de `tenants` (ver DECISIONS.md).
+ * La zona es **de cada negocio** (`Tenant.timeZone`, que el propietario elige en
+ * el panel). Si no la ha elegido se cae a `BUSINESS_TIME_ZONE` y, en último
+ * término, a la del servidor — ver DECISIONS.md.
  */
 
 /** Zona por defecto si la configurada es inválida: la del proceso. */
@@ -21,18 +21,26 @@ function serverTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
-/**
- * Valida la zona configurada. Una zona con un error de tipeo haría fallar a
- * `Intl` en CADA mensaje, así que se degrada a la del servidor en vez de romper.
- */
-export function resolveTimeZone(configured?: string): string {
-  if (!configured) return serverTimeZone();
+/** Si `Intl` acepta la zona. Se usa para validar lo que llega del panel. */
+export function isValidTimeZone(value: string): boolean {
   try {
-    new Intl.DateTimeFormat('es', { timeZone: configured }).format(new Date());
-    return configured;
+    new Intl.DateTimeFormat('es', { timeZone: value }).format(new Date());
+    return true;
   } catch {
-    return serverTimeZone();
+    return false;
   }
+}
+
+/**
+ * Resuelve la zona a usar, en orden de preferencia. Una zona con un error de
+ * tipeo haría fallar a `Intl` en CADA mensaje, así que se degrada en vez de
+ * romper: se prueba cada candidata y se cae a la del servidor.
+ */
+export function resolveTimeZone(...candidates: (string | null | undefined)[]): string {
+  for (const candidate of candidates) {
+    if (candidate && isValidTimeZone(candidate)) return candidate;
+  }
+  return serverTimeZone();
 }
 
 /** Desplazamiento de la zona en el instante dado, con formato ISO (`-05:00`). */

@@ -332,3 +332,21 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **En el chat de prueba del panel se simula** (no está en `READ_ONLY_TOOLS`): probar el agente no puede dejar una conversación real esperando a un humano.
 
 **El proveedor simulado también lo ejercita** ante palabras como "reclamo" o "devolución", para poder validar la cadena completa —nota interna incluida— sin gastar créditos de API.
+
+## 2026-07-25 — Zona horaria por negocio (antes global)
+
+**Decisión**: la zona horaria pasa de la variable global `BUSINESS_TIME_ZONE` a una columna `tenants.time_zone` que el propietario elige en el panel. `BUSINESS_TIME_ZONE` sigue existiendo como respaldo, y la del servidor como último recurso.
+
+**Motivo**: con un único valor para toda la plataforma, dos negocios en husos distintos no pueden ambos agendar bien. Es la limitación que quedaba anotada en `ai-datetime.util.ts` desde que se corrigió el desfase de las citas (2026-07-25): el fallo no daba error, solo agendaba a la hora equivocada. Medido con dos negocios reales, el mismo instante se confirma como 16:00 en Lima y 23:00 en Madrid.
+
+**Vive en `tenants`, no en `business_profiles`**: la zona la usan las citas, los recordatorios y la sincronización con Google Calendar, no solo el agente. Guardarla en la tabla de contexto de la IA obligaría al resto del dominio a leer de ahí, que es exactamente el acoplamiento que se quiere evitar. Se **expone** por el endpoint del perfil porque es donde el propietario configura lo del negocio, y ahí el `upsert` es transaccional: no puede quedar guardada la zona y no el perfil, ni al revés.
+
+**Se resuelve una vez por respuesta y viaja en `ConversationContext`**: quien construye el contexto (el worker de WhatsApp, el chat de prueba) no tiene por qué saber de husos horarios, y las herramientas no deberían consultar la base para confirmarle una hora al cliente. `AiService` la rellena antes de ejecutar nada.
+
+**`timeZoneOf` devuelve `null` cuando el negocio no eligió ninguna**, en vez de una por defecto: devolver una haría indistinguible "eligió Lima" de "no eligió nada", y quien llama no podría aplicar su propio respaldo.
+
+**Se valida contra `Intl` antes de guardar**: una zona con un error de tipeo haría fallar el formateo en CADA mensaje, y el propietario no se enteraría hasta que un cliente escribiera. Se rechaza en el panel, donde aún puede corregirlo. Si aun así una inválida llegara a la base, `resolveTimeZone` degrada en cadena en lugar de romper la conversación.
+
+**La migración deja la columna nula para los negocios ya dados de alta**: rellenarla con una zona fija sería inventarle un huso a quien no lo declaró. Siguen cayendo al respaldo global hasta que su propietario elija.
+
+**El desplegable del panel se construye con `Intl.supportedValuesOf('timeZone')`**, no con una lista escrita a mano: así está completa y al día sin mantenimiento. Si el navegador no lo soporta, queda al menos la suya detectada.
