@@ -154,7 +154,7 @@ export class AiToolExecutorService {
         case TOOL_CHECK_PRODUCT:
           return await this.checkProduct(input, ctx);
         case TOOL_ESCALATE_TO_HUMAN:
-          return await this.escalateToHuman(input, ctx);
+          return await this.escalateTool(input, ctx);
         default:
           return `Herramienta desconocida: ${toolName}`;
       }
@@ -211,13 +211,24 @@ export class AiToolExecutorService {
    * sepa por qué le llegó, sin tener que releer todo el hilo. La nota es interna:
    * el cliente nunca la ve.
    */
-  private async escalateToHuman(
+  private async escalateTool(
     input: Record<string, unknown>,
     ctx: ConversationContext,
   ): Promise<string> {
     const motivo = typeof input.motivo === 'string' ? input.motivo.trim() : '';
     if (!motivo) return 'Falta indicar el motivo por el que no puedes resolverlo.';
+    return this.escalateToHuman(motivo, ctx);
+  }
 
+  /**
+   * Pasa la conversación a una persona dejando el motivo como nota interna.
+   *
+   * Es público porque no lo dispara solo el modelo: la guarda de costo escala
+   * por aquí cuando se agota el presupuesto (ver `AiService`). Un único camino
+   * para las dos causas — si divergieran, una de las dos dejaría la
+   * conversación a medias.
+   */
+  async escalateToHuman(motivo: string, ctx: ConversationContext): Promise<string> {
     // `updateMany` con el tenant en el filtro: `ctx` ya es de confianza, pero
     // así ninguna conversación de otro negocio puede quedar tocada ni por error
     // de programación futuro.

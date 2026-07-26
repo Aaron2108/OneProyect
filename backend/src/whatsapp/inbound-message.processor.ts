@@ -167,25 +167,26 @@ export class InboundMessageProcessor extends WorkerHost {
     lastInboundAt: Date,
   ): Promise<void> {
     try {
-      if (!(await this.ai.withinRateLimit(conversationId))) {
-        this.logger.warn(
-          `Límite de IA alcanzado en conversación ${conversationId}; sin respuesta automática`,
-        );
+      const ctx = {
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        contactId: contact.id,
+        contactName: contact.name,
+        contactPhone: contact.phone,
+        conversationId,
+      };
+
+      // Guarda de costo. Si se agotó el presupuesto se escala a una persona en
+      // vez de no responder: desde el lado del cliente, callarse es que el
+      // negocio lo dejó en visto.
+      const limite = await this.ai.withinRateLimit(conversationId, tenant.id);
+      if (!limite.allowed) {
+        await this.ai.escalateForCostLimit(ctx, limite.reason!);
         return;
       }
 
       const history = await this.loadHistory(conversationId);
-      const reply = await this.ai.respond(
-        {
-          tenantId: tenant.id,
-          tenantName: tenant.name,
-          contactId: contact.id,
-          contactName: contact.name,
-          contactPhone: contact.phone,
-          conversationId,
-        },
-        history,
-      );
+      const reply = await this.ai.respond(ctx, history);
 
       if (!reply.text) return;
 

@@ -364,3 +364,19 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **La migración histórica queda exenta, no corregida**: una migración ya aplicada es inmutable y editarla dejaría la suma de comprobación de Prisma sin cuadrar en cualquier base donde ya corrió. Por lo mismo no se han quitado los comentarios de advertencia de las migraciones posteriores. La lista de exentas tiene su propio test para que no crezca: una migración nueva con este fallo se corrige en el archivo, no se añade a la lista.
 
 **Reparar es explícito (`--repair`), no automático**: por defecto informa y sale con error. Recrear un índice sobre una tabla grande bloquea escrituras, y esa no es una decisión que deba tomar un script sin que nadie se lo pida.
+
+## 2026-07-25 — Guarda de costo por negocio, y escalar en vez de callarse
+
+**Decisión**: a los techos de gasto se suman dos por negocio (por hora y por día), además del que ya existía por conversación/hora. Y al alcanzarse cualquiera de los tres, la conversación **se escala a una persona** en vez de quedarse sin respuesta.
+
+**Por qué tres y no uno**: el de conversación/hora ataja un bucle o un cliente pesado concreto, pero no ve nada si el gasto se reparte entre muchas conversaciones. El de negocio/hora ataja el pico repentino —una campaña, un número filtrado— que ninguna conversación sola delata. El de negocio/día ataja el goteo sostenido, que por hora nunca llega al techo pero al final del mes está en la factura. Cada uno tapa el hueco que dejan los otros.
+
+**Escalar en vez de callarse** es el cambio de comportamiento que más se nota: hasta ahora, al tocar techo el worker registraba un aviso y no respondía. Desde el lado del cliente eso es indistinguible de que el negocio lo dejó en visto — el peor resultado posible para el problema que el producto viene a resolver. Ahora se reutiliza el mismo camino del escalado por baja confianza: el equipo lo ve en la bandeja con el motivo escrito en una nota interna.
+
+**Un único camino de escalado para las dos causas**: `AiToolExecutorService.escalateToHuman` pasa a ser público y lo usan tanto la herramienta del modelo como la guarda de costo. Si divergieran, una de las dos rutas acabaría dejando la conversación a medias (marcada como humana pero sin nota, o al revés).
+
+**Se cuentan mensajes de la IA, no llamadas a la API**: es un proxy, y **conservador a la baja** — una respuesta con tool-calling gasta hasta `MAX_TOOL_ITERATIONS` llamadas y aquí cuenta como una. Sirve para poner un techo, no para facturar. Medir el gasto real exige registrar los tokens de cada llamada, que es otro trabajo (y el que haría falta para enseñarle al dueño lo que gasta).
+
+**Los dos conteos del negocio van en una transacción**: son dos ventanas del mismo instante, y leerlas por separado podría dar una combinación que nunca existió.
+
+**`tenantId` es opcional en la comprobación**: sin él solo se aplica el techo de la conversación, exactamente como se comportaba antes. Así ningún llamador queda con un cambio de semántica silencioso.

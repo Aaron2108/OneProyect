@@ -19,6 +19,22 @@ import { NvidiaChatService } from './nvidia-chat.service';
 import { AgentReply, ConversationContext, HistoryTurn, ToolIntent } from './ai.types';
 import type { ToolRunner } from './nvidia-chat.service';
 
+/** Cuál de los tres techos de costo se alcanzó. */
+export type RateLimitReason = 'conversacion-hora' | 'negocio-hora' | 'negocio-dia';
+
+/**
+ * Motivo que se deja como nota interna al escalar por costo. Lo lee el equipo,
+ * no el cliente: dice qué pasó y qué mirar, sin jerga de la implementación.
+ */
+const MOTIVOS_DE_COSTE: Record<RateLimitReason, string> = {
+  'conversacion-hora':
+    'esta conversación agotó su límite de respuestas automáticas por hora (puede ser un bucle o un cliente muy insistente)',
+  'negocio-hora':
+    'el negocio agotó su límite de respuestas automáticas por hora: hay un pico de tráfico',
+  'negocio-dia':
+    'el negocio agotó su límite de respuestas automáticas del día',
+};
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -26,6 +42,8 @@ export class AiService {
   private readonly provider: string;
   private readonly model: string;
   private readonly maxCallsPerHour: number;
+  private readonly maxCallsPerTenantPerHour: number;
+  private readonly maxCallsPerTenantPerDay: number;
   private readonly timeZone: string;
 
   constructor(
@@ -42,6 +60,8 @@ export class AiService {
     this.model = this.config.get<string>('ai.model') ?? 'claude-haiku-4-5';
     this.maxCallsPerHour =
       this.config.get<number>('ai.maxCallsPerConversationPerHour') ?? 20;
+    this.maxCallsPerTenantPerHour = this.config.get<number>('ai.maxCallsPerTenantPerHour') ?? 200;
+    this.maxCallsPerTenantPerDay = this.config.get<number>('ai.maxCallsPerTenantPerDay') ?? 1500;
     this.timeZone = resolveTimeZone(this.config.get<string>('business.timeZone'));
     // Sin API key la IA queda deshabilitada (arranque local sin credenciales).
     this.client = apiKey ? new Anthropic({ apiKey }) : null;
@@ -55,19 +75,74 @@ export class AiService {
   }
 
   /**
-   * Guarda de costo (NFR): limita las llamadas a la IA por conversación en la
-   * última hora. Cuenta los mensajes generados por la IA como proxy de llamadas.
+   * Guarda de costo (NFR). Tres techos, y hacen falta los tres:
+   *
+   * - **por conversación/hora**: ataja un bucle o un cliente pesado concreto,
+   *   pero no ve nada si el gasto se reparte entre muchas conversaciones;
+   * - **por negocio/hora**: ataja el pico repentino (una campaña, un número
+   *   filtrado) que ninguna conversación sola delata;
+   * - **por negocio/día**: ataja el goteo sostenido, que por hora nunca llega
+   *   al techo pero al final del mes está en la factura.
+   *
+   * Se cuentan los mensajes generados por la IA como proxy de las llamadas.
+   * **Es un proxy conservador a la baja**: una respuesta con tool-calling gasta
+   * hasta `MAX_TOOL_ITERATIONS` llamadas y aquí cuenta como una. Sirve para
+   * poner un tope, no para facturar.
    */
-  async withinRateLimit(conversationId: string): Promise<boolean> {
-    const since = new Date(Date.now() - 60 * 60 * 1000);
-    const count = await this.prisma.message.count({
-      where: {
-        conversationId,
-        sender: MessageSender.AI,
-        createdAt: { gte: since },
-      },
+  async withinRateLimit(
+    conversationId: string,
+    tenantId?: string,
+  ): Promise<{ allowed: boolean; reason?: RateLimitReason }> {
+    const ahora = Date.now();
+    const haceUnaHora = new Date(ahora - 60 * 60 * 1000);
+
+    const enConversacion = await this.prisma.message.count({
+      where: { conversationId, sender: MessageSender.AI, createdAt: { gte: haceUnaHora } },
     });
-    return count < this.maxCallsPerHour;
+    if (enConversacion >= this.maxCallsPerHour) {
+      return { allowed: false, reason: 'conversacion-hora' };
+    }
+
+    // `tenantId` opcional por compatibilidad: sin él solo se aplica el techo de
+    // la conversación, que es como se comportaba antes.
+    if (!tenantId) return { allowed: true };
+
+    const haceUnDia = new Date(ahora - 24 * 60 * 60 * 1000);
+    const [enHora, enDia] = await this.prisma.$transaction([
+      this.prisma.message.count({
+        where: { tenantId, sender: MessageSender.AI, createdAt: { gte: haceUnaHora } },
+      }),
+      this.prisma.message.count({
+        where: { tenantId, sender: MessageSender.AI, createdAt: { gte: haceUnDia } },
+      }),
+    ]);
+
+    if (enHora >= this.maxCallsPerTenantPerHour) {
+      return { allowed: false, reason: 'negocio-hora' };
+    }
+    if (enDia >= this.maxCallsPerTenantPerDay) {
+      return { allowed: false, reason: 'negocio-dia' };
+    }
+    return { allowed: true };
+  }
+
+  /**
+   * Qué hacer cuando se agota el presupuesto: pasar la conversación a una
+   * persona, no callarse.
+   *
+   * Antes, al tocar techo, el cliente simplemente no recibía respuesta — desde
+   * su lado, el negocio lo dejó en visto. Escalar reutiliza el mismo camino que
+   * cuando la IA no sabe algo: el equipo lo ve en la bandeja con el motivo.
+   */
+  async escalateForCostLimit(
+    ctx: ConversationContext,
+    reason: RateLimitReason,
+  ): Promise<void> {
+    this.logger.warn(
+      `Guarda de costo (${reason}) alcanzada en conversación ${ctx.conversationId}; ` +
+        'se escala a una persona en vez de dejar al cliente sin respuesta',
+    );
+    await this.tools.escalateToHuman(MOTIVOS_DE_COSTE[reason], ctx);
   }
 
   /**

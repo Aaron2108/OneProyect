@@ -29,6 +29,10 @@ export interface AppConfig {
     apiKey: string;
     model: string;
     maxCallsPerConversationPerHour: number;
+    // Techo por NEGOCIO además del de cada conversación: sin él, un cliente con
+    // muchas conversaciones a la vez consume el saldo de toda la plataforma.
+    maxCallsPerTenantPerHour: number;
+    maxCallsPerTenantPerDay: number;
     // Proveedor alternativo compatible con la API de OpenAI, solo para probar el
     // agente sin créditos de Anthropic (`AI_PROVIDER=nvidia`). Temporal: el
     // agente de producción es Claude.
@@ -103,6 +107,8 @@ export default (): AppConfig => ({
       process.env.AI_MAX_CALLS_PER_CONVERSATION_PER_HOUR ?? '20',
       10,
     ),
+    maxCallsPerTenantPerHour: parseInt(process.env.AI_MAX_CALLS_PER_TENANT_PER_HOUR ?? '200', 10),
+    maxCallsPerTenantPerDay: parseInt(process.env.AI_MAX_CALLS_PER_TENANT_PER_DAY ?? '1500', 10),
     nvidia: {
       apiKey: process.env.NVIDIA_API_KEY ?? '',
       // Verificado con tool-calling y respuestas en español; no todos los modelos

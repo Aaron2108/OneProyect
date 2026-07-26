@@ -48,20 +48,70 @@ describe('AiService', () => {
   });
 
   describe('withinRateLimit (guarda de costo)', () => {
+    /**
+     * `enConversacion` es el conteo de la primera consulta (la de esta
+     * conversación); `enHora`/`enDia`, los dos del negocio que van juntos en
+     * una transacción.
+     */
+    const prismaCon = (enConversacion: number, enHora = 0, enDia = 0) =>
+      ({
+        message: { count: jest.fn().mockResolvedValue(enConversacion) },
+        $transaction: jest.fn().mockResolvedValue([enHora, enDia]),
+      }) as unknown as PrismaService;
+
+    const service = (prisma: PrismaService) =>
+      new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
+
     it('permite cuando el conteo está por debajo del límite', async () => {
-      const prisma = {
-        message: { count: jest.fn().mockResolvedValue(5) },
-      } as unknown as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
-      expect(await service.withinRateLimit('conv-1')).toBe(true);
+      expect(await service(prismaCon(5)).withinRateLimit('conv-1', 't1')).toEqual({ allowed: true });
     });
 
-    it('bloquea cuando el conteo alcanza el límite', async () => {
-      const prisma = {
-        message: { count: jest.fn().mockResolvedValue(20) },
-      } as unknown as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
-      expect(await service.withinRateLimit('conv-1')).toBe(false);
+    it('bloquea cuando la conversación alcanza su límite', async () => {
+      expect(await service(prismaCon(20)).withinRateLimit('conv-1', 't1')).toEqual({
+        allowed: false,
+        reason: 'conversacion-hora',
+      });
+    });
+
+    it('bloquea por el techo del negocio aunque la conversación vaya holgada', async () => {
+      // El caso que motiva el techo por negocio: el gasto repartido entre
+      // muchas conversaciones no lo delata ninguna de ellas.
+      expect(await service(prismaCon(1, 200, 400)).withinRateLimit('conv-1', 't1')).toEqual({
+        allowed: false,
+        reason: 'negocio-hora',
+      });
+    });
+
+    it('bloquea por el techo diario aunque la hora vaya holgada', async () => {
+      // El goteo sostenido: por hora nunca llega al techo, pero suma.
+      expect(await service(prismaCon(1, 10, 1500)).withinRateLimit('conv-1', 't1')).toEqual({
+        allowed: false,
+        reason: 'negocio-dia',
+      });
+    });
+
+    it('sin tenantId solo aplica el techo de la conversación', async () => {
+      const prisma = prismaCon(1, 9999, 9999);
+      expect(await service(prisma).withinRateLimit('conv-1')).toEqual({ allowed: true });
+      expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).not.toHaveBeenCalled();
+    });
+
+    it('al agotarse el presupuesto escala a una persona, no deja al cliente sin respuesta', async () => {
+      // Callarse, desde el lado del cliente, es que el negocio lo dejó en visto.
+      const toolsMock = { escalateToHuman: jest.fn().mockResolvedValue('ok') } as unknown as AiToolExecutorService;
+      const svc = new AiService(
+        makeConfig('sk-ant-test', 20), prismaCon(0), toolsMock, noMemory, noProfile, noKnowledge, noNvidia,
+      );
+
+      await svc.escalateForCostLimit(
+        { tenantId: 't1', tenantName: 'E', contactId: 'c', contactName: null, contactPhone: '1', conversationId: 'cv' },
+        'negocio-dia',
+      );
+
+      expect(toolsMock.escalateToHuman).toHaveBeenCalledTimes(1);
+      const [motivo] = (toolsMock.escalateToHuman as jest.Mock).mock.calls[0];
+      // El motivo lo lee el equipo en la bandeja: tiene que decir qué pasó.
+      expect(motivo).toMatch(/límite de respuestas automáticas/i);
     });
 
     it('respond lanza si la IA está deshabilitada', async () => {
