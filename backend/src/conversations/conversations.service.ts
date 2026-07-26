@@ -299,7 +299,7 @@ export class ConversationsService {
         role: m.direction === MessageDirection.INBOUND ? ('user' as const) : ('assistant' as const),
         text: this.pii.decrypt(m.content),
       }));
-      const summary = await this.ai.summarize(history);
+      const summary = await this.ai.summarize(history, { tenantId, conversationId });
       if (!summary) return;
       await this.contextMemory.remember(tenantId, conversation.contactId, conversationId, summary);
     } catch (err) {

@@ -4,6 +4,7 @@ import { AiService } from '../../src/ai/ai.service';
 import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { BusinessProfileService } from '../../src/business-profile/business-profile.service';
 import { KnowledgeRetrievalService } from '../../src/knowledge/knowledge-retrieval.service';
+import { AiUsageService } from '../../src/ai/ai-usage.service';
 import { NvidiaChatService } from '../../src/ai/nvidia-chat.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConversationContext } from '../../src/ai/ai.types';
@@ -40,9 +41,12 @@ describe('AiService (modo mock)', () => {
     isEnabled: () => false,
     respond: jest.fn(),
   } as unknown as NvidiaChatService;
+  // Registro de consumo: estos casos no comprueban el gasto, solo tiene que
+  // existir para que el servicio pueda construirse.
+  const noUsage = { record: jest.fn().mockResolvedValue(undefined) } as unknown as AiUsageService;
 
   it('isEnabled es true en modo mock aunque no haya API key', () => {
-    const service = new AiService(config, {} as PrismaService, {} as AiToolExecutorService, noMemory, noProfile, noKnowledge, noNvidia);
+    const service = new AiService(config, {} as PrismaService, {} as AiToolExecutorService, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
     expect(service.isEnabled()).toBe(true);
   });
 
@@ -50,7 +54,7 @@ describe('AiService (modo mock)', () => {
     const tools = {
       execute: jest.fn().mockResolvedValue('Cita creada (id x) para ...'),
     } as unknown as AiToolExecutorService;
-    const service = new AiService(config, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia);
+    const service = new AiService(config, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
 
     const reply = await service.respond(ctx, [
       { role: 'user', text: 'Hola, quiero agendar una cita' },
@@ -68,7 +72,7 @@ describe('AiService (modo mock)', () => {
 
   it('responde sin acciones cuando no se menciona una cita', async () => {
     const tools = { execute: jest.fn() } as unknown as AiToolExecutorService;
-    const service = new AiService(config, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia);
+    const service = new AiService(config, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
 
     const reply = await service.respond(ctx, [
       { role: 'user', text: 'Hola, tengo una duda general' },
@@ -86,7 +90,7 @@ describe('AiService (modo mock)', () => {
       describeWithoutExecuting: jest.fn().mockReturnValue('Cita creada para el lunes.'),
     } as unknown as AiToolExecutorService;
     const service = new AiService(
-      config, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+      config, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
     );
 
     const reply = await service.respond(
@@ -101,7 +105,7 @@ describe('AiService (modo mock)', () => {
   it('recupera memoria de contexto también en modo mock (prueba la tubería completa sin gastar créditos)', async () => {
     const tools = { execute: jest.fn() } as unknown as AiToolExecutorService;
     const contextMemory = { recall: jest.fn().mockResolvedValue([]) } as unknown as AiContextMemoryService;
-    const service = new AiService(config, {} as PrismaService, tools, contextMemory, noProfile, noKnowledge, noNvidia);
+    const service = new AiService(config, {} as PrismaService, tools, contextMemory, noProfile, noKnowledge, noNvidia, noUsage);
 
     await service.respond(ctx, [{ role: 'user', text: 'Hola' }]);
 

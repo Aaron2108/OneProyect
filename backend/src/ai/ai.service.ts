@@ -15,8 +15,9 @@ import {
   TOOL_ESCALATE_TO_HUMAN,
 } from './ai.constants';
 import { describeNow, resolveTimeZone } from './ai-datetime.util';
+import { AiUsageService } from './ai-usage.service';
 import { NvidiaChatService } from './nvidia-chat.service';
-import { AgentReply, ConversationContext, HistoryTurn, ToolIntent } from './ai.types';
+import { AgentReply, ConversationContext, HistoryTurn, TokenUsage, ToolIntent } from './ai.types';
 import type { ToolRunner } from './nvidia-chat.service';
 
 /** Cuál de los tres techos de costo se alcanzó. */
@@ -54,6 +55,7 @@ export class AiService {
     private readonly businessProfile: BusinessProfileService,
     private readonly knowledge: KnowledgeRetrievalService,
     private readonly nvidia: NvidiaChatService,
+    private readonly usage: AiUsageService,
   ) {
     const apiKey = this.config.get<string>('ai.apiKey') ?? '';
     this.provider = this.config.get<string>('ai.provider') ?? 'anthropic';
@@ -65,6 +67,17 @@ export class AiService {
     this.timeZone = resolveTimeZone(this.config.get<string>('business.timeZone'));
     // Sin API key la IA queda deshabilitada (arranque local sin credenciales).
     this.client = apiKey ? new Anthropic({ apiKey }) : null;
+  }
+
+  /**
+   * Modelo que de verdad atendió la llamada. Importa para el histórico de
+   * gasto: los tokens de dos modelos no cuestan lo mismo, así que apuntar
+   * siempre el de Anthropic dejaría el registro sin poder valorarse.
+   */
+  private activeModel(): string {
+    return this.provider === 'nvidia'
+      ? (this.config.get<string>('ai.nvidia.model') ?? 'nvidia')
+      : this.model;
   }
 
   /** La IA opera si es modo mock, o si el proveedor activo tiene credenciales. */
@@ -216,6 +229,19 @@ export class AiService {
         ? 'Listo, ya lo registré. ¿Necesitas algo más?'
         : '¿Podrías darme un poco más de detalle para ayudarte mejor?');
 
+    // Se apunta lo gastado aunque el modelo no devolviera texto útil: la llamada
+    // se pagó igual, y ocultarlo falsearía el histórico justo en los casos malos.
+    if (reply.usage) {
+      await this.usage.record({
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        provider: this.provider,
+        model: this.activeModel(),
+        purpose: 'respond',
+        usage: reply.usage,
+      });
+    }
+
     return options.simulateTools
       ? { text, actions: reply.actions, simulatedTools: simulated }
       : { text, actions: reply.actions };
@@ -238,6 +264,9 @@ export class AiService {
 
     const actions: string[] = [];
     let replyText = '';
+    // Se acumula a lo largo del bucle: cada vuelta de tool-calling es una
+    // llamada facturable más.
+    const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, calls: 0 };
 
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
       const response = await this.client.messages.create({
@@ -247,6 +276,9 @@ export class AiService {
         tools: AI_TOOLS,
         messages,
       });
+      usage.calls += 1;
+      usage.inputTokens += response.usage?.input_tokens ?? 0;
+      usage.outputTokens += response.usage?.output_tokens ?? 0;
 
       // Acumula el texto de esta respuesta.
       replyText = response.content
@@ -276,7 +308,7 @@ export class AiService {
       messages.push({ role: 'user', content: toolResults });
     }
 
-    return { text: replyText, actions };
+    return { text: replyText, actions, usage };
   }
 
   /**
@@ -440,7 +472,12 @@ export class AiService {
    * para guardar el resumen como recuerdo del contacto (ver
    * `AiContextMemoryService`). En modo mock no gasta créditos.
    */
-  async summarize(history: HistoryTurn[]): Promise<string> {
+  async summarize(
+    history: HistoryTurn[],
+    // Opcional para no romper a quien ya llamaba sin ello; sin origen el gasto
+    // no se puede imputar a ningun negocio y simplemente no se apunta.
+    origen?: { tenantId: string; conversationId?: string },
+  ): Promise<string> {
     if (history.length === 0) return '';
     if (this.provider === 'mock' || !this.client) {
       return this.mockSummarize(history);
@@ -455,6 +492,20 @@ export class AiService {
         'Resume la siguiente conversación de atención al cliente en 1-2 frases breves, en español, pensadas para que el equipo recuerde el contexto en una conversación futura con el mismo cliente (qué quería, qué se resolvió). No inventes datos que no estén en la conversación.',
       messages: [{ role: 'user', content: transcript }],
     });
+    if (origen) {
+      await this.usage.record({
+        tenantId: origen.tenantId,
+        conversationId: origen.conversationId,
+        provider: this.provider,
+        model: this.activeModel(),
+        purpose: 'summarize',
+        usage: {
+          inputTokens: response.usage?.input_tokens ?? 0,
+          outputTokens: response.usage?.output_tokens ?? 0,
+          calls: 1,
+        },
+      });
+    }
     return response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
@@ -495,6 +546,18 @@ export class AiService {
       max_tokens: MAX_SUMMARY_TOKENS,
       system,
       messages: [{ role: 'user', content: transcript || 'Sin mensajes previos.' }],
+    });
+    await this.usage.record({
+      tenantId: ctx.tenantId,
+      conversationId: ctx.conversationId,
+      provider: this.provider,
+      model: this.activeModel(),
+      purpose: 'follow-up',
+      usage: {
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+        calls: 1,
+      },
     });
     return response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

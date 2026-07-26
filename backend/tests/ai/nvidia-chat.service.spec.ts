@@ -167,7 +167,13 @@ describe('NvidiaChatService (proveedor de pruebas compatible con OpenAI)', () =>
       title: 'Corte',
       scheduled_at: '2026-08-01T15:00:00Z',
     });
-    expect(reply).toEqual({ text: 'Listo, te agendé el corte.', actions: ['create_appointment'] });
+    expect(reply).toMatchObject({
+      text: 'Listo, te agendé el corte.',
+      actions: ['create_appointment'],
+    });
+    // Una sola respuesta al cliente costó DOS llamadas a la API: es exactamente
+    // la diferencia que la guarda de costo no ve, porque cuenta mensajes.
+    expect(reply.usage?.calls).toBe(2);
 
     // El segundo turno debe llevar el mensaje del asistente CON sus tool_calls y
     // luego el resultado referenciando el mismo id: sin eso el proveedor rechaza

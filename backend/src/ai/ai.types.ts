@@ -26,6 +26,19 @@ export interface ToolIntent {
   input: Record<string, unknown>;
 }
 
+/**
+ * Consumo de una o varias llamadas al proveedor, ya sumado.
+ *
+ * `calls` es el número real de llamadas a la API, que NO es uno por respuesta:
+ * una respuesta con tool-calling encadena varias. Es justo la diferencia que la
+ * guarda de costo no puede ver, porque cuenta mensajes.
+ */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  calls: number;
+}
+
 /** Resultado de una respuesta del agente. */
 export interface AgentReply {
   /** Texto a enviar al cliente por WhatsApp. */
@@ -38,4 +51,10 @@ export interface AgentReply {
    * `actions` sí se ejecutaron.
    */
   simulatedTools?: ToolIntent[];
+  /**
+   * Tokens gastados en generar esta respuesta. Ausente en modo simulado, donde
+   * no hay llamada real que medir — registrar ceros ensuciaría el histórico de
+   * gasto con actividad que nunca costó nada.
+   */
+  usage?: TokenUsage;
 }

@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from 'recharts';
-import { CalendarClock, MessageSquare, Send, Sparkles, Users } from 'lucide-react';
+import { CalendarClock, Coins, MessageSquare, Send, Sparkles, Users } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Select } from '@/components/ui/Input';
 import { CountUp } from '@/components/ui/CountUp';
 import { RadialGauge } from '@/components/ui/RadialGauge';
 import { KpiSkeleton } from '@/components/ui/Skeleton';
-import type { MetricsOverview } from '@/lib/types';
+import type { AiUsageTotals, MetricsOverview } from '@/lib/types';
 
 const CHART_COLORS = { in: 'var(--warn)', human: 'var(--brand)', ai: 'var(--ai)' };
+
+/** Nombres legibles de las finalidades que devuelve la API. */
+const PURPOSE_LABELS: Record<string, string> = {
+  respond: 'Responder a clientes',
+  summarize: 'Resumir al cerrar',
+  'follow-up': 'Seguimientos',
+};
 
 function Kpi({
   label,
@@ -58,6 +65,7 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>):
 export function MetricsPage({ active }: { active: boolean }): JSX.Element {
   const [range, setRange] = useState(7);
   const [data, setData] = useState<MetricsOverview | null>(null);
+  const [usage, setUsage] = useState<AiUsageTotals | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
 
@@ -72,7 +80,14 @@ export function MetricsPage({ active }: { active: boolean }): JSX.Element {
     const from = new Date(to.getTime() - (range - 1) * 86400000);
     from.setHours(0, 0, 0, 0);
     const qs = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
-    setData(await api<MetricsOverview>(`/metrics/overview?${qs}`));
+    // En paralelo: son dos preguntas distintas (cuánto se trabajó y cuánto
+    // costó) y ninguna debe esperar a la otra.
+    const [overview, consumo] = await Promise.all([
+      api<MetricsOverview>(`/metrics/overview?${qs}`),
+      api<AiUsageTotals>(`/metrics/ai-usage?${qs}`),
+    ]);
+    setData(overview);
+    setUsage(consumo);
     setLoadedOnce(true);
   }
 
@@ -146,6 +161,42 @@ export function MetricsPage({ active }: { active: boolean }): JSX.Element {
               </div>
             </div>
           </div>
+
+          {usage && usage.calls > 0 && (
+            <div className="span-4 reveal kpi-card">
+              <h3 className="mb-1.5 flex items-center gap-2 font-display text-base font-bold">
+                <Coins size={16} strokeWidth={2} className="text-ai" /> Consumo de la IA
+              </h3>
+              <p className="mb-4 text-[13px] text-ink-soft">
+                Lo que tu agente gastó de verdad en el período. Se muestran tokens y no un
+                importe: el precio depende del modelo y de la tarifa vigente, y calcularlo aquí
+                daría una cifra que envejece mal.
+              </p>
+              <div className="flex flex-wrap gap-x-10 gap-y-4">
+                <div>
+                  <div className="tabular-nums font-display text-xl font-bold">{usage.calls.toLocaleString('es')}</div>
+                  <div className="text-[12.5px] text-ink-soft">llamadas a la API</div>
+                </div>
+                <div>
+                  <div className="tabular-nums font-display text-xl font-bold">{usage.inputTokens.toLocaleString('es')}</div>
+                  <div className="text-[12.5px] text-ink-soft">tokens de entrada</div>
+                </div>
+                <div>
+                  <div className="tabular-nums font-display text-xl font-bold">{usage.outputTokens.toLocaleString('es')}</div>
+                  <div className="text-[12.5px] text-ink-soft">tokens de salida</div>
+                </div>
+              </div>
+              {/* Las llamadas no son una por respuesta: agendar una cita o mirar
+                  el catálogo encadena varias, y aquí se ve. */}
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-3 text-[12.5px] text-ink-soft">
+                {usage.byPurpose.map((p) => (
+                  <span key={p.purpose}>
+                    {PURPOSE_LABELS[p.purpose] ?? p.purpose}: <b>{p.calls.toLocaleString('es')}</b>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="span-4 reveal kpi-card">
             <h3 className="mb-4 font-display text-base font-bold">Actividad · últimos {chartData.length} días</h3>

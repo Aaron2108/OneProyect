@@ -98,6 +98,14 @@ export interface Appointment {
   contact: { id: string; name: string | null; phone: string };
 }
 
+/** Consumo real de la IA del negocio en el período. Tokens, no dinero. */
+export interface AiUsageTotals {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  byPurpose: Array<{ purpose: string; calls: number; inputTokens: number; outputTokens: number }>;
+}
+
 export interface BusinessProfile {
   businessHours: string | null;
   services: string | null;

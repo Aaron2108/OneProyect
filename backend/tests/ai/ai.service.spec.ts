@@ -4,6 +4,7 @@ import { AiService } from '../../src/ai/ai.service';
 import { AI_TOOLS, AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { BusinessProfileService } from '../../src/business-profile/business-profile.service';
 import { KnowledgeRetrievalService } from '../../src/knowledge/knowledge-retrieval.service';
+import { AiUsageService } from '../../src/ai/ai-usage.service';
 import { NvidiaChatService } from '../../src/ai/nvidia-chat.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
@@ -34,16 +35,19 @@ describe('AiService', () => {
     isEnabled: () => false,
     respond: jest.fn(),
   } as unknown as NvidiaChatService;
+  // Registro de consumo: estos casos no comprueban el gasto, solo tiene que
+  // existir para que el servicio pueda construirse.
+  const noUsage = { record: jest.fn().mockResolvedValue(undefined) } as unknown as AiUsageService;
 
   it('isEnabled es false sin API key', () => {
     const prisma = {} as PrismaService;
-    const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
+    const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
     expect(service.isEnabled()).toBe(false);
   });
 
   it('isEnabled es true con API key', () => {
     const prisma = {} as PrismaService;
-    const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
+    const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
     expect(service.isEnabled()).toBe(true);
   });
 
@@ -60,7 +64,7 @@ describe('AiService', () => {
       }) as unknown as PrismaService;
 
     const service = (prisma: PrismaService) =>
-      new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
+      new AiService(makeConfig('sk-ant-test', 20), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
 
     it('permite cuando el conteo está por debajo del límite', async () => {
       expect(await service(prismaCon(5)).withinRateLimit('conv-1', 't1')).toEqual({ allowed: true });
@@ -100,7 +104,7 @@ describe('AiService', () => {
       // Callarse, desde el lado del cliente, es que el negocio lo dejó en visto.
       const toolsMock = { escalateToHuman: jest.fn().mockResolvedValue('ok') } as unknown as AiToolExecutorService;
       const svc = new AiService(
-        makeConfig('sk-ant-test', 20), prismaCon(0), toolsMock, noMemory, noProfile, noKnowledge, noNvidia,
+        makeConfig('sk-ant-test', 20), prismaCon(0), toolsMock, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
       );
 
       await svc.escalateForCostLimit(
@@ -116,7 +120,7 @@ describe('AiService', () => {
 
     it('respond lanza si la IA está deshabilitada', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
+      const service = new AiService(makeConfig(''), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
       await expect(
         service.respond(
           {
@@ -136,7 +140,7 @@ describe('AiService', () => {
   it('devuelve un texto de cierre si el bucle de tools se agota sin texto (RF-NFR)', async () => {
     const prisma = {} as PrismaService;
     const toolsMock = { execute: jest.fn().mockResolvedValue('ok') } as unknown as AiToolExecutorService;
-    const service = new AiService(makeConfig('sk-ant-test'), prisma, toolsMock, noMemory, noProfile, noKnowledge, noNvidia);
+    const service = new AiService(makeConfig('sk-ant-test'), prisma, toolsMock, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
     // El modelo siempre pide tool_use y nunca devuelve texto → agota el bucle.
     const create = jest.fn().mockResolvedValue({
       stop_reason: 'tool_use',
@@ -156,7 +160,7 @@ describe('AiService', () => {
 
   it('el system prompt le dice al modelo qué día es hoy y en qué zona agendar', () => {
     const service = new AiService(
-      makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+      makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
     );
 
     const prompt = service.buildSystemPrompt(
@@ -203,7 +207,7 @@ describe('AiService', () => {
         describeWithoutExecuting: jest.fn(),
       } as unknown as AiToolExecutorService;
       const service = new AiService(
-        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon('Europe/Madrid'), noKnowledge, noNvidia,
+        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon('Europe/Madrid'), noKnowledge, noNvidia, noUsage,
       );
 
       await service.respond(ctx, [{ role: 'user', text: 'quiero una cita' }]);
@@ -217,7 +221,7 @@ describe('AiService', () => {
         describeWithoutExecuting: jest.fn(),
       } as unknown as AiToolExecutorService;
       const service = new AiService(
-        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon(null), noKnowledge, noNvidia,
+        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon(null), noKnowledge, noNvidia, noUsage,
       );
 
       await service.respond(ctx, [{ role: 'user', text: 'quiero una cita' }]);
@@ -233,7 +237,7 @@ describe('AiService', () => {
         describeWithoutExecuting: jest.fn(),
       } as unknown as AiToolExecutorService;
       const service = new AiService(
-        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon('Marte/Olympus'), noKnowledge, noNvidia,
+        mockConfig, {} as PrismaService, toolsMock, noMemory, profileCon('Marte/Olympus'), noKnowledge, noNvidia, noUsage,
       );
 
       await service.respond(ctx, [{ role: 'user', text: 'quiero una cita' }]);
@@ -243,7 +247,7 @@ describe('AiService', () => {
 
     it('el system prompt anuncia la zona del negocio', () => {
       const service = new AiService(
-        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
       );
 
       const prompt = service.buildSystemPrompt(
@@ -272,7 +276,7 @@ describe('AiService', () => {
 
     const prompt = () =>
       new AiService(
-        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
       ).buildSystemPrompt(
         { tenantId: 't', tenantName: 'E', contactId: 'c', contactName: 'Ana', contactPhone: '1', conversationId: 'cv' },
       );
@@ -301,7 +305,7 @@ describe('AiService', () => {
         describeWithoutExecuting: jest.fn(),
       } as unknown as AiToolExecutorService;
       const service = new AiService(
-        mockConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, noNvidia,
+        mockConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
       );
 
       const reply = await service.respond(ctx, [{ role: 'user', text: 'quiero hacer un reclamo' }]);
@@ -320,7 +324,7 @@ describe('AiService', () => {
         describeWithoutExecuting: jest.fn().mockReturnValue('Conversación pasada a una persona.'),
       } as unknown as AiToolExecutorService;
       const service = new AiService(
-        mockConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, noNvidia,
+        mockConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
       );
 
       const reply = await service.respond(
@@ -338,7 +342,7 @@ describe('AiService', () => {
       const contextMemory = {
         recall: jest.fn().mockResolvedValue(['El cliente preguntó por precios de envío.']),
       } as unknown as AiContextMemoryService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, contextMemory, noProfile, noKnowledge, noNvidia);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, contextMemory, noProfile, noKnowledge, noNvidia, noUsage);
       const create = jest.fn().mockResolvedValue({
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hola de nuevo' }],
@@ -357,7 +361,7 @@ describe('AiService', () => {
 
     it('summarize en modo real pide un resumen corto a Claude', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
       const create = jest.fn().mockResolvedValue({
         content: [{ type: 'text', text: 'El cliente agendó una cita para el jueves.' }],
       });
@@ -373,7 +377,7 @@ describe('AiService', () => {
     });
 
     it('summarize devuelve vacío sin historial', async () => {
-      const service = new AiService(makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia);
+      const service = new AiService(makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
       expect(await service.summarize([])).toBe('');
     });
   });
@@ -385,7 +389,7 @@ describe('AiService', () => {
         describe: jest.fn().mockResolvedValue(['Horario de atención: lunes a viernes 9-18h.']),
         timeZoneOf: jest.fn().mockResolvedValue(null),
       } as unknown as BusinessProfileService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge, noNvidia);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge, noNvidia, noUsage);
       const create = jest.fn().mockResolvedValue({
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hola' }],
@@ -404,7 +408,7 @@ describe('AiService', () => {
 
     it('sin perfil configurado, no añade nada extra al prompt', async () => {
       const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
       const create = jest.fn().mockResolvedValue({
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hola' }],
@@ -437,7 +441,7 @@ describe('AiService', () => {
         describe: jest.fn().mockResolvedValue(['Tono/estilo con el que debes responder: Cercano.']),
         timeZoneOf: jest.fn().mockResolvedValue(null),
       } as unknown as BusinessProfileService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge, noNvidia);
+      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge, noNvidia, noUsage);
       const create = jest.fn().mockResolvedValue({
         content: [{ type: 'text', text: 'Hola Ana, ¿seguís por ahí?' }],
       });
@@ -459,7 +463,7 @@ describe('AiService', () => {
         noMemory,
         noProfile,
         noKnowledge,
-        noNvidia,
+        noNvidia, noUsage,
       );
       (service as unknown as { provider: string }).provider = 'mock';
 
@@ -470,7 +474,7 @@ describe('AiService', () => {
     });
   });
 
-  describe('proveedor de pruebas NVIDIA (AI_PROVIDER=nvidia)', () => {
+  describe('proveedor de pruebas NVIDIA (AI_PROVIDER=nvidia, noUsage)', () => {
     const ctx = {
       tenantId: 't1',
       tenantName: 'Empresa',
@@ -490,7 +494,7 @@ describe('AiService', () => {
         respond: jest.fn(),
       } as unknown as NvidiaChatService;
       const service = new AiService(
-        nvidiaConfig, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, conCredenciales,
+        nvidiaConfig, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, conCredenciales, noUsage,
       );
       // Sin ANTHROPIC_API_KEY, pero con el proveedor de pruebas configurado.
       expect(service.isEnabled()).toBe(true);
@@ -510,7 +514,7 @@ describe('AiService', () => {
       } as unknown as NvidiaChatService;
       const toolsMock = { execute: jest.fn() } as unknown as AiToolExecutorService;
       const service = new AiService(
-        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, profile, knowledge, nvidia,
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, profile, knowledge, nvidia, noUsage,
       );
 
       const reply = await service.respond(ctx, [{ role: 'user', text: 'Quiero un turno' }]);
@@ -532,7 +536,7 @@ describe('AiService', () => {
       } as unknown as NvidiaChatService;
       const toolsMock = { execute: jest.fn().mockResolvedValue('ok') } as unknown as AiToolExecutorService;
       const service = new AiService(
-        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia,
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia, noUsage,
       );
       (nvidia.respond as jest.Mock).mockImplementation(
         async (_system: string, _history: unknown, run: (n: string, i: unknown) => Promise<string>) => {
@@ -573,7 +577,7 @@ describe('AiService', () => {
         ),
       } as unknown as NvidiaChatService;
       const service = new AiService(
-        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia,
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia, noUsage,
       );
 
       const reply = await service.respond(
@@ -613,7 +617,7 @@ describe('AiService', () => {
         ),
       } as unknown as NvidiaChatService;
       const service = new AiService(
-        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia,
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia, noUsage,
       );
 
       const reply = await service.respond(
@@ -650,7 +654,7 @@ describe('AiService', () => {
         ),
       } as unknown as NvidiaChatService;
       const service = new AiService(
-        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia,
+        nvidiaConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, nvidia, noUsage,
       );
 
       const reply = await service.respond(ctx, [{ role: 'user', text: 'quiero un corte' }]);
@@ -669,7 +673,7 @@ describe('AiService', () => {
         respond: jest.fn().mockResolvedValue({ text: '', actions: ['create_reminder'] }),
       } as unknown as NvidiaChatService;
       const service = new AiService(
-        nvidiaConfig, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, nvidia,
+        nvidiaConfig, {} as PrismaService, tools, noMemory, noProfile, noKnowledge, nvidia, noUsage,
       );
 
       const reply = await service.respond(ctx, [{ role: 'user', text: 'Recuérdame algo' }]);

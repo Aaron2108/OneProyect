@@ -107,6 +107,7 @@ model Tenant {
   businessProfile           BusinessProfile?
   knowledgeDocuments        KnowledgeDocument[]
   products                  Product[]
+  aiUsage                   AiUsage[]
 
   @@map("tenants")
 }
@@ -464,6 +465,36 @@ model KnowledgeChunk {
   @@index([tenantId])
   @@index([documentId])
   @@map("knowledge_chunks")
+}
+
+// Consumo real de la IA, una fila por llamada a la API del proveedor.
+//
+// Existe porque la guarda de costo cuenta MENSAJES, y un mensaje con
+// tool-calling gasta varias llamadas: ese contador pone un techo pero no dice
+// cuánto se gasta. Y el gasto no se puede reconstruir hacia atrás — lo que pase
+// antes de que esto exista queda sin medir para siempre.
+//
+// Se guardan tokens (un hecho que devuelve el proveedor) y no dinero: el precio
+// por modelo cambia y no se inventa aquí. Ver docs/DECISIONS.md.
+model AiUsage {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  // Nulo en las llamadas que no nacen de una conversación concreta (por ejemplo
+  // el resumen que se genera al cerrarla ya no pertenece a un mensaje).
+  conversationId String?  @map("conversation_id")
+  provider       String
+  model          String
+  // Para qué se llamó: responder, resumir, seguimiento. Permite ver qué parte
+  // del gasto es atención al cliente y qué parte es trabajo de fondo.
+  purpose        String
+  inputTokens    Int      @map("input_tokens")
+  outputTokens   Int      @map("output_tokens")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("ai_usage")
 }
 
 // Catálogo de productos del negocio. A diferencia de la documentación

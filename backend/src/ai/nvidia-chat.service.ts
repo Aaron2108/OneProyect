@@ -7,7 +7,7 @@ import {
   MAX_TOOL_ITERATIONS,
   NVIDIA_REQUEST_TIMEOUT_MS,
 } from './ai.constants';
-import { AgentReply, HistoryTurn } from './ai.types';
+import { AgentReply, HistoryTurn, TokenUsage } from './ai.types';
 
 /**
  * Proveedor de pruebas compatible con la API de OpenAI (NVIDIA NIM), para poder
@@ -50,6 +50,9 @@ interface OpenAiChatCompletion {
     finish_reason?: string;
     message?: { content?: string | null; tool_calls?: OpenAiToolCall[] };
   }>;
+  // Nombres de OpenAI, no de Anthropic: `prompt`/`completion` en vez de
+  // `input`/`output`. Opcional porque no todo proveedor compatible lo devuelve.
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
 /**
@@ -130,9 +133,12 @@ export class NvidiaChatService {
 
     const actions: string[] = [];
     let replyText = '';
+    // Se acumula a lo largo del bucle: cada vuelta de tool-calling es una
+    // llamada facturable más.
+    const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, calls: 0 };
 
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const message = await this.complete(messages);
+      const message = await this.complete(messages, usage);
       replyText = stripReasoning(message.content ?? '');
 
       const toolCalls = message.tool_calls ?? [];
@@ -166,11 +172,12 @@ export class NvidiaChatService {
       }
     }
 
-    return { text: replyText, actions };
+    return { text: replyText, actions, usage };
   }
 
   private async complete(
     messages: OpenAiMessage[],
+    usage: TokenUsage,
   ): Promise<{ content?: string | null; tool_calls?: OpenAiToolCall[] }> {
     // Sin límite, un modelo que arranca en frío puede dejar colgado al worker de
     // WhatsApp indefinidamente. El temporizador se cancela siempre al terminar
@@ -214,6 +221,12 @@ export class NvidiaChatService {
     }
 
     const data = (await response.json()) as OpenAiChatCompletion;
+    // Se apunta antes de validar el mensaje: la llamada ya se hizo y ya se paga,
+    // aunque la respuesta venga mal formada.
+    usage.calls += 1;
+    usage.inputTokens += data.usage?.prompt_tokens ?? 0;
+    usage.outputTokens += data.usage?.completion_tokens ?? 0;
+
     const message = data.choices?.[0]?.message;
     if (!message) {
       throw new Error('NVIDIA devolvió una respuesta sin mensaje');

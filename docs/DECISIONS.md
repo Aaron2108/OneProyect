@@ -380,3 +380,21 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **Los dos conteos del negocio van en una transacción**: son dos ventanas del mismo instante, y leerlas por separado podría dar una combinación que nunca existió.
 
 **`tenantId` es opcional en la comprobación**: sin él solo se aplica el techo de la conversación, exactamente como se comportaba antes. Así ningún llamador queda con un cambio de semántica silencioso.
+
+## 2026-07-25 — Medir el gasto real de la IA (tokens por llamada)
+
+**Decisión**: una tabla `ai_usage` con una fila por llamada al proveedor (tokens de entrada y de salida, modelo, proveedor y finalidad), y un endpoint `GET /metrics/ai-usage` que la agrega por negocio y período. Se muestra en el panel de métricas.
+
+**Motivo**: la guarda de costo cuenta **mensajes**, y eso basta para poner un techo pero no dice cuánto se gasta — una respuesta con tool-calling encadena varias llamadas y cuenta como una sola. El test del proveedor de pruebas lo deja a la vista: una única respuesta al cliente costó **dos** llamadas. Además, el gasto **no se puede reconstruir hacia atrás**: lo que pase antes de que exista este registro queda sin medir para siempre, así que tiene que estar antes de que llegue tráfico real.
+
+**Se guardan tokens y no dinero**: el precio por modelo cambia con el tiempo y no se inventa en el código. Con los tokens y la tarifa vigente la cuenta se hace cuando haga falta; al revés no — un importe calculado con una tarifa vieja queda mal para siempre, y sin manera de saberlo. El panel lo dice explícitamente en vez de mostrar una cifra en euros que no podría respaldar.
+
+**Se apunta el modelo que de verdad atendió la llamada** (`activeModel()`), no el configurado para Anthropic: con el proveedor de pruebas activo, registrar el de Anthropic dejaría el histórico sin poder valorarse.
+
+**`record` nunca propaga**: si la escritura falla se pierde una fila del histórico; si propagara, se perdería la conversación. Medir el gasto no puede costarle la respuesta al cliente.
+
+**Sin llamadas no se apunta nada**: el modo simulado no gasta, y una fila de ceros ensuciaría el histórico con actividad que nunca costó dinero.
+
+**La finalidad (`respond` / `summarize` / `follow-up`) se guarda por separado** para poder distinguir qué parte del gasto es atender clientes y qué parte es trabajo de fondo — son dos decisiones distintas si hay que recortar.
+
+**El endpoint va aparte de `/metrics/overview`**: responde a otra pregunta (cuánto cuesta, no cuánto se trabajó) y su tabla crece a otro ritmo; mezclarlas encarecería el resumen que se pide en cada carga del panel. El panel las pide en paralelo.
