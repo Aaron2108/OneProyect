@@ -486,6 +486,11 @@ model Product {
   // Un producto descatalogado se desactiva en vez de borrarse, para no perder el
   // histórico; la IA solo ve los activos.
   active      Boolean  @default(true)
+  // Nombre + SKU + descripción en minúsculas y sin tildes, denormalizado en cada
+  // escritura por `ProductsService`. El cliente escribe "pantalon" desde el móvil
+  // y el producto se llama "Pantalón": buscar sobre las columnas originales le
+  // hacía responder al agente que no existía. Ver docs/DECISIONS.md.
+  searchText  String   @default("") @map("search_text")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -493,5 +498,8 @@ model Product {
 
   @@unique([tenantId, sku])
   @@index([tenantId, active])
+  // GIN de trigramas: acelera el `LIKE '%…%'` de la búsqueda y habilita la
+  // tolerancia a erratas (`<%` / `word_similarity`). Requiere `pg_trgm`.
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("products")
 }

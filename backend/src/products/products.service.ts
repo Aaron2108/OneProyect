@@ -34,20 +34,14 @@ export class ProductsService {
     opts: ListProductsDto,
   ): Promise<{ items: Product[]; nextCursor: string | null }> {
     const limit = opts.limit ?? 25;
-    const q = opts.q?.trim();
+    // `searchText` ya está en minúsculas y sin tildes, así que basta con
+    // normalizar la consulta igual: "Pantalón" y "pantalon" caen en lo mismo.
+    const q = normalizeForSearch(opts.q ?? '');
     const items = await this.prisma.product.findMany({
       where: {
         tenantId,
         ...(opts.onlyActive === 'true' ? { active: true } : {}),
-        ...(q
-          ? {
-              OR: [
-                { name: { contains: q, mode: 'insensitive' } },
-                { sku: { contains: q, mode: 'insensitive' } },
-                { description: { contains: q, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
+        ...(q ? { searchText: { contains: q } } : {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
@@ -73,24 +67,65 @@ export class ProductsService {
       where: {
         tenantId,
         active: true,
-        OR: terminos.flatMap((t) => [
-          { name: { contains: t, mode: 'insensitive' as const } },
-          { sku: { contains: t, mode: 'insensitive' as const } },
-          { description: { contains: t, mode: 'insensitive' as const } },
-        ]),
+        OR: terminos.map((t) => ({ searchText: { contains: t } })),
       },
       // Se piden de más porque el orden útil se calcula abajo, no en SQL.
       take: limit * 4,
     });
 
-    return candidatos
-      .map((p) => {
-        const texto = `${p.name} ${p.sku ?? ''} ${p.description ?? ''}`.toLowerCase();
-        return { p, aciertos: terminos.filter((t) => texto.includes(t)).length };
-      })
-      .sort((a, b) => b.aciertos - a.aciertos || a.p.name.localeCompare(b.p.name))
-      .slice(0, limit)
-      .map((x) => x.p);
+    if (candidatos.length > 0) {
+      return candidatos
+        .map((p) => ({
+          p,
+          aciertos: terminos.filter((t) => p.searchText.includes(t)).length,
+        }))
+        .sort((a, b) => b.aciertos - a.aciertos || a.p.name.localeCompare(b.p.name))
+        .slice(0, limit)
+        .map((x) => x.p);
+    }
+
+    // Nada coincide literalmente: puede ser una errata ("pantalonn"). Antes de
+    // decirle al cliente que no existe, se reintenta por parecido.
+    return this.searchByLikeness(tenantId, terminos, limit);
+  }
+
+  /**
+   * Rescate por similitud de trigramas para cuando la coincidencia literal no
+   * devuelve nada. `<%` compara el término contra el fragmento más parecido del
+   * texto, no contra el texto entero: sin eso, una palabra corta contra una
+   * descripción larga nunca supera el umbral.
+   *
+   * Se piden solo los `id` y se releen con Prisma porque `$queryRaw` devuelve
+   * las columnas tal cual están en la base (`price_cents`), sin el mapeo del
+   * modelo — quien llama espera un `Product` de verdad.
+   */
+  private async searchByLikeness(
+    tenantId: string,
+    terminos: string[],
+    limit: number,
+  ): Promise<Product[]> {
+    const filas = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT p.id
+      FROM products p
+      WHERE p.tenant_id = ${tenantId}
+        AND p.active = true
+        AND EXISTS (
+          SELECT 1 FROM unnest(${terminos}::text[]) AS t WHERE t <% p.search_text
+        )
+      ORDER BY (
+        SELECT max(word_similarity(t, p.search_text))
+        FROM unnest(${terminos}::text[]) AS t
+      ) DESC
+      LIMIT ${limit}
+    `;
+    if (filas.length === 0) return [];
+
+    const encontrados = await this.prisma.product.findMany({
+      where: { id: { in: filas.map((f) => f.id) } },
+    });
+    // `findMany` no conserva el orden por similitud que calculó Postgres.
+    const porId = new Map(encontrados.map((p) => [p.id, p]));
+    return filas.map((f) => porId.get(f.id)).filter((p): p is Product => p !== undefined);
   }
 
   async get(tenantId: string, id: string): Promise<Product> {
@@ -101,35 +136,46 @@ export class ProductsService {
 
   async create(tenantId: string, dto: CreateProductDto): Promise<Product> {
     await this.ensureSkuFree(tenantId, dto.sku);
+    const name = dto.name.trim();
+    const sku = dto.sku?.trim() || null;
+    const description = dto.description?.trim() || null;
     return this.prisma.product.create({
       data: {
         tenantId,
-        name: dto.name.trim(),
-        sku: dto.sku?.trim() || null,
-        description: dto.description?.trim() || null,
+        name,
+        sku,
+        description,
         priceCents: dto.priceCents ?? null,
         currency: dto.currency?.toUpperCase() || null,
         stock: dto.stock ?? 0,
         active: dto.active ?? true,
+        searchText: buildSearchText(name, sku, description),
       },
     });
   }
 
   async update(tenantId: string, id: string, dto: UpdateProductDto): Promise<Product> {
-    await this.get(tenantId, id); // 404 si es de otro tenant
+    const actual = await this.get(tenantId, id); // 404 si es de otro tenant
     if (dto.sku !== undefined) await this.ensureSkuFree(tenantId, dto.sku, id);
+
+    const name = dto.name !== undefined ? dto.name.trim() : actual.name;
+    const sku = dto.sku !== undefined ? dto.sku.trim() || null : actual.sku;
+    const description =
+      dto.description !== undefined ? dto.description.trim() || null : actual.description;
+
     return this.prisma.product.update({
       where: { id },
       data: {
-        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-        ...(dto.sku !== undefined ? { sku: dto.sku.trim() || null } : {}),
-        ...(dto.description !== undefined
-          ? { description: dto.description.trim() || null }
-          : {}),
+        ...(dto.name !== undefined ? { name } : {}),
+        ...(dto.sku !== undefined ? { sku } : {}),
+        ...(dto.description !== undefined ? { description } : {}),
         ...(dto.priceCents !== undefined ? { priceCents: dto.priceCents } : {}),
         ...(dto.currency !== undefined ? { currency: dto.currency.toUpperCase() } : {}),
         ...(dto.stock !== undefined ? { stock: dto.stock } : {}),
         ...(dto.active !== undefined ? { active: dto.active } : {}),
+        // Se recalcula desde los valores ya fusionados: cambiar solo la
+        // descripción no puede dejar el nombre fuera del índice de búsqueda.
+        searchText: buildSearchText(name, sku, description),
       },
     });
   }
@@ -195,12 +241,14 @@ export class ProductsService {
           continue;
         }
 
+        const description = valor(columnas.description) || null;
         const datos = {
           name,
-          description: valor(columnas.description) || null,
+          description,
           priceCents,
           currency: valor(columnas.currency).toUpperCase() || null,
           stock,
+          searchText: buildSearchText(name, sku, description),
         };
 
         // Sin SKU no hay forma de saber si es el mismo producto: se crea.
@@ -238,6 +286,31 @@ export class ProductsService {
 }
 
 /**
+ * Deja el texto en minúsculas y sin signos diacríticos.
+ *
+ * Nadie escribe tildes desde el teclado del móvil: el producto está guardado
+ * como "Pantalón" y el cliente pregunta por "pantalon". Se descompone en NFD y
+ * se quitan las marcas combinantes, así que "ñ" pasa a "n" — buscado: quien
+ * escribe "nino" espera encontrar "niño".
+ */
+export function normalizeForSearch(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/** Texto normalizado que se guarda en `Product.searchText` y se indexa. */
+export function buildSearchText(
+  name: string,
+  sku?: string | null,
+  description?: string | null,
+): string {
+  return normalizeForSearch([name, sku ?? '', description ?? ''].join(' ')).replace(/\s+/g, ' ');
+}
+
+/**
  * Convierte lo que escribe el cliente en términos de búsqueda.
  *
  * Un cliente pregunta "¿tienen pantalones negros?" y el producto se llama
@@ -246,12 +319,10 @@ export class ProductsService {
  * la forma sin plural — medido con el agente real, que respondía "no lo
  * encontramos" sobre un producto que sí estaba en el catálogo.
  *
- * Limitación conocida: no ignora tildes ("Pantalón" no casa con "pantalon").
- * Resolverlo bien pide la extensión `unaccent`/`pg_trgm` de Postgres.
+ * Los términos salen ya normalizados para poder compararlos con `searchText`.
  */
 export function buildSearchTerms(query: string): string[] {
-  const palabras = query
-    .toLowerCase()
+  const palabras = normalizeForSearch(query)
     .split(/[^\p{L}\p{N}-]+/u)
     .filter((palabra) => palabra.length >= 3);
 

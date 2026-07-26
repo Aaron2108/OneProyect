@@ -1,6 +1,20 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { buildSearchTerms, ProductsService } from '../../src/products/products.service';
+import {
+  buildSearchTerms,
+  buildSearchText,
+  normalizeForSearch,
+  ProductsService,
+} from '../../src/products/products.service';
+
+/**
+ * Un producto tal y como sale de la base: `searchText` ya normalizado, que es
+ * justo lo que la búsqueda mira. Construirlo con la misma función que usa el
+ * servicio al escribir evita que los tests pasen con datos imposibles.
+ */
+function producto(id: string, name: string, description: string | null = null) {
+  return { id, name, sku: null, description, searchText: buildSearchText(name, null, description) };
+}
 
 describe('ProductsService', () => {
   let prisma: {
@@ -11,6 +25,7 @@ describe('ProductsService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    $queryRaw: jest.Mock;
   };
   let service: ProductsService;
 
@@ -23,6 +38,7 @@ describe('ProductsService', () => {
         update: jest.fn().mockImplementation(({ data }) => ({ id: 'p1', ...data })),
         delete: jest.fn().mockResolvedValue({}),
       },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     service = new ProductsService(prisma as unknown as PrismaService);
   });
@@ -66,8 +82,8 @@ describe('ProductsService', () => {
 
     it('ordena primero el producto que coincide con más términos', async () => {
       prisma.product.findMany.mockResolvedValue([
-        { id: '1', name: 'Pantalon beige', sku: null, description: null },
-        { id: '2', name: 'Pantalon negro', sku: null, description: null },
+        producto('1', 'Pantalon beige'),
+        producto('2', 'Pantalon negro'),
       ]);
 
       const resultado = await service.searchForAi('t1', 'pantalon negro');
@@ -76,13 +92,113 @@ describe('ProductsService', () => {
     });
 
     it('basta con que coincida un término: no excluye alternativas', async () => {
-      prisma.product.findMany.mockResolvedValue([
-        { id: '1', name: 'Pantalon beige', sku: null, description: null },
-      ]);
+      prisma.product.findMany.mockResolvedValue([producto('1', 'Pantalon beige')]);
       const resultado = await service.searchForAi('t1', 'pantalon negro');
       // Sigue ofreciendo el beige: es mejor mostrar una alternativa que decir
       // que no hay nada.
       expect(resultado).toHaveLength(1);
+    });
+  });
+
+  describe('tildes', () => {
+    it('el cliente escribe sin tildes y el producto las tiene', () => {
+      // Nadie pone tildes desde el móvil. Antes, "pantalon" no encontraba
+      // "Pantalón" y el agente respondía que no lo vendían.
+      const guardado = buildSearchText('Pantalón de vestir', null, null);
+      expect(buildSearchTerms('pantalon').every((t) => guardado.includes(t))).toBe(true);
+    });
+
+    it('y al revés: el producto sin tildes y el cliente con ellas', () => {
+      const guardado = buildSearchText('Pantalon de vestir', null, null);
+      expect(buildSearchTerms('pantalón').every((t) => guardado.includes(t))).toBe(true);
+    });
+
+    it('la ñ se pliega a n: quien escribe "nino" busca "niño"', () => {
+      expect(normalizeForSearch('Niño')).toBe('nino');
+    });
+
+    it('el texto indexado junta nombre, SKU y descripción ya normalizados', () => {
+      expect(buildSearchText('Camisón', 'Á-1', 'Algodón')).toBe('camison a-1 algodon');
+    });
+
+    it('la búsqueda del panel también ignora las tildes', async () => {
+      await service.list('t1', { q: 'PANTALÓN' } as never);
+      expect(prisma.product.findMany.mock.calls[0][0].where.searchText).toEqual({
+        contains: 'pantalon',
+      });
+    });
+
+    it('guarda el texto normalizado al crear', async () => {
+      await service.create('t1', { name: 'Pantalón', description: 'Algodón' });
+      expect(prisma.product.create.mock.calls[0][0].data.searchText).toBe('pantalon algodon');
+    });
+
+    it('al editar solo la descripción, el nombre sigue siendo buscable', async () => {
+      // Recalcular solo con lo que llega en el DTO habría borrado el nombre del
+      // texto indexado y el producto habría desaparecido de las búsquedas.
+      prisma.product.findFirst.mockResolvedValue({
+        id: 'p1',
+        name: 'Pantalón',
+        sku: null,
+        description: 'viejo',
+      });
+      await service.update('t1', 'p1', { description: 'Algodón' });
+      expect(prisma.product.update.mock.calls[0][0].data.searchText).toBe('pantalon algodon');
+    });
+
+    it('la importación CSV también normaliza', async () => {
+      await service.importCsv('t1', 'nombre,descripcion\nPantalón,Algodón');
+      expect(prisma.product.create.mock.calls[0][0].data.searchText).toBe('pantalon algodon');
+    });
+  });
+
+  describe('erratas', () => {
+    it('si nada coincide literalmente, reintenta por parecido antes de rendirse', async () => {
+      // "no lo encontré" y "no lo vendemos" no son lo mismo: una letra de más
+      // no puede costarle una venta al negocio.
+      prisma.product.findMany.mockResolvedValueOnce([]); // la búsqueda literal falla
+      prisma.$queryRaw.mockResolvedValue([{ id: '2' }]);
+      prisma.product.findMany.mockResolvedValueOnce([producto('2', 'Pantalon negro')]);
+
+      const resultado = await service.searchForAi('t1', 'pantalonn');
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(resultado[0].name).toBe('Pantalon negro');
+    });
+
+    it('no gasta la consulta por parecido si ya encontró algo', async () => {
+      prisma.product.findMany.mockResolvedValue([producto('1', 'Pantalon negro')]);
+      await service.searchForAi('t1', 'pantalon');
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('el rescate por parecido respeta el tenant y solo mira los activos', async () => {
+      prisma.product.findMany.mockResolvedValueOnce([]);
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await service.searchForAi('t1', 'pantalonn');
+
+      // La consulta es SQL en crudo: el aislamiento no lo cubre Prisma, hay que
+      // comprobar que el tenant viaja como parámetro y que filtra por activos.
+      const [fragmentos, ...parametros] = prisma.$queryRaw.mock.calls[0];
+      expect(fragmentos.join('?')).toContain('p.active = true');
+      expect(fragmentos.join('?')).toContain('p.tenant_id =');
+      expect(parametros).toContain('t1');
+    });
+
+    it('conserva el orden por similitud que calculó Postgres', async () => {
+      // `findMany` con `in` devuelve en el orden que quiera; el bueno es el de
+      // la consulta por similitud.
+      prisma.product.findMany.mockResolvedValueOnce([]);
+      prisma.$queryRaw.mockResolvedValue([{ id: '2' }, { id: '1' }]);
+      prisma.product.findMany.mockResolvedValueOnce([
+        producto('1', 'Pantalon beige'),
+        producto('2', 'Pantalon negro'),
+      ]);
+
+      const resultado = await service.searchForAi('t1', 'pantalonn');
+
+      expect(resultado.map((p) => p.id)).toEqual(['2', '1']);
     });
   });
 

@@ -298,3 +298,19 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **Importación CSV que actualiza por SKU**: volver a subir el archivo del negocio con el stock nuevo es el caso normal, no la excepción — si duplicara, el catálogo se llenaría de copias. Detecta el separador `;` porque es lo que exporta Excel en español, y las filas con error no detienen la importación: se informan con el número de fila tal como se ve en Excel.
 
 **No se distingue "no lo encontré" de "no lo vendemos"**: cuando no hay coincidencias, la herramienta le pide al modelo que ofrezca confirmarlo con el equipo, en vez de afirmar que el negocio no lo vende.
+
+## 2026-07-25 — Búsqueda de productos sin tildes y tolerante a erratas
+
+**Decisión**: `products` gana una columna `search_text` con nombre+SKU+descripción normalizados (minúsculas, sin diacríticos), que `ProductsService` reescribe en cada escritura. La consulta del cliente se normaliza con la misma función. Si aun así no coincide nada, se reintenta por similitud de trigramas (`pg_trgm`, operador `<%` y `word_similarity`) antes de dar el producto por inexistente.
+
+**Motivo**: nadie escribe tildes desde el teclado del móvil. Con el catálogo guardado como "Pantalón", la pregunta "¿tienen pantalones?" no devolvía nada y el agente respondía que no lo vendían — sobre un producto en stock. Era la limitación anotada al cerrar el catálogo, y en WhatsApp no es un caso raro sino el normal.
+
+**Se normaliza al escribir, no al leer**: la alternativa era llamar a `unaccent()` en cada consulta, pero una función sobre la columna impide usar el índice y obliga a envolverla en una función `IMMUTABLE` propia para poder indexarla. Guardar el texto ya normalizado deja la búsqueda como un `LIKE` corriente que el índice GIN de trigramas sí acelera. `unaccent` se usa una sola vez, en el relleno de la migración.
+
+**La ñ se pliega a n**: consecuencia de descomponer en NFD y quitar las marcas combinantes. Es lo buscado — quien escribe "nino" espera encontrar "niño".
+
+**`searchText` se recalcula desde los valores ya fusionados** en las ediciones parciales: hacerlo solo con lo que trae el DTO habría borrado el nombre del texto indexado al editar únicamente la descripción, y el producto habría desaparecido de las búsquedas sin que nadie lo notara.
+
+**El rescate por similitud solo corre si la búsqueda literal falla**, y usa `<%` (parecido contra el *fragmento* más parecido del texto) en vez de `%`: una palabra corta comparada contra una descripción larga nunca supera el umbral de similitud global. Devuelve solo `id` y relee con Prisma, porque `$queryRaw` entrega las columnas tal como están en la base (`price_cents`) sin el mapeo del modelo.
+
+**Prisma vuelve a borrar los índices HNSW**: la migración generada traía otra vez `DROP INDEX` de `ai_context_memory_embedding_idx` y `knowledge_chunks_embedding_idx`. Se quitaron a mano y queda la advertencia dentro del propio archivo. Su motor de diff no ve los índices de pgvector, así que **esto se repetirá en cada migración que se genere**: hay que revisar el SQL antes de aplicarlo.
