@@ -350,3 +350,17 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **La migración deja la columna nula para los negocios ya dados de alta**: rellenarla con una zona fija sería inventarle un huso a quien no lo declaró. Siguen cayendo al respaldo global hasta que su propietario elija.
 
 **El desplegable del panel se construye con `Intl.supportedValuesOf('timeZone')`**, no con una lista escrita a mano: así está completa y al día sin mantenimiento. Si el navegador no lo soporta, queda al menos la suya detectada.
+
+## 2026-07-25 — Red de seguridad para los índices de pgvector
+
+**Decisión**: dos comprobaciones automáticas en vez de seguir confiando en revisar el SQL a mano. Un test (`tests/prisma/vector-indexes.spec.ts`) falla si alguna migración borra un índice vectorial sin recrearlo; un script (`npm run prisma:check-indexes`, encadenado tras `prisma migrate dev`) comprueba la base en vivo y puede recrearlos con `--repair`.
+
+**Motivo**: Prisma no modela el tipo `vector`, así que su motor de diff no ve los índices HNSW y emite un `DROP INDEX` de cada uno en **cada** migración que genera. Aplicarlo no da error — las búsquedas siguen devolviendo resultados correctos, solo que recorriendo la tabla entera. La migración `business_profile` (2026-07-23) los borró sin recrearlos y estuvo así hasta `embeddings_1024` (2026-07-25): dos días de escaneo secuencial que nadie notó. Desde entonces reapareció en tres migraciones seguidas, siempre quitado a mano. Un procedimiento que depende de que alguien se acuerde no es un procedimiento.
+
+**Hacen falta las dos comprobaciones**: la del SQL detecta el error antes de aplicarlo, pero no arregla una base ya dañada; la de la base detecta el daño, pero no impide que se repita. La segunda va encadenada a `prisma migrate dev` para que el aviso llegue en el momento, no semanas después.
+
+**Borrar y recrear en la misma migración es legítimo** y ocurre de verdad (`embeddings_1024` los rehace al cambiar la dimensión del vector), así que lo que se persigue es el borrado **huérfano**, no el `DROP` en sí. La detección también ignora los comentarios: las propias advertencias escritas en las migraciones habrían hecho saltar la comprobación.
+
+**La migración histórica queda exenta, no corregida**: una migración ya aplicada es inmutable y editarla dejaría la suma de comprobación de Prisma sin cuadrar en cualquier base donde ya corrió. Por lo mismo no se han quitado los comentarios de advertencia de las migraciones posteriores. La lista de exentas tiene su propio test para que no crezca: una migración nueva con este fallo se corrige en el archivo, no se añade a la lista.
+
+**Reparar es explícito (`--repair`), no automático**: por defecto informa y sale con error. Recrear un índice sobre una tabla grande bloquea escrituras, y esa no es una decisión que deba tomar un script sin que nadie se lo pida.
