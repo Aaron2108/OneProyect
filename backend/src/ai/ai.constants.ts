@@ -3,6 +3,15 @@ export const TOOL_CREATE_APPOINTMENT = 'create_appointment';
 export const TOOL_CREATE_REMINDER = 'create_reminder';
 export const TOOL_UPDATE_CONTACT = 'update_contact';
 export const TOOL_CHECK_PRODUCT = 'consultar_producto';
+export const TOOL_ESCALATE_TO_HUMAN = 'escalar_a_humano';
+
+/**
+ * Autor con el que la IA firma la nota interna al escalar. No es un `User`:
+ * `ConversationNote.authorId` es texto libre (sin clave foránea), así que la
+ * nota no queda atribuida a ninguna persona del equipo que no la escribió.
+ */
+export const AI_AUTHOR_ID = 'agente-ia';
+export const AI_AUTHOR_NAME = 'Agente IA';
 
 /** Cuántos productos devuelve una consulta del catálogo (cabe en el prompt). */
 export const PRODUCT_SEARCH_LIMIT = 5;

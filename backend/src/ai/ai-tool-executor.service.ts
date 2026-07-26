@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ConversationHandler } from '@prisma/client';
 import type Anthropic from '@anthropic-ai/sdk';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { PiiCryptoService } from '../common/pii-crypto.service';
@@ -7,10 +8,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { formatBusinessDateTime, resolveTimeZone } from './ai-datetime.util';
 import { ProductsService } from '../products/products.service';
 import {
+  AI_AUTHOR_ID,
+  AI_AUTHOR_NAME,
   PRODUCT_SEARCH_LIMIT,
   TOOL_CHECK_PRODUCT,
   TOOL_CREATE_APPOINTMENT,
   TOOL_CREATE_REMINDER,
+  TOOL_ESCALATE_TO_HUMAN,
   TOOL_UPDATE_CONTACT,
 } from './ai.constants';
 import { ConversationContext } from './ai.types';
@@ -85,7 +89,32 @@ export const AI_TOOLS: Anthropic.Tool[] = [
       },
     },
   },
+  {
+    name: TOOL_ESCALATE_TO_HUMAN,
+    description:
+      'Pasa la conversación a una persona del equipo y deja de responder automáticamente. Úsala cuando NO puedas responder con seguridad: te falta el dato, la pregunta no está cubierta por la información del negocio, el cliente reclama o está molesto, o te piden algo que no puedes hacer. Es preferible que una persona conteste a que tú improvises un dato equivocado. No la uses para preguntas que sí puedes responder con la información que tienes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        motivo: {
+          type: 'string',
+          description:
+            'Por qué no puedes resolverlo, en una frase. Lo lee el equipo, no el cliente. Ej. "pregunta por la política de devoluciones, que no está en la información del negocio".',
+        },
+      },
+      required: ['motivo'],
+    },
+  },
 ];
+
+/**
+ * Lo que se le devuelve al modelo tras escalar. Le dice qué hacer a continuación
+ * porque el turno no termina aquí: todavía escribe el último mensaje que lee el
+ * cliente, y sin esta instrucción vuelve a intentar responder la pregunta que
+ * acaba de reconocer que no sabe.
+ */
+const ESCALATION_RESULT =
+  'Conversación pasada a una persona del equipo. Despídete confirmándole al cliente que alguien del equipo le responderá, sin prometer un plazo concreto. NO intentes responder la consulta tú.';
 
 @Injectable()
 export class AiToolExecutorService {
@@ -123,6 +152,8 @@ export class AiToolExecutorService {
           return await this.updateContact(input, ctx);
         case TOOL_CHECK_PRODUCT:
           return await this.checkProduct(input, ctx);
+        case TOOL_ESCALATE_TO_HUMAN:
+          return await this.escalateToHuman(input, ctx);
         default:
           return `Herramienta desconocida: ${toolName}`;
       }
@@ -155,9 +186,57 @@ export class AiToolExecutorService {
           return 'No se indicó ningún campo a actualizar.';
         }
         return 'Contacto actualizado.';
+      case TOOL_ESCALATE_TO_HUMAN:
+        if (typeof input.motivo !== 'string' || !input.motivo.trim()) {
+          return 'Falta indicar el motivo por el que no puedes resolverlo.';
+        }
+        return ESCALATION_RESULT;
       default:
         return `Herramienta desconocida: ${toolName}`;
     }
+  }
+
+  /**
+   * Tercer disparador del handoff (RF-11): la propia IA reconoce que no puede
+   * responder con seguridad. Los otros dos son manuales —el equipo desde el
+   * panel— o por palabra clave del cliente (`requestsHumanAgent`).
+   *
+   * El motivo queda como nota interna para que quien retome la conversación
+   * sepa por qué le llegó, sin tener que releer todo el hilo. La nota es interna:
+   * el cliente nunca la ve.
+   */
+  private async escalateToHuman(
+    input: Record<string, unknown>,
+    ctx: ConversationContext,
+  ): Promise<string> {
+    const motivo = typeof input.motivo === 'string' ? input.motivo.trim() : '';
+    if (!motivo) return 'Falta indicar el motivo por el que no puedes resolverlo.';
+
+    // `updateMany` con el tenant en el filtro: `ctx` ya es de confianza, pero
+    // así ninguna conversación de otro negocio puede quedar tocada ni por error
+    // de programación futuro.
+    const { count } = await this.prisma.conversation.updateMany({
+      where: { id: ctx.conversationId, tenantId: ctx.tenantId },
+      data: { handledBy: ConversationHandler.HUMAN },
+    });
+    if (count === 0) {
+      return 'No se pudo escalar la conversación.';
+    }
+
+    await this.prisma.conversationNote.create({
+      data: {
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        authorId: AI_AUTHOR_ID,
+        authorName: AI_AUTHOR_NAME,
+        body: this.pii.encrypt(`Escalado automático: ${motivo}`),
+      },
+    });
+
+    this.logger.log(
+      `Conversación ${ctx.conversationId} escalada por la IA (tenant ${ctx.tenantId}): ${motivo}`,
+    );
+    return ESCALATION_RESULT;
   }
 
   /**

@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
 import { AiService } from '../../src/ai/ai.service';
-import { AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
+import { AI_TOOLS, AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { BusinessProfileService } from '../../src/business-profile/business-profile.service';
 import { KnowledgeRetrievalService } from '../../src/knowledge/knowledge-retrieval.service';
 import { NvidiaChatService } from '../../src/ai/nvidia-chat.service';
@@ -118,6 +118,81 @@ describe('AiService', () => {
     expect(prompt).toContain('3 de agosto de 2026');
     expect(prompt).toContain('America/Lima');
     expect(prompt).toMatch(/nunca en UTC/i);
+  });
+
+  describe('escalado por baja confianza (RF-11)', () => {
+    const ctx = {
+      tenantId: 't1',
+      tenantName: 'Empresa',
+      contactId: 'c1',
+      contactName: 'Ana',
+      contactPhone: '52155',
+      conversationId: 'cv1',
+    };
+    // Proveedor simulado: ejercita el bucle de herramientas sin gastar créditos.
+    const mockConfig = {
+      get: (key: string) =>
+        ({ 'ai.provider': 'mock', 'business.timeZone': 'America/Lima' })[key],
+    } as unknown as ConfigService;
+
+    const prompt = () =>
+      new AiService(
+        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia,
+      ).buildSystemPrompt(
+        { tenantId: 't', tenantName: 'E', contactId: 'c', contactName: 'Ana', contactPhone: '1', conversationId: 'cv' },
+      );
+
+    it('el prompt le dice que escale en vez de improvisar', () => {
+      // Sin esto el modelo prefiere inventar antes que admitir que no sabe: en
+      // una prueba real se inventó una moneda que el negocio nunca declaró.
+      expect(prompt()).toMatch(/escala la conversación a una persona/i);
+      expect(prompt()).toMatch(/en vez de improvisar/i);
+    });
+
+    it('y también le pone el contrapeso para que no escale todo', () => {
+      // Un agente que escala cada mensaje le devuelve al dueño el trabajo que
+      // venía a quitarle: la instrucción sin freno rompe el producto.
+      expect(prompt()).toMatch(/no escales por costumbre/i);
+      expect(prompt()).toMatch(/si la información que tienes alcanza.*responde tú/i);
+    });
+
+    it('la herramienta se le ofrece al modelo', () => {
+      expect(AI_TOOLS.map((t) => t.name)).toContain('escalar_a_humano');
+    });
+
+    it('el modo simulado ejercita la cadena completa sin gastar créditos', async () => {
+      const toolsMock = {
+        execute: jest.fn().mockResolvedValue('Conversación pasada a una persona del equipo.'),
+        describeWithoutExecuting: jest.fn(),
+      } as unknown as AiToolExecutorService;
+      const service = new AiService(
+        mockConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, noNvidia,
+      );
+
+      const reply = await service.respond(ctx, [{ role: 'user', text: 'quiero hacer un reclamo' }]);
+
+      expect(toolsMock.execute).toHaveBeenCalledWith(
+        'escalar_a_humano', expect.objectContaining({ motivo: expect.any(String) }), ctx,
+      );
+      expect(reply.actions).toContain('escalar_a_humano');
+    });
+
+    it('en el chat de prueba se simula: probar no puede escalar una conversación real', async () => {
+      const toolsMock = {
+        execute: jest.fn(),
+        describeWithoutExecuting: jest.fn().mockReturnValue('Conversación pasada a una persona.'),
+      } as unknown as AiToolExecutorService;
+      const service = new AiService(
+        mockConfig, {} as PrismaService, toolsMock, noMemory, noProfile, noKnowledge, noNvidia,
+      );
+
+      const reply = await service.respond(
+        ctx, [{ role: 'user', text: 'quiero una devolución' }], { simulateTools: true },
+      );
+
+      expect(toolsMock.execute).not.toHaveBeenCalled();
+      expect(reply.simulatedTools?.[0]?.name).toBe('escalar_a_humano');
+    });
   });
 
   describe('memoria de contexto (Fase 4)', () => {

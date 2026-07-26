@@ -314,3 +314,21 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **El rescate por similitud solo corre si la búsqueda literal falla**, y usa `<%` (parecido contra el *fragmento* más parecido del texto) en vez de `%`: una palabra corta comparada contra una descripción larga nunca supera el umbral de similitud global. Devuelve solo `id` y relee con Prisma, porque `$queryRaw` entrega las columnas tal como están en la base (`price_cents`) sin el mapeo del modelo.
 
 **Prisma vuelve a borrar los índices HNSW**: la migración generada traía otra vez `DROP INDEX` de `ai_context_memory_embedding_idx` y `knowledge_chunks_embedding_idx`. Se quitaron a mano y queda la advertencia dentro del propio archivo. Su motor de diff no ve los índices de pgvector, así que **esto se repetirá en cada migración que se genere**: hay que revisar el SQL antes de aplicarlo.
+
+## 2026-07-25 — Escalado a humano por baja confianza (tercer disparador del RF-11)
+
+**Decisión**: la IA escala mediante una **herramienta** (`escalar_a_humano`), no mediante un clasificador aparte ni una medida de confianza del modelo. Al invocarla, la conversación pasa a `handledBy = HUMAN` y el motivo queda como nota interna.
+
+**Por qué una herramienta y no un puntaje de confianza**: la API de Anthropic no expone probabilidades por token, así que no hay un número que umbralizar. Las alternativas eran una segunda llamada al modelo para juzgar su propia respuesta —duplicando el costo de cada mensaje— o dejar que el propio agente lo declare dentro del bucle que ya existe. Lo segundo no cuesta ninguna llamada extra y encaja con el patrón que el proyecto ya usa para citas y catálogo.
+
+**El resultado de la herramienta le ordena al modelo dejar de intentarlo**: el turno no termina al escalar —el modelo todavía escribe el mensaje que lee el cliente— y sin esa instrucción vuelve a responder la consulta que acaba de admitir que no sabe.
+
+**El prompt lleva contrapeso explícito**: junto a "escala cuando no puedas responder con seguridad" va "no escales por costumbre ni por cortesía; si la información que tienes alcanza, responde tú". Un agente que escala cada mensaje le devuelve al dueño exactamente el trabajo que el producto venía a quitarle. Ambas instrucciones tienen test.
+
+**Motivo como nota interna, no como mensaje**: quien retoma la conversación necesita saber por qué le llegó sin releer el hilo. Va cifrada como el resto de notas, y firmada con un autor propio (`agente-ia` / "Agente IA") en vez de con un usuario real — `ConversationNote.authorId` es texto libre sin clave foránea, así que atribuirla a una persona haría creer que alguien del equipo la escribió.
+
+**La escritura filtra por `tenantId` además de por `id`** (`updateMany`, no `update`): el contexto ya es de confianza, pero es la única herramienta que modifica una conversación entera, y un fallo futuro no puede acabar tocando la de otro negocio. Si no coincide nada, se informa en vez de dejar la nota huérfana.
+
+**En el chat de prueba del panel se simula** (no está en `READ_ONLY_TOOLS`): probar el agente no puede dejar una conversación real esperando a un humano.
+
+**El proveedor simulado también lo ejercita** ante palabras como "reclamo" o "devolución", para poder validar la cadena completa —nota interna incluida— sin gastar créditos de API.

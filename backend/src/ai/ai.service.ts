@@ -12,6 +12,7 @@ import {
   MAX_SUMMARY_TOKENS,
   MAX_TOOL_ITERATIONS,
   READ_ONLY_TOOLS,
+  TOOL_ESCALATE_TO_HUMAN,
 } from './ai.constants';
 import { describeNow, resolveTimeZone } from './ai-datetime.util';
 import { NvidiaChatService } from './nvidia-chat.service';
@@ -210,6 +211,19 @@ export class AiService {
     const nombre = ctx.contactName ?? '';
     const actions: string[] = [];
 
+    // Escalado simulado: permite probar toda la cadena del handoff por baja
+    // confianza (nota interna incluida) sin gastar créditos de API.
+    if (/\b(reclamo|queja|devoluci[oó]n|reembolso)\b/i.test(lastUser)) {
+      const result = await run(TOOL_ESCALATE_TO_HUMAN, {
+        motivo: 'consulta simulada que el agente no puede resolver',
+      });
+      actions.push(TOOL_ESCALATE_TO_HUMAN);
+      return {
+        text: `Gracias por contarme, ${nombre}. ${result} [respuesta simulada — modo pruebas sin créditos]`.trim(),
+        actions,
+      };
+    }
+
     if (/\b(cita|agendar|agenda|turno|reservar)\b/i.test(lastUser)) {
       const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const result = await run('create_appointment', {
@@ -250,7 +264,13 @@ export class AiService {
       ...describeNow(now, this.timeZone),
       'Responde en español, de forma breve, cordial y útil.',
       'Usa las herramientas disponibles para programar citas, crear recordatorios o actualizar los datos del contacto cuando el cliente lo pida.',
-      'No inventes información del negocio que no conozcas; si no puedes resolver algo, indícalo con claridad.',
+      'No inventes información del negocio que no conozcas.',
+      // Sin esto el modelo prefiere improvisar antes que reconocer que no sabe:
+      // en una prueba real se inventó una moneda que el negocio nunca declaró.
+      'Si no puedes responder con seguridad, escala la conversación a una persona del equipo en vez de improvisar. Escala cuando: te falte un dato que no está en la información del negocio, el cliente reclame o esté molesto, pida algo que tú no puedes hacer, o se trate de dinero, condiciones o compromisos que el negocio no dejó por escrito.',
+      // El contrapeso importa tanto como la instrucción: un agente que escala
+      // todo le devuelve al dueño el trabajo que venía a quitarle.
+      'No escales por costumbre ni por cortesía: si la información que tienes alcanza para responder, responde tú. Escalar todo deja al negocio sin asistente.',
     ];
     if (profileLines.length > 0) {
       lines.push('Esto es lo que el negocio configuró para que lo tengas en cuenta:', ...profileLines);

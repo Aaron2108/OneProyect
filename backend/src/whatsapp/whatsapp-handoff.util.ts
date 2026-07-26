@@ -3,9 +3,10 @@
  * Si el cliente pide hablar con una persona, la conversación se pasa a un humano
  * y la IA deja de responder automáticamente.
  *
- * Heurística deliberadamente conservadora para el MVP: cubre las formas más
- * comunes en español sin arriesgar falsos positivos. Un clasificador por IA
- * (baja confianza → escalar) se puede añadir después.
+ * Heurística deliberadamente conservadora: cubre las formas más comunes en
+ * español sin arriesgar falsos positivos. Es solo uno de los tres disparadores
+ * del handoff — los otros son manual (desde el panel) y por baja confianza de
+ * la propia IA (herramienta `escalar_a_humano`, ver AiToolExecutorService).
  */
 const HUMAN_REQUEST_PATTERNS: RegExp[] = [
   /\b(hablar|habla|comunicar|comunicarme|contactar)\s+con\s+(una?\s+)?(persona|humano|humana|agente|asesor|asesora|ejecutivo|ejecutiva|operador|operadora|alguien|un\s+representante|representante)\b/i,

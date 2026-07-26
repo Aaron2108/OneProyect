@@ -11,6 +11,8 @@ describe('AiToolExecutorService', () => {
   let prisma: {
     reminder: { create: jest.Mock };
     contact: { update: jest.Mock };
+    conversation: { updateMany: jest.Mock };
+    conversationNote: { create: jest.Mock };
   };
   let appointments: { create: jest.Mock };
   let products: { searchForAi: jest.Mock };
@@ -28,6 +30,8 @@ describe('AiToolExecutorService', () => {
     prisma = {
       reminder: { create: jest.fn().mockResolvedValue({ id: 'rem-1' }) },
       contact: { update: jest.fn().mockResolvedValue({}) },
+      conversation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      conversationNote: { create: jest.fn().mockResolvedValue({ id: 'nota-1' }) },
     };
     appointments = { create: jest.fn().mockResolvedValue({ id: 'appt-1' }) };
     products = { searchForAi: jest.fn().mockResolvedValue([]) };
@@ -220,6 +224,66 @@ describe('AiToolExecutorService', () => {
       const result = await executor.execute('consultar_producto', { consulta: '  ' }, ctx);
       expect(products.searchForAi).not.toHaveBeenCalled();
       expect(result).toContain('Falta indicar');
+    });
+  });
+
+  describe('escalar_a_humano', () => {
+    it('pasa la conversación a un humano acotando por tenant', async () => {
+      await executor.execute('escalar_a_humano', { motivo: 'no sé la política de devoluciones' }, ctx);
+
+      expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+        // El tenant va en el filtro además del id: aunque `ctx` sea de confianza,
+        // ningún fallo futuro puede tocar la conversación de otro negocio.
+        where: { id: 'conv-1', tenantId: 'tenant-1' },
+        data: { handledBy: 'HUMAN' },
+      });
+    });
+
+    it('deja el motivo como nota interna cifrada para quien la retome', async () => {
+      await executor.execute('escalar_a_humano', { motivo: 'pregunta por reembolsos' }, ctx);
+
+      const data = prisma.conversationNote.create.mock.calls[0][0].data;
+      expect(data.tenantId).toBe('tenant-1');
+      expect(data.conversationId).toBe('conv-1');
+      expect(data.body).not.toContain('reembolsos'); // se guarda cifrada
+      expect(data.body).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
+    });
+
+    it('la nota no se le atribuye a ninguna persona del equipo', async () => {
+      // Firmarla con un usuario real haría creer que alguien la escribió.
+      await executor.execute('escalar_a_humano', { motivo: 'x' }, ctx);
+      const data = prisma.conversationNote.create.mock.calls[0][0].data;
+      expect(data.authorName).toBe('Agente IA');
+      expect(data.authorId).not.toBe('contact-1');
+    });
+
+    it('le prohíbe al modelo seguir intentando responder', async () => {
+      // Sin esto vuelve a contestar la pregunta que acaba de admitir que no sabe.
+      const result = await executor.execute('escalar_a_humano', { motivo: 'x' }, ctx);
+      expect(result).toMatch(/NO intentes responder/i);
+      expect(result).toMatch(/persona del equipo/i);
+    });
+
+    it('sin motivo no escala ni deja nota', async () => {
+      const result = await executor.execute('escalar_a_humano', { motivo: '  ' }, ctx);
+      expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
+      expect(prisma.conversationNote.create).not.toHaveBeenCalled();
+      expect(result).toContain('Falta indicar');
+    });
+
+    it('si la conversación no es de este tenant, no deja la nota huérfana', async () => {
+      prisma.conversation.updateMany.mockResolvedValue({ count: 0 });
+      const result = await executor.execute('escalar_a_humano', { motivo: 'x' }, ctx);
+      expect(prisma.conversationNote.create).not.toHaveBeenCalled();
+      expect(result).toContain('No se pudo escalar');
+    });
+
+    it('en el chat de prueba se simula: no escala una conversación real', async () => {
+      const texto = executor.describeWithoutExecuting('escalar_a_humano', { motivo: 'x' });
+      expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
+      expect(prisma.conversationNote.create).not.toHaveBeenCalled();
+      // Mismo texto que la ejecución real: el dueño prueba lo que verá su cliente.
+      expect(texto).toBe(await executor.execute('escalar_a_humano', { motivo: 'x' }, ctx));
     });
   });
 
