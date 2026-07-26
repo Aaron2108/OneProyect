@@ -37,6 +37,163 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     return new ConversationsService(makePrisma(prisma), sender, makeTestPiiCrypto(), ai, contextMemory);
   }
 
+  describe('resumen para el equipo', () => {
+    const pii = makeTestPiiCrypto();
+    const hace = (min: number) => new Date(Date.now() - min * 60_000);
+
+    /** Conversación con dos mensajes y, opcionalmente, un resumen ya guardado. */
+    const conv = (extra: Record<string, unknown> = {}) => ({
+      id: 'cv1',
+      summary: null,
+      summaryAt: null,
+      lastMessageAt: hace(10),
+      messages: [
+        { direction: MessageDirection.INBOUND, content: pii.encrypt('¿tienen turno el viernes?') },
+        { direction: MessageDirection.OUTBOUND, content: pii.encrypt('Sí, a las 16h.') },
+      ],
+      ...extra,
+    });
+
+    const aiConResumen = (texto = 'El cliente pidió turno; se le ofreció el viernes a las 16h.') =>
+      ({ summarizeForTeam: jest.fn().mockResolvedValue(texto) }) as unknown as AiService;
+
+    it('genera el resumen y lo guarda cifrado', async () => {
+      const update = jest.fn().mockResolvedValue({
+        summary: pii.encrypt('El cliente pidió turno.'),
+        summaryAt: new Date(),
+        lastMessageAt: hace(10),
+      });
+      const service = makeService(
+        { conversation: { findFirst: jest.fn().mockResolvedValue(conv()), update } },
+        senderDisabled,
+        aiConResumen(),
+      );
+
+      const res = await service.summarizeForTeam('t1', 'cv1');
+
+      // Cifrado en reposo como el resto del contenido de la conversación.
+      expect(update.mock.calls[0][0].data.summary).not.toContain('cliente');
+      // Pero quien llama lo recibe legible.
+      expect(res.summary).toContain('cliente');
+      expect(res.summaryStale).toBe(false);
+    });
+
+    it('no vuelve a pagar si el resumen guardado sigue vigente', async () => {
+      // Pulsar dos veces el botón no puede costar dos llamadas al modelo.
+      const ai = aiConResumen();
+      const service = makeService(
+        {
+          conversation: {
+            findFirst: jest.fn().mockResolvedValue(
+              conv({ summary: pii.encrypt('Ya resumido.'), summaryAt: hace(5), lastMessageAt: hace(10) }),
+            ),
+            update: jest.fn(),
+          },
+        },
+        senderDisabled,
+        ai,
+      );
+
+      const res = await service.summarizeForTeam('t1', 'cv1');
+
+      expect(ai.summarizeForTeam).not.toHaveBeenCalled();
+      expect(res.summary).toBe('Ya resumido.');
+    });
+
+    it('lo rehace si llegaron mensajes después de generarlo', async () => {
+      // Un resumen vencido enseñado como válido lleva al equipo a actuar sobre
+      // información que ya no es cierta.
+      const ai = aiConResumen();
+      const service = makeService(
+        {
+          conversation: {
+            findFirst: jest.fn().mockResolvedValue(
+              conv({ summary: pii.encrypt('Viejo.'), summaryAt: hace(30), lastMessageAt: hace(2) }),
+            ),
+            update: jest.fn().mockResolvedValue({
+              summary: pii.encrypt('Nuevo.'),
+              summaryAt: new Date(),
+              lastMessageAt: hace(2),
+            }),
+          },
+        },
+        senderDisabled,
+        ai,
+      );
+
+      const res = await service.summarizeForTeam('t1', 'cv1');
+
+      expect(ai.summarizeForTeam).toHaveBeenCalledTimes(1);
+      expect(res.summary).toBe('Nuevo.');
+    });
+
+    it('con force lo rehace aunque siga vigente', async () => {
+      const ai = aiConResumen();
+      const service = makeService(
+        {
+          conversation: {
+            findFirst: jest.fn().mockResolvedValue(
+              conv({ summary: pii.encrypt('Vigente.'), summaryAt: hace(1), lastMessageAt: hace(10) }),
+            ),
+            update: jest.fn().mockResolvedValue({
+              summary: pii.encrypt('Rehecho.'),
+              summaryAt: new Date(),
+              lastMessageAt: hace(10),
+            }),
+          },
+        },
+        senderDisabled,
+        ai,
+      );
+
+      await service.summarizeForTeam('t1', 'cv1', true);
+
+      expect(ai.summarizeForTeam).toHaveBeenCalledTimes(1);
+    });
+
+    it('marca como desactualizado el resumen anterior a los últimos mensajes', async () => {
+      const service = makeService({
+        conversation: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'cv1',
+            contact: {},
+            messages: [],
+            _count: { notes: 0 },
+            summary: pii.encrypt('Algo'),
+            summaryAt: hace(30),
+            lastMessageAt: hace(2),
+          }),
+        },
+      });
+
+      expect((await service.get('t1', 'cv1')).summaryStale).toBe(true);
+    });
+
+    it('la conversación de otro negocio no se resume', async () => {
+      const service = makeService({
+        conversation: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
+      });
+      await expect(service.summarizeForTeam('t1', 'de-otro')).rejects.toThrow(NotFoundException);
+    });
+
+    it('una conversación sin mensajes no gasta una llamada al modelo', async () => {
+      const ai = aiConResumen();
+      const service = makeService(
+        {
+          conversation: {
+            findFirst: jest.fn().mockResolvedValue(conv({ messages: [] })),
+            update: jest.fn(),
+          },
+        },
+        senderDisabled,
+        ai,
+      );
+
+      await expect(service.summarizeForTeam('t1', 'cv1')).rejects.toThrow(/no tiene mensajes/i);
+      expect(ai.summarizeForTeam).not.toHaveBeenCalled();
+    });
+  });
+
   it('list filtra por tenantId y ordena por actividad reciente (keyset estable)', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const service = makeService({ conversation: { findMany } });

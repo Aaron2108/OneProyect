@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   Conversation,
   ConversationHandler,
@@ -119,6 +119,65 @@ export class ConversationsService {
     return {
       ...conversation,
       messages: conversation.messages.map((m) => ({ ...m, content: this.pii.decrypt(m.content) })),
+      ...this.summaryOf(conversation),
+    };
+  }
+
+  /**
+   * Genera (o rehace) el resumen de la conversación para el equipo.
+   *
+   * Bajo demanda y no al cerrar: resumir cuesta dinero, y pagarlo por cada
+   * conversación —incluidas las que nadie va a leer— es gasto seguro a cambio
+   * de valor incierto. Si ya hay uno al día se devuelve el guardado, así que
+   * pulsar dos veces no cobra dos veces.
+   */
+  async summarizeForTeam(tenantId: string, id: string, force = false) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, tenantId },
+      include: { messages: { orderBy: { createdAt: 'asc' }, select: { direction: true, content: true } } },
+    });
+    if (!conversation) {
+      throw new NotFoundException('Conversación no encontrada');
+    }
+    if (conversation.messages.length === 0) {
+      throw new BadRequestException('La conversación no tiene mensajes que resumir.');
+    }
+
+    const guardado = this.summaryOf(conversation);
+    if (!force && guardado.summary && !guardado.summaryStale) {
+      return guardado;
+    }
+
+    const history: HistoryTurn[] = conversation.messages.map((m) => ({
+      role: m.direction === MessageDirection.INBOUND ? ('user' as const) : ('assistant' as const),
+      text: this.pii.decrypt(m.content),
+    }));
+    const texto = await this.ai.summarizeForTeam(history, { tenantId, conversationId: id });
+    if (!texto) {
+      throw new BadRequestException('No se pudo generar el resumen.');
+    }
+
+    // `summaryAt` se fija ahora, no con `lastMessageAt`: si llega un mensaje
+    // mientras se genera el resumen, debe quedar marcado como desactualizado.
+    const summaryAt = new Date();
+    const actualizada = await this.prisma.conversation.update({
+      where: { id },
+      data: { summary: this.pii.encrypt(texto), summaryAt },
+      select: { summary: true, summaryAt: true, lastMessageAt: true },
+    });
+    return this.summaryOf(actualizada);
+  }
+
+  /**
+   * Descifra el resumen y dice si se quedó viejo. Está desactualizado cuando
+   * llegaron mensajes después de generarlo: enseñarlo como si siguiera siendo
+   * válido llevaría al equipo a actuar sobre información vencida.
+   */
+  private summaryOf(c: { summary: string | null; summaryAt: Date | null; lastMessageAt: Date | null }) {
+    return {
+      summary: c.summary ? this.pii.decrypt(c.summary) : null,
+      summaryAt: c.summaryAt?.toISOString() ?? null,
+      summaryStale: !!(c.summaryAt && c.lastMessageAt && c.lastMessageAt > c.summaryAt),
     };
   }
 

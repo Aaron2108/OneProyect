@@ -513,6 +513,59 @@ export class AiService {
       .trim();
   }
 
+  /**
+   * Resume una conversación **para el equipo**, no para la IA.
+   *
+   * `summarize` produce memoria: una nota que la propia IA leerá en una
+   * conversación futura con el mismo cliente. Esto es otra cosa — lo lee una
+   * persona que abre la bandeja y necesita entender en diez segundos qué quería
+   * el cliente, qué se le dijo y qué queda pendiente. Mismo material de
+   * entrada, lector distinto, así que prompt distinto.
+   */
+  async summarizeForTeam(
+    history: HistoryTurn[],
+    origen: { tenantId: string; conversationId: string },
+  ): Promise<string> {
+    if (history.length === 0) return '';
+    if (this.provider === 'mock' || !this.client) {
+      return `Resumen simulado de ${history.length} mensajes. [modo pruebas sin créditos]`;
+    }
+    const transcript = history
+      .map((t) => `${t.role === 'user' ? 'Cliente' : 'Agente'}: ${t.text}`)
+      .join('\n');
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: MAX_SUMMARY_TOKENS,
+      system: [
+        'Resume esta conversación de atención al cliente para el equipo del negocio, en español.',
+        'Escribe 2-4 frases que respondan: qué quería el cliente, qué se le respondió o se acordó, y qué queda pendiente.',
+        'Si no queda nada pendiente, dilo. Si la conversación quedó a medias o el cliente no volvió a responder, dilo también.',
+        // Sin esto el modelo rellena huecos y el equipo actúa sobre algo que
+        // nadie dijo — el peor fallo posible en un resumen operativo.
+        'No inventes nada que no esté en la conversación: si un dato no aparece, no lo menciones.',
+        'No saludes ni te dirijas al cliente: es una nota interna.',
+      ].join('\n'),
+      messages: [{ role: 'user', content: transcript }],
+    });
+    await this.usage.record({
+      tenantId: origen.tenantId,
+      conversationId: origen.conversationId,
+      provider: this.provider,
+      model: this.activeModel(),
+      purpose: 'team-summary',
+      usage: {
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+        calls: 1,
+      },
+    });
+    return response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join(' ')
+      .trim();
+  }
+
   /** Resumen simulado (sin IA real) para pruebas locales de la tubería de memoria. */
   private mockSummarize(history: HistoryTurn[]): string {
     const lastUser = [...history].reverse().find((t) => t.role === 'user')?.text ?? '';

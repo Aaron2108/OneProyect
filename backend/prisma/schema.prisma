@@ -257,6 +257,13 @@ model Conversation {
   // último. Ver ConversationFollowUpService.
   followUpCount  Int                 @default(0) @map("follow_up_count")
   lastFollowUpAt DateTime?           @map("last_follow_up_at")
+  // Resumen para EL EQUIPO, distinto del que se guarda en `ai_context_memory`:
+  // aquel es memoria para la IA, este es para que una persona entienda de un
+  // vistazo qué pasó. Cifrado como el resto del contenido de la conversación.
+  // Se genera bajo demanda y queda guardado; si `lastMessageAt` es posterior a
+  // `summaryAt`, está desactualizado (ver ConversationsService).
+  summary        String?
+  summaryAt      DateTime?           @map("summary_at")
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
 

@@ -2,8 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenUsage } from './ai.types';
 
-/** Para qué se llamó al modelo. Separa la atención al cliente del trabajo de fondo. */
-export type AiPurpose = 'respond' | 'summarize' | 'follow-up';
+/**
+ * Para qué se llamó al modelo. Separa la atención al cliente del trabajo de
+ * fondo. `summarize` es la memoria interna de la IA; `team-summary`, el resumen
+ * que pide una persona desde la bandeja: mismo material, lector distinto y
+ * gasto que conviene poder mirar por separado.
+ */
+export type AiPurpose = 'respond' | 'summarize' | 'follow-up' | 'team-summary';
 
 /** Consumo agregado de un negocio en una ventana de tiempo. */
 export interface AiUsageTotals {

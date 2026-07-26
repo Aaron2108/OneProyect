@@ -398,3 +398,19 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **La finalidad (`respond` / `summarize` / `follow-up`) se guarda por separado** para poder distinguir qué parte del gasto es atender clientes y qué parte es trabajo de fondo — son dos decisiones distintas si hay que recortar.
 
 **El endpoint va aparte de `/metrics/overview`**: responde a otra pregunta (cuánto cuesta, no cuánto se trabajó) y su tabla crece a otro ritmo; mezclarlas encarecería el resumen que se pide en cada carga del panel. El panel las pide en paralelo.
+
+## 2026-07-25 — Resumen de conversación para el equipo (distinto del de la IA)
+
+**Decisión**: `Conversation.summary` (cifrado) más `POST /conversations/:id/summary`, con un prompt propio y su propia finalidad de gasto (`team-summary`). Se muestra sobre el hilo en la bandeja.
+
+**Por qué no reutilizar el resumen que ya existía**: el de `ai_context_memory` es **memoria para la IA** — una nota que el propio agente leerá en una conversación futura con el mismo cliente. Este lo lee una persona que abre la bandeja y necesita saber en diez segundos qué quería el cliente, qué se le dijo y qué queda pendiente. Mismo material de entrada, lector distinto, así que prompt distinto: este pide explícitamente lo pendiente y avisa de que si la conversación quedó a medias hay que decirlo.
+
+**Bajo demanda y no al cerrar**: resumir cuesta dinero, y pagarlo por cada conversación —incluidas las que nadie va a abrir— es gasto seguro a cambio de valor incierto. Si ya hay un resumen vigente se devuelve el guardado, así que pulsar dos veces no cobra dos veces. Y el endpoint va limitado por minuto: sin tope, mantener pulsado "rehacer" se traduce en factura.
+
+**`summaryStale` en vez de borrar el resumen viejo**: cuando llegan mensajes después de generarlo, el resumen sigue siendo útil pero ya no está completo. Borrarlo perdería información; enseñarlo como válido llevaría al equipo a actuar sobre lo que la conversación decía antes. Se muestra con el aviso de que hay mensajes nuevos sin incluir.
+
+**`summaryAt` se fija al generar, no con `lastMessageAt`**: si entra un mensaje mientras el modelo redacta, el resumen tiene que quedar marcado como desactualizado. Tomando `lastMessageAt` como referencia, ese mensaje quedaría tapado.
+
+**El prompt prohíbe explícitamente rellenar huecos**: en un resumen operativo, inventar es el peor fallo posible — el equipo actuaría sobre algo que ningún cliente dijo.
+
+**Se apunta como `team-summary` y no como `summarize`** en el registro de gasto: son dos usos distintos del modelo y conviene poder mirarlos por separado a la hora de recortar.

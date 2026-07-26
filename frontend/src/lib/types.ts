@@ -55,6 +55,18 @@ export interface ConversationDetail extends ConversationSummary {
   contact: Contact;
   messages: Message[];
   _count: { notes: number };
+  /** Resumen para el equipo (distinto de la memoria interna de la IA). */
+  summary: string | null;
+  summaryAt: string | null;
+  /** Llegaron mensajes después de generarlo: lo que dice puede haber cambiado. */
+  summaryStale: boolean;
+}
+
+/** Respuesta de POST /conversations/:id/summary. */
+export interface ConversationSummaryResult {
+  summary: string | null;
+  summaryAt: string | null;
+  summaryStale: boolean;
 }
 
 export interface ConversationNote {

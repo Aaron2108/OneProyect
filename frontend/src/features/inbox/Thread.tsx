@@ -1,9 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bot, Check, ChevronLeft, CircleCheck, MessageCircle, RotateCcw, StickyNote, UserRound } from 'lucide-react';
+import { Bot, Check, ChevronLeft, CircleCheck, MessageCircle, RotateCcw, ScrollText, StickyNote, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/components/ui/Pill';
 import { EmptyState } from '@/components/ui/EmptyState';
-import type { ConversationDetail, Message } from '@/lib/types';
+import { api } from '@/lib/api';
+import { useToast } from '@/lib/toast-context';
+import type { ConversationDetail, ConversationSummaryResult, Message } from '@/lib/types';
 import { Composer } from './Composer';
 import { NotesDialog } from './NotesDialog';
 
@@ -22,10 +24,19 @@ interface ThreadProps {
   onNotesChanged: () => void;
 }
 
-const HeadBtn = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+const HeadBtn = ({
+  onClick,
+  children,
+  disabled,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) => (
   <button
     onClick={onClick}
-    className="flex items-center gap-1.5 rounded-sm border border-line-strong px-3 py-2 text-[12.5px] font-semibold text-ink-soft transition-colors duration-fast hover:border-brand/50 hover:text-brand"
+    disabled={disabled}
+    className="flex items-center gap-1.5 rounded-sm border border-line-strong px-3 py-2 text-[12.5px] font-semibold text-ink-soft transition-colors duration-fast hover:border-brand/50 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
   >
     {children}
   </button>
@@ -64,7 +75,33 @@ function Turn({ m, contactName, index }: { m: Message; contactName: string | nul
 
 export function Thread(props: ThreadProps): JSX.Element {
   const { conversation: c } = props;
+  const toast = useToast();
   const [notesOpen, setNotesOpen] = useState(false);
+  const [summary, setSummary] = useState<ConversationSummaryResult | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
+
+  // Al cambiar de conversación se descarta el resumen anterior: dejarlo puesto
+  // mostraría el de un cliente sobre el hilo de otro.
+  useEffect(() => {
+    setSummary(c ? { summary: c.summary, summaryAt: c.summaryAt, summaryStale: c.summaryStale } : null);
+  }, [c?.id, c?.summary, c?.summaryAt, c?.summaryStale]);
+
+  async function generarResumen(force: boolean): Promise<void> {
+    if (!c) return;
+    setSummarizing(true);
+    try {
+      setSummary(
+        await api<ConversationSummaryResult>(
+          `/conversations/${c.id}/summary${force ? '?force=true' : ''}`,
+          { method: 'POST' },
+        ),
+      );
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'No se pudo generar el resumen', 'error');
+    } finally {
+      setSummarizing(false);
+    }
+  }
   const streamRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -106,6 +143,10 @@ export function Thread(props: ThreadProps): JSX.Element {
             <Pill kind={closed ? 'closed' : c.handledBy === 'AI' ? 'ai' : 'human'} />
           </motion.span>
         </AnimatePresence>
+        <HeadBtn onClick={() => void generarResumen(!!summary?.summary)} disabled={summarizing}>
+          <ScrollText size={14} strokeWidth={2} />
+          {summarizing ? 'Resumiendo…' : summary?.summary ? 'Rehacer resumen' : 'Resumir'}
+        </HeadBtn>
         <HeadBtn onClick={() => setNotesOpen(true)}>
           <StickyNote size={14} strokeWidth={2} /> Notas{c._count.notes ? ` (${c._count.notes})` : ''}
         </HeadBtn>
@@ -128,6 +169,21 @@ export function Thread(props: ThreadProps): JSX.Element {
           </HeadBtn>
         )}
       </div>
+
+      {summary?.summary && (
+        <div className="flex-shrink-0 border-b border-line px-4 py-3 sm:px-10">
+          <div className="mb-1 flex items-center gap-2 text-[12px] font-semibold text-ink-soft">
+            <ScrollText size={13} strokeWidth={2} className="text-ai" />
+            Resumen
+            {/* Sin este aviso, el equipo actuaría sobre lo que decía la
+                conversación antes de los últimos mensajes. */}
+            {summary.summaryStale && (
+              <span className="font-normal text-warn">· hay mensajes nuevos sin incluir</span>
+            )}
+          </div>
+          <p className="m-0 text-[13.5px] leading-relaxed text-ink-soft">{summary.summary}</p>
+        </div>
+      )}
 
       <div ref={streamRef} className="flex flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-10" aria-live="polite">
         {c.messages.map((m, i) => (

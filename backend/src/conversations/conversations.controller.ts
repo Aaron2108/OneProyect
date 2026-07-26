@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ConversationStatus } from '@prisma/client';
 import { AuthContext } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -102,5 +103,23 @@ export class ConversationsController {
   @HttpCode(200)
   reopen(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.conversations.setStatus(user.tenantId, id, ConversationStatus.OPEN);
+  }
+
+  /**
+   * Resumen de la conversación para el equipo. `?force=true` lo rehace aunque
+   * el guardado siga vigente.
+   *
+   * Limitado por minuto porque cada generación cuesta dinero: sin tope, mantener
+   * pulsado el botón de rehacer se traduce en factura.
+   */
+  @Post(':id/summary')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  summarize(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Query('force') force?: string,
+  ) {
+    return this.conversations.summarizeForTeam(user.tenantId, id, force === 'true');
   }
 }
