@@ -10,6 +10,62 @@ import type { ImportReport, Product } from '@/lib/types';
 import { centsToInput, formatPrice, inputToCents } from './products.util';
 
 /**
+ * Celda editable del catálogo (precio o stock).
+ *
+ * Es un campo *controlado* y sincronizado con el servidor. Antes era no
+ * controlado (`defaultValue`) y se corregía escribiendo en el DOM a mano
+ * (`e.target.value = …`), con dos consecuencias:
+ *
+ * - Si el guardado fallaba, la página recargaba el catálogo pero la celda
+ *   seguía enseñando el texto rechazado: `defaultValue` solo se lee al montar.
+ *   El comentario decía "vuelve al valor real" y no volvía.
+ * - Tras guardar, la celda mostraba lo tecleado y no lo que quedó guardado.
+ *
+ * `valorServidor` es la fuente de la verdad: cuando cambia —porque se guardó,
+ * porque falló y se recargó, o porque lo tocó otra persona— la celda se pone al
+ * día sola. El ajuste se hace durante el render y no con un efecto: es el patrón
+ * que recomienda React para "un prop cambió", y evita el parpadeo de pintar
+ * primero el valor viejo.
+ */
+function CeldaEditable({
+  valorServidor,
+  className,
+  inputMode,
+  etiqueta,
+  onGuardar,
+}: {
+  valorServidor: string;
+  className: string;
+  inputMode: 'decimal' | 'numeric';
+  etiqueta: string;
+  /** Devuelve false si lo escrito no vale; entonces la celda se restaura sola. */
+  onGuardar: (texto: string) => boolean;
+}): JSX.Element {
+  const [texto, setTexto] = useState(valorServidor);
+  const [ultimoDelServidor, setUltimoDelServidor] = useState(valorServidor);
+
+  if (valorServidor !== ultimoDelServidor) {
+    setUltimoDelServidor(valorServidor);
+    setTexto(valorServidor);
+  }
+
+  return (
+    <input
+      className={className}
+      value={texto}
+      inputMode={inputMode}
+      aria-label={etiqueta}
+      onChange={(e) => setTexto(e.target.value)}
+      // Al salir del campo y no en cada tecla: una petición por pulsación
+      // saturaría la API y guardaría precios a medio escribir.
+      onBlur={() => {
+        if (!onGuardar(texto)) setTexto(valorServidor);
+      }}
+    />
+  );
+}
+
+/**
  * Catálogo de productos con existencias.
  *
  * Es lo que le permite a la IA responder "¿tienen X?" con datos reales: la
@@ -269,18 +325,19 @@ export function ProductsPage(): JSX.Element {
                   <td className="py-2.5 pr-3 font-mono text-[12px] text-ink-soft">{p.sku ?? '—'}</td>
                   <td className="py-2.5 pr-3">
                     {isOwner ? (
-                      <input
+                      <CeldaEditable
                         className="w-[92px] rounded-sm bg-canvas px-2 py-1 text-[13px] text-ink-soft"
-                        defaultValue={centsToInput(p.priceCents)}
+                        valorServidor={centsToInput(p.priceCents)}
                         inputMode="decimal"
-                        onBlur={(e) => {
-                          const cents = inputToCents(e.target.value);
+                        etiqueta={`Precio de ${p.name}`}
+                        onGuardar={(texto) => {
+                          const cents = inputToCents(texto);
                           if (cents === undefined) {
                             toast.show('El precio no es un número válido', 'error');
-                            e.target.value = centsToInput(p.priceCents);
-                            return;
+                            return false;
                           }
                           if (cents !== p.priceCents) void guardarCampo(p, { priceCents: cents });
+                          return true;
                         }}
                       />
                     ) : (
@@ -289,20 +346,23 @@ export function ProductsPage(): JSX.Element {
                   </td>
                   <td className="py-2.5 pr-3">
                     {isOwner ? (
-                      <input
+                      <CeldaEditable
                         className={`w-[70px] rounded-sm bg-canvas px-2 py-1 text-[13px] ${
                           p.stock === 0 ? 'text-danger' : 'text-ink-soft'
                         }`}
-                        defaultValue={String(p.stock)}
+                        valorServidor={String(p.stock)}
                         inputMode="numeric"
-                        onBlur={(e) => {
-                          const n = Number(e.target.value);
+                        etiqueta={`Stock de ${p.name}`}
+                        onGuardar={(texto) => {
+                          const n = Number(texto);
+                          // Se conserva tal cual el criterio anterior, incluido que
+                          // `Number('')` sea 0: vaciar la celda pone el stock a cero.
                           if (!Number.isInteger(n) || n < 0) {
                             toast.show('El stock debe ser un entero', 'error');
-                            e.target.value = String(p.stock);
-                            return;
+                            return false;
                           }
                           if (n !== p.stock) void guardarCampo(p, { stock: n });
+                          return true;
                         }}
                       />
                     ) : (
