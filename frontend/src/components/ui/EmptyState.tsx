@@ -14,10 +14,7 @@ export function EmptyState({
 }): JSX.Element {
   return (
     <div className="reveal mx-auto max-w-[300px] p-6 text-center text-ink-faint">
-      <div
-        className="relative mx-auto mb-4 grid h-16 w-16 place-items-center rounded-lg bg-surface text-brand shadow-2"
-        style={{ animation: 'floatY 4.5s ease-in-out infinite' }}
-      >
+      <div className="float-y relative mx-auto mb-4 grid h-16 w-16 place-items-center rounded-lg bg-surface text-brand shadow-2">
         <span
           className="absolute inset-0 -z-10 rounded-full blur-xl"
           style={{ background: 'radial-gradient(circle, var(--brand-glow), transparent 70%)' }}

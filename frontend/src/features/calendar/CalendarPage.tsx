@@ -2,6 +2,7 @@ import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
 import { Pill, type PillKind } from '@/components/ui/Pill';
@@ -19,6 +20,7 @@ const STATUS_PILL: Record<AppointmentStatus, PillKind> = {
 };
 
 export function CalendarPage(): JSX.Element {
+  const { user } = useAuth();
   const toast = useToast();
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -68,7 +70,11 @@ export function CalendarPage(): JSX.Element {
         </Button>
       </div>
 
-      <GoogleCalendarCard />
+      {/* Quien decide si la integración se ve es la página, no la tarjeta. Antes
+          se montaba siempre y era ella la que devolvía null para los agentes:
+          para entonces ya había consultado el estado de la conexión, una
+          petición cuyo resultado nadie iba a ver. */}
+      {user?.role === 'OWNER' && <GoogleCalendarCard />}
 
       <div className="flex flex-col gap-6 lg:flex-row">
         <div className="flex-1">

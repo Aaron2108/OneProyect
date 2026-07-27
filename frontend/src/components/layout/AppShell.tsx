@@ -3,6 +3,7 @@ import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
+import { PageSkeleton } from '@/components/ui/Skeleton';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { ProfileDialog } from '@/features/account/ProfileDialog';
 // La bandeja es la pantalla de trabajo y la primera que se ve: va en el bundle
@@ -121,8 +122,11 @@ export function AppShell(): JSX.Element {
               irse a otra sección. Al cambiar de ruta se descarta el error. */}
           <ErrorBoundary claveReinicio={pathname}>
             {/* Un solo Suspense para todas: cada ruta perezosa necesita uno, y
-                repetirlo por página solo añadiría ruido. */}
-            <Suspense fallback={null}>
+                repetirlo por página solo añadiría ruido. Con `null` de relleno,
+                una conexión lenta dejaba el área de contenido en blanco y sin
+                señal de que algo estuviera pasando — Métricas arrastra Recharts,
+                que es el chunk más pesado con diferencia. */}
+            <Suspense fallback={<PageSkeleton />}>
               <Routes>
                 {/* La bandeja ocupa el alto completo y reparte el scroll entre
                     sus columnas; no lleva envoltorio con scroll propio. */}
