@@ -132,6 +132,10 @@ export function useListaPaginada<T>(
           : ruta;
       try {
         const res = await api<Page<T>>(url, { signal });
+        // Si lo que llega no tiene forma de página, se trata como fallo: sin
+        // esto `items` se quedaba en undefined y la pantalla reventaba después,
+        // al recorrer la lista, lejos de donde estaba el problema.
+        if (!res || !Array.isArray(res.items)) throw new Error(mensajeError);
         setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
         cursorRef.current = res.nextCursor;
         setCursor(res.nextCursor);

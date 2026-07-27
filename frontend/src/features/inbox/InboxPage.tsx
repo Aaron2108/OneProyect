@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, downloadFile, esCancelacion } from '@/lib/api';
+import { api, downloadFile } from '@/lib/api';
 import { esConversationDetail } from '@/lib/guards';
 import { useToast } from '@/lib/toast-context';
-import type { ConversationDetail, ConversationStatus, ConversationHandler, Page, ConversationSummary } from '@/lib/types';
+import { useListaPaginada } from '@/lib/use-recurso';
+import type { ConversationDetail, ConversationStatus, ConversationHandler, ConversationSummary } from '@/lib/types';
 import { ContactPanel } from './ContactPanel';
 import { Roster } from './Roster';
 import { Thread } from './Thread';
@@ -15,9 +16,6 @@ export function InboxPage(): JSX.Element {
   // recargar la página no te devuelve a la lista vacía.
   const { conversationId: selectedId = null } = useParams();
   const navigate = useNavigate();
-  const [items, setItems] = useState<ConversationSummary[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   // '' es "sin filtrar". Tipados así, el compilador no deja pasar un valor que
   // el backend no entienda: antes eran `string` y `setStatus('OPENN')` habría
   // compilado y devuelto una lista vacía sin explicación.
@@ -26,56 +24,23 @@ export function InboxPage(): JSX.Element {
   const [query, setQuery] = useState('');
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [mobileViewingThread, setMobileViewingThread] = useState(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
-  const loadedOnce = useRef(false);
 
-  // Función normal y no `useCallback`: memorizarla con los filtros como
-  // dependencias congelaba el `cursor` del primer render, así que "Cargar más"
-  // volvía a pedir la primera página y la añadía repetida al final de la lista.
-  // Recreada en cada render siempre lee el cursor vigente — igual que en
-  // ContactsPage.
-  async function load(reset: boolean, signal?: AbortSignal): Promise<void> {
-    setLoading(reset && items.length === 0);
-    const qs = new URLSearchParams();
-    if (status) qs.set('status', status);
-    if (handledBy) qs.set('handledBy', handledBy);
-    if (query.trim()) qs.set('q', query.trim());
-    if (!reset && cursor) qs.set('cursor', cursor);
-    try {
-      const res = await api<Page<ConversationSummary>>(`/conversations?${qs.toString()}`, { signal });
-      setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-      setCursor(res.nextCursor);
-    } catch (e) {
-      // Cancelada porque cambió el filtro o se salió de la pantalla: no hay nada
-      // que contar, y su respuesta ya no debe tocar la lista.
-      if (esCancelacion(e)) return;
-      // Sin esto la lista se quedaba como estaba, sin decir nada: parecía que
-      // el negocio no tenía conversaciones nuevas cuando lo que había caído era
-      // la petición.
-      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las conversaciones', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const qs = new URLSearchParams();
+  if (status) qs.set('status', status);
+  if (handledBy) qs.set('handledBy', handledBy);
+  if (query.trim()) qs.set('q', query.trim());
 
-  // Carga inicial + recarga al cambiar filtros (con debounce en la búsqueda).
-  useEffect(() => {
-    clearTimeout(searchTimer.current);
-    // El rebote no basta: si una búsqueda tarda más que la siguiente, su
-    // respuesta llegaba después y pisaba la lista con resultados de un texto que
-    // el usuario ya había cambiado. Cancelarla al salir del efecto lo impide.
-    const control = new AbortController();
-    const delay = loadedOnce.current ? 300 : 0;
-    searchTimer.current = setTimeout(() => {
-      loadedOnce.current = true;
-      void load(true, control.signal);
-    }, delay);
-    return () => {
-      clearTimeout(searchTimer.current);
-      control.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, handledBy, query]);
+  // La ruta lleva los filtros; del rebote, la cancelación, el cursor y el aviso
+  // de error se encarga el hook, que es donde vive ahora ese mecanismo.
+  const ruta = `/conversations?${qs.toString()}`;
+  const {
+    items,
+    setItems,
+    cursor,
+    cargando,
+    cargarMas,
+    recargar,
+  } = useListaPaginada<ConversationSummary>(ruta, 'No se pudieron cargar las conversaciones');
 
   function openConversation(id: string): void {
     setMobileViewingThread(true);
@@ -125,7 +90,7 @@ export function InboxPage(): JSX.Element {
       toast.show(e instanceof Error ? e.message : 'No se pudo actualizar la conversación', 'error');
       return;
     }
-    void load(true);
+    void recargar();
   }
 
   async function sendMessage(text: string): Promise<void> {
@@ -159,7 +124,7 @@ export function InboxPage(): JSX.Element {
     <div className={`inbox-layout ${mobileViewingThread ? 'is-viewing-thread' : ''}`}>
       <Roster
         items={items}
-        loading={loading}
+        loading={cargando && items.length === 0}
         selectedId={selectedId}
         hasMore={!!cursor}
         status={status}
@@ -169,7 +134,7 @@ export function InboxPage(): JSX.Element {
         onHandledByChange={setHandledBy}
         onQueryChange={setQuery}
         onSelect={openConversation}
-        onLoadMore={() => load(false)}
+        onLoadMore={() => void cargarMas()}
         onExport={() => downloadFile('/conversations/export', 'conversaciones.csv').catch((e) => toast.show(e.message, 'error'))}
       />
       <Thread
