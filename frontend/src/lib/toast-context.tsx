@@ -1,6 +1,6 @@
 import * as RadixToast from '@radix-ui/react-toast';
 import { Bot, Check, TriangleAlert } from 'lucide-react';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 interface ToastItem {
   id: number;
@@ -19,16 +19,26 @@ let nextId = 1;
 export function ToastProvider({ children }: { children: ReactNode }): JSX.Element {
   const [items, setItems] = useState<ToastItem[]>([]);
 
-  function show(message: string, kind: ToastItem['kind'] = 'default'): void {
+  // El objeto del contexto se memoriza porque este proveedor envuelve la
+  // aplicación entera: al crear uno nuevo en cada render, mostrar un aviso
+  // volvía a renderizar TODOS los componentes que usan `useToast` (la bandeja,
+  // las métricas, los diálogos…), aunque el aviso no tuviera nada que ver con
+  // ellos. `show` no depende de nada — el contador de ids vive fuera del
+  // componente — así que puede ser estable de por vida.
+  const show = useCallback((message: string, kind: ToastItem['kind'] = 'default'): void => {
     const id = nextId++;
     setItems((prev) => [...prev, { id, message, kind }]);
-  }
+  }, []);
+  const value = useMemo<ToastContextValue>(() => ({ show }), [show]);
+
+  // `remove` se queda como función normal: solo se usa en el JSX de aquí, donde
+  // recrearla no cuesta nada.
   function remove(id: number): void {
     setItems((prev) => prev.filter((t) => t.id !== id));
   }
 
   return (
-    <ToastContext.Provider value={{ show }}>
+    <ToastContext.Provider value={value}>
       <RadixToast.Provider swipeDirection="right" duration={2800}>
         {children}
         {items.map((t) => (
