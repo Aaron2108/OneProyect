@@ -16,6 +16,39 @@ describe('toCsv', () => {
   it('trata null/undefined como celda vacía', () => {
     expect(toCsv(['x'], [[null], [undefined]])).toBe('﻿x\r\n\r\n');
   });
+
+  describe('inyección de fórmulas', () => {
+    // El nombre de un contacto es el nombre de perfil de WhatsApp: lo elige
+    // quien escribe al negocio. Sin neutralizarlo, un desconocido siembra una
+    // fórmula con solo mandar un mensaje y se ejecuta en la máquina del dueño
+    // al abrir la exportación en Excel.
+    it.each(['=1+1', '+1', '-1', '@SUM(A1)', '\tx', '\rx'])(
+      'neutraliza el prefijo de %j',
+      (peligroso) => {
+        // La celda queda con el apóstrofo delante, esté entrecomillada o no
+        // (un \r fuerza el entrecomillado de RFC 4180, un \t no).
+        const celda = toCsv(['n'], [[peligroso]]).slice('﻿n\r\n'.length).replace(/^"/, '');
+        expect(celda.startsWith("'")).toBe(true);
+      },
+    );
+
+    it('el caso concreto que encontró la auditoría', () => {
+      const csv = toCsv(['Nombre'], [['=HYPERLINK("https://atacante.tld","Ver")']]);
+      // Con el apóstrofo delante, Excel lo muestra como texto y no lo evalúa.
+      expect(csv).toContain('\'=HYPERLINK');
+    });
+
+    it('no toca los valores que no empiezan por un prefijo de fórmula', () => {
+      // Neutralizar de más ensuciaría nombres y notas legítimos.
+      expect(toCsv(['n'], [['Ana Pérez'], ['3-4'], ['a=b']])).toBe(
+        '﻿n\r\nAna Pérez\r\n3-4\r\na=b',
+      );
+    });
+
+    it('sigue escapando comillas después de neutralizar', () => {
+      expect(toCsv(['n'], [['="a"']])).toBe('﻿n\r\n"\'=""a"""');
+    });
+  });
 });
 
 describe('parseCsv', () => {

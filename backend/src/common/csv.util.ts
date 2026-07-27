@@ -1,10 +1,23 @@
 /**
- * Serializa filas a CSV. Escapa comillas/comas/saltos de línea según RFC 4180 y
- * antepone el BOM UTF-8 para que Excel abra bien los acentos.
+ * Prefijos que Excel y LibreOffice interpretan como fórmula en vez de como
+ * texto. Neutralizarlos NO es cosmética: el nombre de un contacto es el nombre
+ * de perfil de WhatsApp, que elige quien escribe al negocio. Sin esto, un
+ * desconocido puede sembrar `=HYPERLINK(...)` con solo mandar un mensaje, y la
+ * fórmula se ejecuta en la máquina del propietario al abrir la exportación.
+ */
+const PREFIJOS_DE_FORMULA = /^[=+\-@\t\r]/;
+
+/**
+ * Serializa filas a CSV. Escapa comillas/comas/saltos de línea según RFC 4180,
+ * neutraliza los prefijos de fórmula y antepone el BOM UTF-8 para que Excel
+ * abra bien los acentos.
  */
 export function toCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
   const escape = (value: string | number | null | undefined): string => {
-    const s = value == null ? '' : String(value);
+    let s = value == null ? '' : String(value);
+    // Se neutraliza aquí, en el serializador, y no en cada llamador: así
+    // cualquier exportación futura queda cubierta sin que nadie se acuerde.
+    if (PREFIJOS_DE_FORMULA.test(s)) s = `'${s}`;
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   const lines = [headers.map(escape).join(',')];
