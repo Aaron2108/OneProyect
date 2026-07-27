@@ -1,9 +1,10 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { Plus, TriangleAlert, UserPlus } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
+import { useRecurso } from '@/lib/use-recurso';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
@@ -13,34 +14,24 @@ import type { TeamMember, UserRole } from '@/lib/types';
 export function TeamPage(): JSX.Element {
   const { user } = useAuth();
   const toast = useToast();
-  const [items, setItems] = useState<TeamMember[]>([]);
   const [inviting, setInviting] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('AGENT');
   const [error, setError] = useState('');
-  // Separado del error del formulario: sirve para no enseñar "aún no hay más
-  // miembros" cuando la rejilla está vacía porque la petición falló.
-  const [errorCarga, setErrorCarga] = useState('');
   const [gridRef] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
 
-  async function load(): Promise<void> {
-    try {
-      setItems(await api<TeamMember[]>('/users'));
-      setErrorCarga('');
-    } catch (e) {
-      const mensaje = e instanceof Error ? e.message : 'No se pudo cargar el equipo';
-      setErrorCarga(mensaje);
-      toast.show(mensaje, 'error');
-    }
-  }
-  // Solo al montar: `load` se recrea en cada render, así que declararla como
-  // dependencia volvería a pedir la lista sin parar.
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // `errorCarga` va separado del error del formulario: sirve para no enseñar
+  // "aún no hay más miembros" cuando la rejilla está vacía porque la petición
+  // falló. Mientras carga, `datos` es null y la rejilla sale vacía, igual que
+  // antes.
+  const {
+    datos,
+    error: errorCarga,
+    recargar,
+  } = useRecurso<TeamMember[]>('/users', 'No se pudo cargar el equipo');
+  const items = datos ?? [];
 
   async function invite(ev: FormEvent): Promise<void> {
     ev.preventDefault();
@@ -52,7 +43,7 @@ export function TeamPage(): JSX.Element {
       setPassword('');
       setInviting(false);
       toast.show('Miembro añadido');
-      void load();
+      void recargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo invitar');
     }
@@ -111,7 +102,7 @@ export function TeamPage(): JSX.Element {
             <div className="col-span-full flex flex-col items-center gap-2 py-10 text-center text-ink-disabled">
               <TriangleAlert size={26} strokeWidth={1.75} className="text-danger" />
               <p className="m-0 text-sm">No se pudo cargar el equipo. {errorCarga}</p>
-              <Button size="sm" variant="sec" onClick={() => void load()}>
+              <Button size="sm" variant="sec" onClick={() => void recargar()}>
                 Reintentar
               </Button>
             </div>
