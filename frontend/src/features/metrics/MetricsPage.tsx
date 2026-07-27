@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from 'recharts';
 import { CalendarClock, Coins, MessageSquare, Send, Sparkles, Users } from 'lucide-react';
 import { api } from '@/lib/api';
+import { esMetricsOverview } from '@/lib/guards';
 import { useToast } from '@/lib/toast-context';
 import { Select } from '@/components/ui/Input';
 import { CountUp } from '@/components/ui/CountUp';
@@ -85,9 +86,12 @@ export function MetricsPage(): JSX.Element {
       // En paralelo: son dos preguntas distintas (cuánto se trabajó y cuánto
       // costó) y ninguna debe esperar a la otra.
       const [overview, consumo] = await Promise.all([
-        api<MetricsOverview>(`/metrics/overview?${qs}`),
+        api<unknown>(`/metrics/overview?${qs}`),
         api<AiUsageTotals>(`/metrics/ai-usage?${qs}`),
       ]);
+      // Se comprueba la forma antes de desglosarla: esta pantalla entra a
+      // `data.messages.fromAi` y compañía sin red debajo.
+      if (!esMetricsOverview(overview)) throw new Error('Las métricas llegaron incompletas');
       setData(overview);
       setUsage(consumo);
       setLoadedOnce(true);

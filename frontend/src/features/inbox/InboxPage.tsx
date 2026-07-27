@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, downloadFile, esCancelacion } from '@/lib/api';
+import { esConversationDetail } from '@/lib/guards';
 import { useToast } from '@/lib/toast-context';
 import type { ConversationDetail, ConversationStatus, ConversationHandler, Page, ConversationSummary } from '@/lib/types';
 import { ContactPanel } from './ContactPanel';
@@ -91,8 +92,11 @@ export function InboxPage(): JSX.Element {
     let cancelado = false;
     (async () => {
       try {
-        const c = await api<ConversationDetail>(`/conversations/${selectedId}`);
+        const c = await api<unknown>(`/conversations/${selectedId}`);
         if (cancelado) return;
+        // Se comprueba la forma antes de pintarla: sin esto, una respuesta
+        // inesperada reventaba dentro del render del hilo.
+        if (!esConversationDetail(c)) throw new Error('La conversación llegó incompleta');
         setConversation(c);
         if (c.unreadCount > 0) {
           await api(`/conversations/${selectedId}/read`, { method: 'POST' });
@@ -112,7 +116,9 @@ export function InboxPage(): JSX.Element {
   async function refreshConversation(): Promise<void> {
     if (!selectedId) return;
     try {
-      setConversation(await api<ConversationDetail>(`/conversations/${selectedId}`));
+      const c = await api<unknown>(`/conversations/${selectedId}`);
+      if (!esConversationDetail(c)) throw new Error('La conversación llegó incompleta');
+      setConversation(c);
     } catch (e) {
       // No se relanza: quien llama ya hizo su trabajo (enviar, cerrar, anotar) y
       // que falle el refresco no significa que aquello fallara.
