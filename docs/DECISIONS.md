@@ -414,3 +414,17 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **El prompt prohíbe explícitamente rellenar huecos**: en un resumen operativo, inventar es el peor fallo posible — el equipo actuaría sobre algo que ningún cliente dijo.
 
 **Se apunta como `team-summary` y no como `summarize`** en el registro de gasto: son dos usos distintos del modelo y conviene poder mirarlos por separado a la hora de recortar.
+
+## 2026-07-26 — `AiService` se parte: los textos de una sola llamada salen aparte
+
+**Decisión**: los resúmenes (memoria de la IA y resumen para el equipo) y el mensaje de seguimiento se mudan de `AiService` a `AiWriterService`.
+
+**Motivo inmediato**: `ai.service.ts` había llegado a 627 líneas contra el límite de 500 que fija el propio proyecto. Pero el corte no es por tamaño: son dos cosas distintas. `AiService` mantiene una conversación —bucle de tool-calling, historial, guarda de costo, alguien esperando al otro lado de WhatsApp—. `AiWriterService` hace una sola llamada, sin herramientas y sin nadie esperando.
+
+**Se elimina triplicación real**: las tres funciones repetían el mismo esqueleto —armar la transcripción, llamar al modelo, apuntar el gasto, extraer el texto—. Ahora ese esqueleto vive una vez en `oneShot()`, y cada función aporta solo su prompt y su finalidad de gasto.
+
+**Los dos llamadores cambian de dependencia, no de forma**: `ConversationsService` y `ConversationFollowUpService` solo usaban métodos de esta familia, así que se sustituye `AiService` por `AiWriterService` en la misma posición del constructor. Ningún otro código se entera.
+
+**El servicio nuevo construye su propio cliente de Anthropic** en vez de compartir el de `AiService`. Son dos líneas de configuración repetidas; la alternativa —un tercer servicio que solo sostiene el cliente— añadía una indirección que no paga lo que cuesta leerla.
+
+**Resultado**: `ai.service.ts` queda en 468 líneas y ningún archivo del backend supera el límite. La cobertura sube: los resúmenes tenían dos casos y ahora tienen quince, incluidos los que faltaban —que sin origen no se impute el gasto a nadie, y que el modo simulado no apunte consumo que nunca ocurrió.

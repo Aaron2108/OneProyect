@@ -8,7 +8,7 @@ import {
   MessageSender,
 } from '@prisma/client';
 import { AiContextMemoryService } from '../ai/ai-context-memory.service';
-import { AiService } from '../ai/ai.service';
+import { AiWriterService } from '../ai/ai-writer.service';
 import { HistoryTurn } from '../ai/ai.types';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,7 +41,7 @@ export class ConversationsService {
     private readonly prisma: PrismaService,
     private readonly sender: WhatsappSenderService,
     private readonly pii: PiiCryptoService,
-    private readonly ai: AiService,
+    private readonly ai: AiWriterService,
     private readonly contextMemory: AiContextMemoryService,
   ) {}
 

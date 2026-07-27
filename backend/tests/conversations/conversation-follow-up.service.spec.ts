@@ -1,5 +1,5 @@
 import { MessageDirection, ReminderStatus } from '@prisma/client';
-import { AiService } from '../../src/ai/ai.service';
+import { AiWriterService } from '../../src/ai/ai-writer.service';
 import { ConversationFollowUpService } from '../../src/conversations/conversation-follow-up.service';
 import { FOLLOW_UP_SOURCE } from '../../src/conversations/follow-up.constants';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -41,7 +41,7 @@ describe('ConversationFollowUpService', () => {
       reminder: { create: reminderCreate },
     } as unknown as PrismaService;
     const generateFollowUp = opts.generateFollowUp ?? jest.fn().mockResolvedValue('¿Seguís por ahí?');
-    const ai = { generateFollowUp } as unknown as AiService;
+    const ai = { generateFollowUp } as unknown as AiWriterService;
     return { service: new ConversationFollowUpService(prisma, ai, pii), findMany, updateMany, reminderCreate, generateFollowUp };
   }
 

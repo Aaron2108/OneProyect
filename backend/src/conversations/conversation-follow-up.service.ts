@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConsentStatus, ConversationHandler, ConversationStatus, MessageDirection, ReminderStatus } from '@prisma/client';
-import { AiService } from '../ai/ai.service';
+import { AiWriterService } from '../ai/ai-writer.service';
 import { HistoryTurn } from '../ai/ai.types';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,7 +39,7 @@ export class ConversationFollowUpService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly ai: AiService,
+    private readonly ai: AiWriterService,
     private readonly pii: PiiCryptoService,
   ) {}
 

@@ -5,6 +5,7 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { AiContextMemoryService } from './ai-context-memory.service';
 import { AiToolExecutorService } from './ai-tool-executor.service';
 import { AiUsageService } from './ai-usage.service';
+import { AiWriterService } from './ai-writer.service';
 import { AiService } from './ai.service';
 import { EmbeddingsModule } from './embeddings.module';
 import { NvidiaChatService } from './nvidia-chat.service';
@@ -34,9 +35,10 @@ import { ProductsModule } from '../products/products.module';
     AiContextMemoryService,
     NvidiaChatService,
     AiUsageService,
+    AiWriterService,
   ],
   // AiUsageService se exporta para que el panel de metricas pueda consultar el
   // gasto sin duplicar la agregacion.
-  exports: [AiService, AiContextMemoryService, AiUsageService],
+  exports: [AiService, AiContextMemoryService, AiUsageService, AiWriterService],
 })
 export class AiModule {}

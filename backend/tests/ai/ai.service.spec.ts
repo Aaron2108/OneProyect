@@ -358,28 +358,6 @@ describe('AiService', () => {
       const systemPrompt = create.mock.calls[0][0].system as string;
       expect(systemPrompt).toContain('El cliente preguntó por precios de envío.');
     });
-
-    it('summarize en modo real pide un resumen corto a Claude', async () => {
-      const prisma = {} as PrismaService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
-      const create = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'El cliente agendó una cita para el jueves.' }],
-      });
-      (service as unknown as { client: unknown }).client = { messages: { create } };
-
-      const summary = await service.summarize([
-        { role: 'user', text: 'Quiero una cita el jueves' },
-        { role: 'assistant', text: 'Listo, quedó agendada' },
-      ]);
-
-      expect(summary).toBe('El cliente agendó una cita para el jueves.');
-      expect(create).toHaveBeenCalled();
-    });
-
-    it('summarize devuelve vacío sin historial', async () => {
-      const service = new AiService(makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
-      expect(await service.summarize([])).toBe('');
-    });
   });
 
   describe('perfil de negocio (Agente IA)', () => {
@@ -425,56 +403,10 @@ describe('AiService', () => {
     });
   });
 
-  describe('generateFollowUp (seguimiento automático, Fase 4)', () => {
-    const ctx = {
-      tenantId: 't1',
-      tenantName: 'Empresa',
-      contactId: 'c1',
-      contactName: 'Ana',
-      contactPhone: '1',
-      conversationId: 'cv',
-    };
+  // Los resúmenes y el seguimiento se mudaron a `AiWriterService`: son una sola
+  // llamada sin herramientas, y tienen su propio spec (`ai-writer.service.spec`).
 
-    it('en modo real, pide un mensaje breve de seguimiento incluyendo el tono del negocio', async () => {
-      const prisma = {} as PrismaService;
-      const profile = {
-        describe: jest.fn().mockResolvedValue(['Tono/estilo con el que debes responder: Cercano.']),
-        timeZoneOf: jest.fn().mockResolvedValue(null),
-      } as unknown as BusinessProfileService;
-      const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, profile, noKnowledge, noNvidia, noUsage);
-      const create = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'Hola Ana, ¿seguís por ahí?' }],
-      });
-      (service as unknown as { client: unknown }).client = { messages: { create } };
-
-      const text = await service.generateFollowUp(ctx, [{ role: 'assistant', text: 'Hola, ¿en qué te ayudo?' }]);
-
-      expect(text).toBe('Hola Ana, ¿seguís por ahí?');
-      expect(profile.describe).toHaveBeenCalledWith('t1');
-      const systemPrompt = create.mock.calls[0][0].system as string;
-      expect(systemPrompt).toContain('Cercano');
-    });
-
-    it('en modo mock, devuelve un seguimiento simulado sin llamar a la API', async () => {
-      const service = new AiService(
-        { get: () => undefined } as unknown as ConfigService,
-        {} as PrismaService,
-        tools,
-        noMemory,
-        noProfile,
-        noKnowledge,
-        noNvidia, noUsage,
-      );
-      (service as unknown as { provider: string }).provider = 'mock';
-
-      const text = await service.generateFollowUp(ctx, []);
-
-      expect(text).toContain('Ana');
-      expect(text).toContain('simulado');
-    });
-  });
-
-  describe('proveedor de pruebas NVIDIA (AI_PROVIDER=nvidia, noUsage)', () => {
+  describe('proveedor de pruebas NVIDIA (AI_PROVIDER=nvidia)', () => {
     const ctx = {
       tenantId: 't1',
       tenantName: 'Empresa',

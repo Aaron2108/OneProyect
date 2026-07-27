@@ -6,7 +6,7 @@ import {
   MessageSender,
 } from '@prisma/client';
 import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
-import { AiService } from '../../src/ai/ai.service';
+import { AiWriterService } from '../../src/ai/ai-writer.service';
 import { ConversationsService } from '../../src/conversations/conversations.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { WhatsappSenderService } from '../../src/whatsapp/whatsapp-sender.service';
@@ -18,7 +18,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     sendText: jest.fn(),
   } as unknown as WhatsappSenderService;
 
-  const aiDisabled = { summarize: jest.fn().mockResolvedValue('') } as unknown as AiService;
+  const aiDisabled = { summarize: jest.fn().mockResolvedValue('') } as unknown as AiWriterService;
   const contextMemoryDisabled = {
     isEnabled: () => false,
     remember: jest.fn(),
@@ -31,7 +31,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
   function makeService(
     prisma: Record<string, unknown>,
     sender: WhatsappSenderService = senderDisabled,
-    ai: AiService = aiDisabled,
+    ai: AiWriterService = aiDisabled,
     contextMemory: AiContextMemoryService = contextMemoryDisabled,
   ): ConversationsService {
     return new ConversationsService(makePrisma(prisma), sender, makeTestPiiCrypto(), ai, contextMemory);
@@ -55,7 +55,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
     });
 
     const aiConResumen = (texto = 'El cliente pidió turno; se le ofreció el viernes a las 16h.') =>
-      ({ summarizeForTeam: jest.fn().mockResolvedValue(texto) }) as unknown as AiService;
+      ({ summarizeForTeam: jest.fn().mockResolvedValue(texto) }) as unknown as AiWriterService;
 
     it('genera el resumen y lo guarda cifrado', async () => {
       const update = jest.fn().mockResolvedValue({
@@ -409,7 +409,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
       const service = makeService(
         { conversation: { count, update, findUnique } },
         senderDisabled,
-        { summarize } as unknown as AiService,
+        { summarize } as unknown as AiWriterService,
         { isEnabled: () => true, remember } as unknown as AiContextMemoryService,
       );
 
