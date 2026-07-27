@@ -1,5 +1,5 @@
 import { Bot, Calendar, Contact, LayoutGrid, MessageSquare, Package, Users, type LucideIcon } from 'lucide-react';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
@@ -35,6 +35,18 @@ const SECCIONES: Array<{ path: string; label: string; icon: LucideIcon }> = [
   { path: '/agente', label: 'Agente IA', icon: Bot },
   { path: '/equipo', label: 'Equipo', icon: Users },
 ];
+
+/**
+ * Contenedor con scroll de cada sección.
+ *
+ * `main` no puede desplazarse (`overflow-hidden`) porque la bandeja necesita
+ * que sus tres columnas se desplacen por separado. Las demás páginas son una
+ * columna larga y sí necesitan su propio scroll: sin esto, el contenido se
+ * corta y la rueda del ratón no hace nada.
+ */
+function Desplazable({ children }: { children: ReactNode }): JSX.Element {
+  return <div className="h-full overflow-y-auto">{children}</div>;
+}
 
 /** Título de la barra superior, derivado de la URL. */
 function useTituloDeSeccion(): string {
@@ -106,16 +118,21 @@ export function AppShell(): JSX.Element {
               repetirlo por página solo añadiría ruido. */}
           <Suspense fallback={null}>
             <Routes>
-              <Route path="/bandeja" element={<InboxPage />} />
-            {/* La conversación abierta va en la URL: así se puede enlazar una
-                conversación concreta y el botón "atrás" cierra el hilo. */}
-              <Route path="/bandeja/:conversationId" element={<InboxPage />} />
-              <Route path="/metricas" element={<MetricsPage />} />
-              <Route path="/contactos" element={<ContactsPage />} />
-              <Route path="/calendario" element={<CalendarPage />} />
-              <Route path="/productos" element={<ProductsPage />} />
-              <Route path="/agente" element={<AiAgentPage />} />
-              <Route path="/equipo" element={<TeamPage />} />
+              {/* La bandeja ocupa el alto completo y reparte el scroll entre
+                  sus columnas; no lleva envoltorio con scroll propio. */}
+              <Route path="/bandeja" element={<div className="h-full"><InboxPage /></div>} />
+              {/* La conversación abierta va en la URL: así se puede enlazar una
+                  conversación concreta y el botón "atrás" cierra el hilo. */}
+              <Route
+                path="/bandeja/:conversationId"
+                element={<div className="h-full"><InboxPage /></div>}
+              />
+              <Route path="/metricas" element={<Desplazable><MetricsPage /></Desplazable>} />
+              <Route path="/contactos" element={<Desplazable><ContactsPage /></Desplazable>} />
+              <Route path="/calendario" element={<Desplazable><CalendarPage /></Desplazable>} />
+              <Route path="/productos" element={<Desplazable><ProductsPage /></Desplazable>} />
+              <Route path="/agente" element={<Desplazable><AiAgentPage /></Desplazable>} />
+              <Route path="/equipo" element={<Desplazable><TeamPage /></Desplazable>} />
             {/* Cualquier otra cosa cae en la bandeja, que es la pantalla de
                 trabajo. `replace` para no dejar basura en el historial. */}
               <Route path="*" element={<Navigate to="/bandeja" replace />} />
