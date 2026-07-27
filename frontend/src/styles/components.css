@@ -419,37 +419,6 @@
 }
 .wf-menu-item[data-highlighted] { background: var(--hover-bg); }
 
-/* ===== Movimiento reducido =====
-   Quien activa "reducir movimiento" en su sistema no lo hace por gusto: lo hace
-   porque el movimiento le provoca mareo o migraña. Se anulan las animaciones
-   decorativas —sobre todo las infinitas, que nunca paran— y se dejan intactas
-   las transiciones de color, que no desplazan nada. Framer Motion se cubre
-   aparte con `MotionConfig reducedMotion="user"` en App.tsx. */
-@media (prefers-reduced-motion: reduce) {
-  .reveal,
-  .auth-hero h1 span,
-  .auth-demo,
-  .auth-card,
-  .wf-toast[data-state='open'],
-  .wf-toast[data-state='closed'],
-  .wf-dialog[data-state='open'],
-  .wf-popover[data-state='open'],
-  .wf-overlay[data-state='open'] {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-  .float-y,
-  .auth-hero__glow,
-  .auth-demo__dot,
-  .auth-demo__typing i,
-  .status-pill__dot,
-  .sk-shimmer,
-  .bubble--ai.is-new {
-    animation: none;
-  }
-}
-
 /* ===== Scrollbar discreto ===== */
 * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }

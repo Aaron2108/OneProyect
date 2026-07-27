@@ -50,11 +50,6 @@
   --danger: #ff6b6b;
   --danger-tint: rgba(255, 107, 107, 0.16);
 
-  /* Gráficos (mismo trío tri-voz de siempre, hex nuevos) */
-  --chart-human: #35f0a3;
-  --chart-in: #f6c453;
-  --chart-ai: #6c7bff;
-
   /* ---- Radios: escala de 4 pasos, 20px para tarjetas ---- */
   --radius-xs: 10px;
   --radius-sm: 12px;
@@ -70,70 +65,10 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 180ms;
 
-  /* Atmósfera muy sutil — nunca ruido, nunca brillo cyberpunk */
-  --mesh: radial-gradient(50% 60% at 12% 0%, rgba(53, 240, 163, 0.05), transparent 60%),
-    radial-gradient(45% 55% at 92% 10%, rgba(108, 123, 255, 0.06), transparent 60%);
+  /* Grano de la pantalla de acceso — atmósfera muy sutil, nunca ruido */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 
   color-scheme: dark;
-}
-
-/* ---- Vidrio (glassmorphism sutil — sidebar/topbar/popovers/modales) ---- */
-.glass {
-  background: var(--surface-glass);
-  backdrop-filter: saturate(140%) blur(18px);
-  -webkit-backdrop-filter: saturate(140%) blur(18px);
-  border: 1px solid var(--line);
-  position: relative;
-}
-.glass::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-  pointer-events: none;
-}
-
-/* ---- Mesh + grain (atmósfera de superficies clave, no ruido) ---- */
-.mesh-surface {
-  position: relative;
-  background-image: var(--mesh);
-}
-.mesh-surface::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--grain);
-  opacity: 0.025;
-  mix-blend-mode: overlay;
-  pointer-events: none;
-}
-
-/*
- * Aura de la IA — el único gesto decorativo que se repite a propósito
- * (avatar/burbuja de la IA, ítem activo del sidebar, gauge de automatización):
- * un resplandor de dos tonos (marca + índigo) que respira muy despacio.
- * Nunca parpadea, nunca es intenso — es presencia, no ruido.
- */
-@keyframes auraBreathe {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
-}
-.ai-aura {
-  position: relative;
-}
-.ai-aura::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  z-index: -1;
-  border-radius: inherit;
-  background: linear-gradient(135deg, var(--brand-glow), var(--ai-glow));
-  filter: blur(10px);
-  opacity: 0.55;
-  animation: auraBreathe 4.5s ease-in-out infinite;
-  pointer-events: none;
 }
 
 /* ---- Base ---- */
