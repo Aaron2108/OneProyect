@@ -9,9 +9,10 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, uploadFile } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
+import { useRecurso } from '@/lib/use-recurso';
 import { Button } from '@/components/ui/Button';
 import { Pill } from '@/components/ui/Pill';
 import type { KnowledgeDocument, KnowledgeUploadResult } from '@/lib/types';
@@ -49,7 +50,6 @@ export function KnowledgeDocuments({
   onChanged: () => void;
 }): JSX.Element {
   const toast = useToast();
-  const [items, setItems] = useState<KnowledgeDocument[]>([]);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [review, setReview] = useState<KnowledgeUploadResult | null>(null);
@@ -57,24 +57,17 @@ export function KnowledgeDocuments({
   const inputRef = useRef<HTMLInputElement>(null);
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
 
-  async function load(): Promise<void> {
-    try {
-      setItems(await api<KnowledgeDocument[]>('/knowledge/documents'));
-    } catch (e) {
-      toast.show(e instanceof Error ? e.message : 'No se pudo cargar la documentación', 'error');
-    }
-  }
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { datos, recargar } = useRecurso<KnowledgeDocument[]>(
+    '/knowledge/documents',
+    'No se pudo cargar la documentación',
+  );
+  const items = datos ?? [];
 
   async function handleFile(file: File): Promise<void> {
     setUploading(true);
     try {
       const result = await uploadFile<KnowledgeUploadResult>('/knowledge/documents', file);
-      await load();
+      await recargar();
       if (result.status === 'FAILED') {
         toast.show(result.extractionError ?? 'No se pudo leer el documento', 'error');
       } else {
@@ -96,7 +89,7 @@ export function KnowledgeDocuments({
       await api(`/knowledge/documents/${id}/activate`, { method: 'POST' });
       toast.show('Documento activado: la IA ya puede consultarlo');
       setReview(null);
-      await load();
+      await recargar();
       onChanged();
     } catch (e) {
       toast.show(e instanceof Error ? e.message : 'No se pudo activar', 'error');
@@ -112,7 +105,7 @@ export function KnowledgeDocuments({
       toast.show('Documento eliminado');
       if (review?.id === id) setReview(null);
       if (previewOf?.id === id) setPreviewOf(null);
-      await load();
+      await recargar();
       onChanged();
     } catch (e) {
       toast.show(e instanceof Error ? e.message : 'No se pudo eliminar', 'error');
