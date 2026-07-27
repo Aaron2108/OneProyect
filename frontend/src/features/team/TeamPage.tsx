@@ -75,16 +75,19 @@ export function TeamPage(): JSX.Element {
       {user?.role === 'OWNER' && inviting && (
         <form onSubmit={invite} className="mb-6 flex flex-wrap items-end gap-3 kpi-card">
           {error && <div role="alert" className="w-full rounded-sm bg-danger-tint px-3.5 py-2.5 text-[13.5px] text-danger">{error}</div>}
+          {/* `aria-label` y no una etiqueta visible: el placeholder desaparece al
+              escribir y un lector de pantalla solo anunciaba "cuadro de edición".
+              Poner un <Label> encima cambiaría el diseño del formulario. */}
           <div className="min-w-[140px] flex-1">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" aria-label="Nombre" />
           </div>
           <div className="min-w-[160px] flex-1">
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" aria-label="Email" />
           </div>
           <div className="min-w-[170px] flex-1">
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña (mín. 8)" autoComplete="new-password" />
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña (mín. 8)" aria-label="Contraseña" autoComplete="new-password" />
           </div>
-          <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)} className="w-auto flex-shrink-0">
+          <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)} aria-label="Rol" className="w-auto flex-shrink-0">
             <option value="AGENT">Agente</option>
             <option value="OWNER">Propietario</option>
           </Select>

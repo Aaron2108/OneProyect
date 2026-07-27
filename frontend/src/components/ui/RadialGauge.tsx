@@ -23,7 +23,10 @@ export function RadialGauge({ aiPct, size = 168 }: { aiPct: number; size?: numbe
 
   return (
     <div className="relative grid place-items-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+      {/* El anillo es la versión dibujada de la cifra que ya está debajo en
+          texto ("68% lo resuelve la IA"): sin ocultarlo, un lector de pantalla
+          anuncia un gráfico sin contenido antes de llegar al dato. */}
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true">
         <circle className="gauge-track" cx={center} cy={center} r={r} fill="none" strokeWidth={11} />
         <circle
           className="gauge-ai"

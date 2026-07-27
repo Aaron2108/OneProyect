@@ -106,11 +106,14 @@ export function ContactsPage(): JSX.Element {
       {adding && (
         <form onSubmit={addContact} className="mb-5 flex flex-wrap items-end gap-3 kpi-card">
           {error && <div role="alert" className="w-full rounded-sm bg-danger-tint px-3.5 py-2.5 text-[13.5px] text-danger">{error}</div>}
+          {/* `aria-label` y no una etiqueta visible: el placeholder desaparece al
+              escribir y un lector de pantalla solo anunciaba "cuadro de edición".
+              Poner un <Label> encima cambiaría el diseño del formulario. */}
           <div className="min-w-[180px] flex-1">
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Teléfono (5215500000000)" inputMode="tel" />
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Teléfono (5215500000000)" aria-label="Teléfono" inputMode="tel" />
           </div>
           <div className="min-w-[180px] flex-1">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre (opcional)" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre (opcional)" aria-label="Nombre (opcional)" />
           </div>
           <Button type="submit">Añadir</Button>
         </form>
@@ -160,7 +163,13 @@ export function ContactsPage(): JSX.Element {
                   role="button"
                   tabIndex={0}
                   onClick={() => setEditing(c)}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setEditing(c)}
+                  // `preventDefault` en la barra espaciadora: sin él el navegador
+                  // además desplaza la página al abrir la ficha con teclado.
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    setEditing(c);
+                  }}
                   className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-4 border-b border-line px-5 py-3.5 transition-colors duration-fast last:border-0 hover:bg-[var(--row-hover)] sm:grid-cols-[1fr_auto_auto]"
                 >
                   <div className="flex items-center gap-3 overflow-hidden">

@@ -100,7 +100,14 @@ export function Roster(props: RosterProps): JSX.Element {
                   role="button"
                   tabIndex={0}
                   onClick={() => props.onSelect(c.id)}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && props.onSelect(c.id)}
+                  // `preventDefault` en la barra espaciadora: sin él el navegador
+                  // además desplaza la lista, y al abrir la conversación con
+                  // teclado el listado saltaba una pantalla hacia abajo.
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    props.onSelect(c.id);
+                  }}
                   className={`relative flex cursor-pointer gap-3 border-b border-line px-4 py-3.5 transition-colors duration-fast hover:bg-[var(--row-hover)] ${
                     selectedId === c.id ? 'bg-brand-tint' : ''
                   }`}

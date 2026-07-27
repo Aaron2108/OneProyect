@@ -237,10 +237,12 @@ export function MetricsPage(): JSX.Element {
             {showTable && (
               <table className="mt-3 w-full border-collapse text-[13px]">
                 <thead>
+                  {/* `scope="col"` para que el lector de pantalla relacione cada
+                      número con su columna al recorrer la tabla. */}
                   <tr>
-                    <th className="border-b border-line py-2 text-left font-semibold text-ink-soft">Día</th>
-                    <th className="border-b border-line py-2 text-right font-semibold text-ink-soft">Recibidos</th>
-                    <th className="border-b border-line py-2 text-right font-semibold text-ink-soft">Enviados</th>
+                    <th scope="col" className="border-b border-line py-2 text-left font-semibold text-ink-soft">Día</th>
+                    <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Recibidos</th>
+                    <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Enviados</th>
                   </tr>
                 </thead>
                 <tbody>

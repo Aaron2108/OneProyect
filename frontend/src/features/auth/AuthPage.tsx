@@ -297,15 +297,18 @@ export function AuthPage(): JSX.Element {
 
           <p className="mt-5 text-center text-sm text-ink-soft">
             {isRegister ? '¿Ya tienes cuenta? ' : '¿Aún no tienes cuenta? '}
-            <a
-              role="button"
-              tabIndex={0}
+            {/* Un <button> y no un <a role="button">: el enlace no tenía href, así
+                que no era enfocable de por sí ni se activaba con teclado sin
+                emularlo a mano. El botón trae todo eso de fábrica y se anuncia
+                como lo que es. El aspecto no cambia: Tailwind normaliza los
+                botones para heredar tipografía y fondo. */}
+            <button
+              type="button"
               onClick={() => setMode(isRegister ? 'login' : 'register')}
-              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setMode(isRegister ? 'login' : 'register')}
               className="cursor-pointer font-semibold text-brand-hover"
             >
               {isRegister ? 'Inicia sesión' : 'Crea tu empresa'}
-            </a>
+            </button>
           </p>
           <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-ink-disabled">
             <Lock size={12} strokeWidth={2} /> Conexión oficial con la Meta Cloud API de WhatsApp
