@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, downloadFile } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
@@ -25,25 +25,26 @@ export function InboxPage(): JSX.Element {
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
   const loadedOnce = useRef(false);
 
-  const load = useCallback(
-    async (reset: boolean) => {
-      setLoading(reset && items.length === 0);
-      const qs = new URLSearchParams();
-      if (status) qs.set('status', status);
-      if (handledBy) qs.set('handledBy', handledBy);
-      if (query.trim()) qs.set('q', query.trim());
-      if (!reset && cursor) qs.set('cursor', cursor);
-      try {
-        const res = await api<Page<ConversationSummary>>(`/conversations?${qs.toString()}`);
-        setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-        setCursor(res.nextCursor);
-      } finally {
-        setLoading(false);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [status, handledBy, query],
-  );
+  // Función normal y no `useCallback`: memorizarla con los filtros como
+  // dependencias congelaba el `cursor` del primer render, así que "Cargar más"
+  // volvía a pedir la primera página y la añadía repetida al final de la lista.
+  // Recreada en cada render siempre lee el cursor vigente — igual que en
+  // ContactsPage.
+  async function load(reset: boolean): Promise<void> {
+    setLoading(reset && items.length === 0);
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (handledBy) qs.set('handledBy', handledBy);
+    if (query.trim()) qs.set('q', query.trim());
+    if (!reset && cursor) qs.set('cursor', cursor);
+    try {
+      const res = await api<Page<ConversationSummary>>(`/conversations?${qs.toString()}`);
+      setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
+      setCursor(res.nextCursor);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Carga inicial + recarga al cambiar filtros (con debounce en la búsqueda).
   useEffect(() => {
