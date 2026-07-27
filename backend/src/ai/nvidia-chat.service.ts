@@ -73,13 +73,28 @@ function toOpenAiTool(tool: Anthropic.Tool): OpenAiTool {
 }
 
 /**
- * Algunos modelos de razonamiento devuelven su cadena de pensamiento en un campo
- * aparte (`reasoning_content`), pero otros la intercalan en el texto como
- * `<think>…</think>`. Eso NUNCA debe llegar al cliente por WhatsApp, así que se
- * descarta defensivamente aunque el modelo probado no lo haga.
+ * Etiquetas con las que estos modelos envuelven su salida. No son parte del
+ * mensaje: son andamiaje que a veces se les escapa.
+ */
+const ETIQUETAS_DE_ANDAMIO = ['think', 'thinking', 'response', 'answer', 'output', 'final'];
+
+/**
+ * Limpia el texto antes de que salga hacia el cliente.
+ *
+ * Quita el razonamiento intercalado (`<think>…</think>`) y también las
+ * etiquetas sueltas de esa familia: en una prueba real llegó un mensaje que
+ * empezaba con `<response>` literal, porque el modelo abrió la etiqueta y no la
+ * cerró. Se limita a una lista conocida a propósito — borrar cualquier `<…>`
+ * destrozaría un mensaje legítimo que hable de tallas o de precios ("<10 soles").
  */
 function stripReasoning(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const nombres = ETIQUETAS_DE_ANDAMIO.join('|');
+  return text
+    // Bloques completos, con su contenido: es razonamiento, no respuesta.
+    .replace(new RegExp(`<(${nombres})>[\\s\\S]*?</\\1>`, 'gi'), '')
+    // Etiquetas huérfanas (abiertas y nunca cerradas, o al revés).
+    .replace(new RegExp(`</?(${nombres})>`, 'gi'), '')
+    .trim();
 }
 
 /** Los argumentos llegan como string JSON; si no es un objeto válido, null. */

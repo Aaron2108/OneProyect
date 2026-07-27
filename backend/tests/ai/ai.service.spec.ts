@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
-import { AiService } from '../../src/ai/ai.service';
+import { AiService, toWhatsAppText } from '../../src/ai/ai.service';
 import { AI_TOOLS, AiToolExecutorService } from '../../src/ai/ai-tool-executor.service';
 import { BusinessProfileService } from '../../src/business-profile/business-profile.service';
 import { KnowledgeRetrievalService } from '../../src/knowledge/knowledge-retrieval.service';
@@ -49,6 +49,26 @@ describe('AiService', () => {
     const prisma = {} as PrismaService;
     const service = new AiService(makeConfig('sk-ant-test'), prisma, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage);
     expect(service.isEnabled()).toBe(true);
+  });
+
+  describe('toWhatsAppText', () => {
+    // WhatsApp no lee Markdown: su negrita lleva UN asterisco. Pedirlo en el
+    // prompt no basta — se colaba en una de cada seis respuestas del agente.
+    it('convierte la negrita de Markdown a la de WhatsApp', () => {
+      expect(toWhatsAppText('El precio es **24.00 PEN** hoy')).toBe('El precio es *24.00 PEN* hoy');
+    });
+
+    it('quita los marcadores de encabezado sin perder el texto', () => {
+      expect(toWhatsAppText('## Horarios\nAbrimos a las 9')).toBe('Horarios\nAbrimos a las 9');
+    });
+
+    it('no toca un asterisco suelto ni la negrita que ya es de WhatsApp', () => {
+      expect(toWhatsAppText('Talla 3*4 y *oferta* del dia')).toBe('Talla 3*4 y *oferta* del dia');
+    });
+
+    it('deja intacto el texto plano', () => {
+      expect(toWhatsAppText('Hola, tenemos turno el viernes.')).toBe('Hola, tenemos turno el viernes.');
+    });
   });
 
   describe('withinRateLimit (guarda de costo)', () => {
@@ -293,6 +313,18 @@ describe('AiService', () => {
       // venía a quitarle: la instrucción sin freno rompe el producto.
       expect(prompt()).toMatch(/no escales por costumbre/i);
       expect(prompt()).toMatch(/si la información que tienes alcanza.*responde tú/i);
+    });
+
+    it('le prohibe prometer lo que el negocio no declaro', () => {
+      // Ofrecia "gestionar el reembolso" de un negocio que nunca lo prometio.
+      expect(prompt()).toMatch(/no prometas nada en nombre del negocio/i);
+      expect(prompt()).toMatch(/reembolsos.*garantias|garantías/i);
+    });
+
+    it('pide texto plano: WhatsApp no interpreta Markdown', () => {
+      // Escribia **negrita** y en WhatsApp se leen los asteriscos.
+      expect(prompt()).toMatch(/texto plano/i);
+      expect(prompt()).toMatch(/nada de markdown/i);
     });
 
     it('la herramienta se le ofrece al modelo', () => {

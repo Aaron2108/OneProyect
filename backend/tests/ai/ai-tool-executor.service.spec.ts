@@ -204,6 +204,26 @@ describe('AiToolExecutorService', () => {
       expect(result).toContain('4 disponibles');
     });
 
+    it('no le pasa el SKU al modelo: es un codigo interno del negocio', async () => {
+      // En una prueba real el agente le solto al cliente "es el modelo 500ml
+      // (DEMO-01)". Mismo criterio que con el id de una cita: si no lo tiene,
+      // no puede repetirlo.
+      products.searchForAi.mockResolvedValue([
+        { name: 'Remera azul', sku: 'DEMO-01', priceCents: 1990, currency: 'PEN', stock: 4 },
+      ]);
+      const result = await executor.execute('consultar_producto', { consulta: 'remera' }, ctx);
+      expect(result).not.toContain('DEMO-01');
+    });
+
+    it('le prohibe ofrecer reservas: la consulta es de solo lectura', async () => {
+      // Ofrecia "reservarlo" y no existe ninguna funcion de reserva.
+      products.searchForAi.mockResolvedValue([
+        { name: 'Remera', sku: null, priceCents: 1990, currency: 'PEN', stock: 4 },
+      ]);
+      const result = await executor.execute('consultar_producto', { consulta: 'remera' }, ctx);
+      expect(result).toMatch(/no ofrezcas reservar/i);
+    });
+
     it('marca claramente lo que no tiene existencias', async () => {
       products.searchForAi.mockResolvedValue([
         { name: 'Gorra', sku: null, priceCents: 2500, currency: null, stock: 0 },

@@ -292,9 +292,23 @@ export class AiToolExecutorService {
         precio = `${(p.priceCents / 100).toFixed(2)} (el negocio no configuró la moneda: di solo la cifra, sin símbolo ni nombre de moneda)`;
       }
       const stock = p.stock > 0 ? `${p.stock} disponibles` : 'SIN STOCK';
-      return `- ${p.name}${p.sku ? ` (${p.sku})` : ''}: ${precio}, ${stock}.`;
+      // El SKU NO va en el resultado, por lo mismo que no va el id de una cita:
+      // el modelo repite este texto al cliente, y en una prueba real le soltó
+      // "es el modelo 500ml (DEMO-01)". Un código interno del negocio no le
+      // dice nada a quien pregunta. La búsqueda sí lo mira (está en
+      // `searchText`), así que preguntar por el código sigue funcionando.
+      return `- ${p.name}: ${precio}, ${stock}.`;
     });
-    return `Resultado del catálogo para "${consulta}":\n${lineas.join('\n')}`;
+    this.logger.log(
+      `Catálogo consultado por la IA (tenant ${ctx.tenantId}): "${consulta}" -> ` +
+        encontrados.map((p) => p.sku ?? p.name).join(', '),
+    );
+    return (
+      `Resultado del catálogo para "${consulta}":\n${lineas.join('\n')}\n` +
+      // La consulta es de solo lectura: no hay reserva ni pedido en el sistema.
+      // Sin esto el agente ofrecía "reservarlo", que nadie puede cumplir.
+      'Informa disponibilidad y precio; NO ofrezcas reservar, apartar ni encargar: el negocio no tiene esa función.'
+    );
   }
 
   private async createAppointment(

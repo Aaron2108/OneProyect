@@ -202,6 +202,27 @@ describe('NvidiaChatService (proveedor de pruebas compatible con OpenAI)', () =>
     expect(reply.text).not.toContain('<think>');
   });
 
+  it('quita las etiquetas de andamio que el modelo deja abiertas', async () => {
+    // Caso real del chat de prueba: llegó un mensaje que empezaba por
+    // "<response>" literal porque el modelo abrió la etiqueta y no la cerró.
+    const service = new NvidiaChatService(config);
+    mockFetch([assistantMessage('<response> Entiendo su frustración, ya aviso al equipo.')]);
+
+    const reply = await service.respond('sistema', history, jest.fn());
+
+    expect(reply.text).toBe('Entiendo su frustración, ya aviso al equipo.');
+  });
+
+  it('no destroza un mensaje legítimo que use el signo menor que', async () => {
+    // Borrar cualquier <…> se llevaría por delante precios y tallas.
+    const service = new NvidiaChatService(config);
+    mockFetch([assistantMessage('Tenemos tallas <M> y todo cuesta <10 soles.')]);
+
+    const reply = await service.respond('sistema', history, jest.fn());
+
+    expect(reply.text).toBe('Tenemos tallas <M> y todo cuesta <10 soles.');
+  });
+
   it('con argumentos ilegibles informa al modelo en vez de romper la conversación', async () => {
     const service = new NvidiaChatService(config);
     const calls = mockFetch([

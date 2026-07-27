@@ -19,6 +19,26 @@ import { NvidiaChatService } from './nvidia-chat.service';
 import { AgentReply, ConversationContext, HistoryTurn, TokenUsage, ToolIntent } from './ai.types';
 import type { ToolRunner } from './nvidia-chat.service';
 
+/**
+ * Adapta el texto al formato que entiende WhatsApp.
+ *
+ * WhatsApp no lee Markdown: su negrita es `*así*`, con UN asterisco, y `##` no
+ * significa nada. Un `**precio**` se le muestra al cliente con los asteriscos
+ * puestos. El system prompt ya pide texto plano, pero pedirlo no basta —
+ * medido: se colaba en una de cada seis respuestas. Esto no depende de que el
+ * modelo obedezca.
+ */
+export function toWhatsAppText(texto: string): string {
+  return (
+    texto
+      // Negrita de Markdown a la de WhatsApp, sin perder el énfasis.
+      .replace(/\*\*(.+?)\*\*/gs, '*$1*')
+      // Encabezados: el marcador sobra, el texto se queda.
+      .replace(/^#{1,6}\s+/gm, '')
+      .trim()
+  );
+}
+
 /** Cuál de los tres techos de costo se alcanzó. */
 export type RateLimitReason = 'conversacion-hora' | 'negocio-hora' | 'negocio-dia';
 
@@ -222,11 +242,12 @@ export class AiService {
     // recibe una respuesta de cierre. Al garantizar texto no vacío, el mensaje
     // se persiste y la guarda de costo cuenta esta llamada (corrige que una
     // respuesta vacía se pagara sin contar).
-    const text =
+    const text = toWhatsAppText(
       reply.text ||
-      (reply.actions.length > 0
-        ? 'Listo, ya lo registré. ¿Necesitas algo más?'
-        : '¿Podrías darme un poco más de detalle para ayudarte mejor?');
+        (reply.actions.length > 0
+          ? 'Listo, ya lo registré. ¿Necesitas algo más?'
+          : '¿Podrías darme un poco más de detalle para ayudarte mejor?'),
+    );
 
     // Se apunta lo gastado aunque el modelo no devolviera texto útil: la llamada
     // se pagó igual, y ocultarlo falsearía el histórico justo en los casos malos.
@@ -379,6 +400,13 @@ export class AiService {
       // es solo el respaldo global para quien llame sin ella.
       ...describeNow(now, ctx.timeZone ?? this.timeZone),
       'Responde en español, de forma breve, cordial y útil.',
+      // WhatsApp no interpreta Markdown: `**negrita**` se lee con los asteriscos
+      // puestos. Visto en una prueba real.
+      'Escribe en texto plano. Nada de Markdown: ni asteriscos para negrita, ni almohadillas, ni listas con guiones o viñetas.',
+      // El agente ofrecía "reservarlo" y decía que el equipo "gestionará el
+      // reembolso" — dos cosas que el negocio nunca prometió y que el sistema no
+      // puede cumplir. Comprometer al negocio es peor que no responder.
+      'No prometas nada en nombre del negocio que no esté escrito en su información: ni reembolsos, ni garantías, ni descuentos, ni reservas, ni plazos de entrega o de respuesta. Si el cliente lo pide y no está declarado, escala en vez de suponer.',
       'Usa las herramientas disponibles para programar citas, crear recordatorios o actualizar los datos del contacto cuando el cliente lo pida.',
       'No inventes información del negocio que no conozcas.',
       // Sin esto el modelo prefiere improvisar antes que reconocer que no sabe:
