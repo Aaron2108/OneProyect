@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite';
+// `defineConfig` de vitest/config y no de vite: es el mismo objeto de
+// configuración más la sección `test`, que Vite por sí solo no tipa.
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // Proxy de desarrollo: en `npm run dev` (Vite en :5173) las llamadas a la API
@@ -26,6 +28,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: { '@': '/src' },
+  },
+  test: {
+    // jsdom porque parte de lo que se prueba habla con el navegador
+    // (`sessionStorage`); las funciones puras no lo necesitan, pero tener un
+    // solo entorno evita configurar cada archivo por separado.
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
   },
   server: {
     port: 5173,

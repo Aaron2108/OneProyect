@@ -7,26 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, Label } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { ImportReport, Product } from '@/lib/types';
-
-/** Céntimos -> texto editable ("1990" -> "19.90"). */
-function centsToInput(cents: number | null): string {
-  return cents == null ? '' : (cents / 100).toFixed(2);
-}
-
-/** Texto -> céntimos. Devuelve undefined si no es un número válido. */
-function inputToCents(valor: string): number | null | undefined {
-  const limpio = valor.trim().replace(',', '.');
-  if (!limpio) return null;
-  const n = Number(limpio);
-  if (!Number.isFinite(n) || n < 0) return undefined;
-  return Math.round(n * 100);
-}
-
-function formatPrice(product: Product): string {
-  if (product.priceCents == null) return '—';
-  const importe = (product.priceCents / 100).toFixed(2);
-  return product.currency ? `${importe} ${product.currency}` : importe;
-}
+import { centsToInput, formatPrice, inputToCents } from './products.util';
 
 /**
  * Catálogo de productos con existencias.

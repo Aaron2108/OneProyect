@@ -5,6 +5,7 @@ import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { SimulatedTool, TestChatReply } from '@/lib/types';
+import { guardarConversacion, leerConversacionGuardada, type ChatTurn } from './test-chat.util';
 
 /** Tope de turnos que acepta la API (cada turno se paga en el prompt). */
 const MAX_TURNS = 20;
@@ -24,53 +25,6 @@ const ARG_LABELS: Record<string, string> = {
   remind_at: 'Fecha y hora',
   name: 'Nombre',
 };
-
-interface ChatTurn {
-  role: 'user' | 'assistant';
-  text: string;
-  simulatedTools?: SimulatedTool[];
-}
-
-/**
- * La conversación de prueba se guarda en `sessionStorage`.
- *
- * Hace falta porque cada sección es una ruta y salir de "Agente IA" desmonta
- * esta pantalla: sin esto, ir a Productos y volver borraba lo conversado.
- * `sessionStorage` y no `localStorage` a propósito — es una prueba, no algo que
- * deba seguir ahí mañana: vive mientras la pestaña esté abierta.
- *
- * La clave lleva versión: si algún día cambia la forma de un turno, lo viejo se
- * descarta solo en vez de reventar al leerlo.
- */
-const CLAVE_CHAT = 'whatsflow:test-chat:v1';
-
-function leerConversacionGuardada(): ChatTurn[] {
-  try {
-    const crudo = sessionStorage.getItem(CLAVE_CHAT);
-    if (!crudo) return [];
-    const turnos: unknown = JSON.parse(crudo);
-    if (!Array.isArray(turnos)) return [];
-    // Se valida la forma antes de confiar: lo que hay en el almacenamiento lo
-    // pudo escribir una versión anterior de la aplicación.
-    return turnos.filter(
-      (t): t is ChatTurn =>
-        !!t && typeof t === 'object' && typeof (t as ChatTurn).text === 'string',
-    );
-  } catch {
-    return [];
-  }
-}
-
-function guardarConversacion(turnos: ChatTurn[]): void {
-  try {
-    if (turnos.length === 0) sessionStorage.removeItem(CLAVE_CHAT);
-    else sessionStorage.setItem(CLAVE_CHAT, JSON.stringify(turnos));
-  } catch {
-    // Sin espacio o con el almacenamiento bloqueado: el chat sigue funcionando
-    // en memoria, solo que no sobrevive al cambio de sección. No vale romper la
-    // pantalla por esto.
-  }
-}
 
 /** Muestra lo que el agente habría hecho, sin haberlo hecho. */
 function SimulatedToolCard({ tool }: { tool: SimulatedTool }): JSX.Element {
