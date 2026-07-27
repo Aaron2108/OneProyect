@@ -52,15 +52,19 @@ export class GoogleCalendarController {
     @Res() res: Response,
   ): Promise<void> {
     const base = this.config.get<string>('frontend.baseUrl') ?? '';
+    // Se vuelve a /calendario, que es donde vive la tarjeta de la integración.
+    // Antes se redirigía a la raíz: el panel la reenvía a la bandeja y descarta
+    // los parámetros, así que el resultado de la conexión no se veía nunca.
+    const destino = `${base}/calendario`;
     if (error || !code || !state) {
-      res.redirect(`${base}/?googleCalendar=error`);
+      res.redirect(`${destino}?googleCalendar=error`);
       return;
     }
     try {
       await this.oauth.handleCallback(code, state);
-      res.redirect(`${base}/?googleCalendar=connected`);
+      res.redirect(`${destino}?googleCalendar=connected`);
     } catch {
-      res.redirect(`${base}/?googleCalendar=error`);
+      res.redirect(`${destino}?googleCalendar=error`);
     }
   }
 }

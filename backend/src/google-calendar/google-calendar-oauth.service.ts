@@ -159,13 +159,55 @@ export class GoogleCalendarOauthService {
       where: { tenantId },
     });
     if (!integration) {
-      return { connected: false, googleAccountEmail: null, connectedAt: null };
+      return {
+        connected: false,
+        googleAccountEmail: null,
+        connectedAt: null,
+        needsReconnect: false,
+        pendingSyncCount: 0,
+        lastSyncError: null,
+      };
     }
+
+    // Los reintentos vivos son la señal de que algo va mal ahora mismo: sin
+    // esto el fallo solo existía en el log del servidor, donde el dueño del
+    // negocio no va a mirar nunca.
+    const [pendingSyncCount, ultimo] = await Promise.all([
+      this.prisma.googleCalendarSyncJob.count({ where: { tenantId } }),
+      this.prisma.googleCalendarSyncJob.findFirst({
+        where: { tenantId, lastError: { not: null } },
+        orderBy: { updatedAt: 'desc' },
+        select: { lastError: true },
+      }),
+    ]);
+
     return {
       connected: true,
       googleAccountEmail: integration.googleAccountEmail,
       connectedAt: integration.createdAt.toISOString(),
+      needsReconnect: !this.credencialesUtilizables(integration.refreshToken),
+      pendingSyncCount,
+      lastSyncError: ultimo?.lastError ?? null,
     };
+  }
+
+  /**
+   * ¿El refresh token guardado se puede seguir usando?
+   *
+   * Solo se comprueba que descifre, sin llamar a Google: el panel consulta el
+   * estado en cada visita al calendario y una petición de red por visita sería
+   * caro para lo que aporta. Descifrar detecta el caso que de verdad rompe la
+   * integración sin previo aviso — que TOKEN_ENCRYPTION_KEY haya cambiado desde
+   * que se conectó la cuenta, con lo que los tokens quedan ilegibles para
+   * siempre. Un token revocado desde Google no se ve aquí; ese se descubre al
+   * sincronizar y aflora por `lastSyncError`.
+   */
+  private credencialesUtilizables(refreshTokenCifrado: string): boolean {
+    try {
+      return decryptSecret(refreshTokenCifrado, this.encryptionKey).length > 0;
+    } catch {
+      return false;
+    }
   }
 
   async disconnect(tenantId: string): Promise<void> {

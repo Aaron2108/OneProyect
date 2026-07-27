@@ -135,4 +135,75 @@ describe('GoogleCalendarOauthService', () => {
     expect(token).toBe('AT-nuevo');
     expect(update).toHaveBeenCalledTimes(1);
   });
+
+  describe('getStatus', () => {
+    function makePrisma(
+      integration: unknown,
+      jobs: { count?: number; lastError?: string | null } = {},
+    ): PrismaService {
+      return {
+        googleCalendarIntegration: { findUnique: jest.fn().mockResolvedValue(integration) },
+        googleCalendarSyncJob: {
+          count: jest.fn().mockResolvedValue(jobs.count ?? 0),
+          findFirst: jest
+            .fn()
+            .mockResolvedValue(jobs.lastError ? { lastError: jobs.lastError } : null),
+        },
+      } as unknown as PrismaService;
+    }
+
+    const integracion = (refreshToken: string) => ({
+      googleAccountEmail: 'negocio@example.com',
+      createdAt: new Date('2026-07-01T10:00:00Z'),
+      refreshToken,
+    });
+
+    it('sin integración no pide reconexión ni cuenta reintentos', async () => {
+      const service = new GoogleCalendarOauthService(makeConfig(), makePrisma(null), {} as JwtService);
+
+      const status = await service.getStatus('t1');
+
+      expect(status.connected).toBe(false);
+      expect(status.needsReconnect).toBe(false);
+      expect(status.pendingSyncCount).toBe(0);
+      expect(status.lastSyncError).toBeNull();
+    });
+
+    it('con credenciales legibles reporta conectado y sin reconexión', async () => {
+      const prisma = makePrisma(integracion(encryptSecret('RT-valido', TOKEN_KEY)));
+      const service = new GoogleCalendarOauthService(makeConfig(), prisma, {} as JwtService);
+
+      const status = await service.getStatus('t1');
+
+      expect(status.connected).toBe(true);
+      expect(status.googleAccountEmail).toBe('negocio@example.com');
+      expect(status.needsReconnect).toBe(false);
+    });
+
+    // El caso que motivó el cambio: las citas dejaron de llegar a Google porque
+    // TOKEN_ENCRYPTION_KEY cambió, y el panel seguía anunciando "conectado".
+    it('pide reconectar si el refresh token se cifró con otra clave', async () => {
+      const otraClave = Buffer.from('otra-clave-de-32-bytes-exactos!!').toString('base64');
+      const prisma = makePrisma(integracion(encryptSecret('RT-valido', otraClave)));
+      const service = new GoogleCalendarOauthService(makeConfig(), prisma, {} as JwtService);
+
+      const status = await service.getStatus('t1');
+
+      expect(status.connected).toBe(true);
+      expect(status.needsReconnect).toBe(true);
+    });
+
+    it('expone los reintentos vivos y su último error', async () => {
+      const prisma = makePrisma(integracion(encryptSecret('RT-valido', TOKEN_KEY)), {
+        count: 3,
+        lastError: 'Google Calendar respondió 403',
+      });
+      const service = new GoogleCalendarOauthService(makeConfig(), prisma, {} as JwtService);
+
+      const status = await service.getStatus('t1');
+
+      expect(status.pendingSyncCount).toBe(3);
+      expect(status.lastSyncError).toBe('Google Calendar respondió 403');
+    });
+  });
 });
