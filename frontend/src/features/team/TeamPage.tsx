@@ -10,7 +10,7 @@ import { Input, Select } from '@/components/ui/Input';
 import { Pill } from '@/components/ui/Pill';
 import type { TeamMember, UserRole } from '@/lib/types';
 
-export function TeamPage({ active }: { active: boolean }): JSX.Element {
+export function TeamPage(): JSX.Element {
   const { user } = useAuth();
   const toast = useToast();
   const [items, setItems] = useState<TeamMember[]>([]);
@@ -26,8 +26,8 @@ export function TeamPage({ active }: { active: boolean }): JSX.Element {
     setItems(await api<TeamMember[]>('/users'));
   }
   useEffect(() => {
-    if (active) void load();
-  }, [active]);
+    void load();
+  }, []);
 
   async function invite(ev: FormEvent): Promise<void> {
     ev.preventDefault();

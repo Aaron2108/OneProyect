@@ -62,7 +62,7 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>):
   );
 }
 
-export function MetricsPage({ active }: { active: boolean }): JSX.Element {
+export function MetricsPage(): JSX.Element {
   const [range, setRange] = useState(7);
   const [data, setData] = useState<MetricsOverview | null>(null);
   const [usage, setUsage] = useState<AiUsageTotals | null>(null);
@@ -70,10 +70,9 @@ export function MetricsPage({ active }: { active: boolean }): JSX.Element {
   const [loadedOnce, setLoadedOnce] = useState(false);
 
   useEffect(() => {
-    if (!active) return;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, range]);
+  }, [range]);
 
   async function load(): Promise<void> {
     const to = new Date();

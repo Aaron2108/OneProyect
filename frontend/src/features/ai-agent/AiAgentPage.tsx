@@ -72,7 +72,7 @@ function timeZoneOptions(): string[] {
   return soportadas?.length ? soportadas : [propia].filter(Boolean);
 }
 
-export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
+export function AiAgentPage(): JSX.Element {
   const { user } = useAuth();
   const toast = useToast();
   const isOwner = user?.role === 'OWNER';
@@ -87,7 +87,6 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
   const [zonas] = useState(timeZoneOptions);
 
   useEffect(() => {
-    if (!active) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -113,7 +112,7 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, []);
 
   async function save(ev: FormEvent): Promise<void> {
     ev.preventDefault();
@@ -198,16 +197,14 @@ export function AiAgentPage({ active }: { active: boolean }): JSX.Element {
         </form>
       )}
 
-      {!loading && (
-        <div className="mt-6 flex flex-col gap-6">
-          <KnowledgeDocuments
-            isOwner={isOwner}
-            onChanged={() => setContextKey((k) => k + 1)}
-          />
-          <AiContextPanel reloadKey={contextKey} />
-          <AiTestChat isOwner={isOwner} />
-        </div>
-      )}
+      {/* Fuera del bloque de carga a propósito: nada de esto depende del perfil,
+          y meterlo dentro los desmontaba cada vez que el perfil se recargaba.
+          Ahí nació el fallo de que la conversación de prueba se borrara. */}
+      <div className="mt-6 flex flex-col gap-6">
+        <KnowledgeDocuments isOwner={isOwner} onChanged={() => setContextKey((k) => k + 1)} />
+        <AiContextPanel reloadKey={contextKey} />
+        <AiTestChat isOwner={isOwner} />
+      </div>
     </div>
   );
 }

@@ -1,56 +1,74 @@
-import * as RadixTabs from '@radix-ui/react-tabs';
 import { Bot, Calendar, Contact, LayoutGrid, MessageSquare, Package, Users, type LucideIcon } from 'lucide-react';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
 import { ProfileDialog } from '@/features/account/ProfileDialog';
+// La bandeja es la pantalla de trabajo y la primera que se ve: va en el bundle
+// inicial. El resto se carga al entrar en su ruta — quien abre el panel para
+// contestar mensajes no debería descargar el calendario, el catálogo y los
+// gráficos que quizá no visite. Recharts (Métricas) es el más pesado con
+// diferencia.
 import { InboxPage } from '@/features/inbox/InboxPage';
-import { ContactsPage } from '@/features/contacts/ContactsPage';
-import { TeamPage } from '@/features/team/TeamPage';
-import { CalendarPage } from '@/features/calendar/CalendarPage';
-import { AiAgentPage } from '@/features/ai-agent/AiAgentPage';
-import { ProductsPage } from '@/features/products/ProductsPage';
 
-// Recharts es el mayor contribuyente al peso del bundle; se carga solo cuando
-// se visita Métricas (no es la primera pantalla tras entrar) en vez de en el
-// bundle inicial de Bandeja/Login.
 const MetricsPage = lazy(() => import('@/features/metrics/MetricsPage').then((m) => ({ default: m.MetricsPage })));
+const ContactsPage = lazy(() => import('@/features/contacts/ContactsPage').then((m) => ({ default: m.ContactsPage })));
+const TeamPage = lazy(() => import('@/features/team/TeamPage').then((m) => ({ default: m.TeamPage })));
+const CalendarPage = lazy(() => import('@/features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })));
+const AiAgentPage = lazy(() => import('@/features/ai-agent/AiAgentPage').then((m) => ({ default: m.AiAgentPage })));
+const ProductsPage = lazy(() => import('@/features/products/ProductsPage').then((m) => ({ default: m.ProductsPage })));
 
-const TABS: Array<{ value: string; label: string; icon: LucideIcon }> = [
-  { value: 'inbox', label: 'Bandeja', icon: MessageSquare },
-  { value: 'metrics', label: 'Métricas', icon: LayoutGrid },
-  { value: 'contacts', label: 'Contactos', icon: Contact },
-  { value: 'calendar', label: 'Calendario', icon: Calendar },
-  { value: 'products', label: 'Productos', icon: Package },
-  { value: 'agent', label: 'Agente IA', icon: Bot },
-  { value: 'team', label: 'Equipo', icon: Users },
+/**
+ * Las secciones del panel, cada una con su URL.
+ *
+ * Antes eran pestañas guardadas en un `useState`: no se podía enlazar una
+ * sección, el botón "atrás" del navegador no hacía nada y al recargar siempre
+ * se volvía a Bandeja. Las rutas van en español porque son visibles para el
+ * usuario, igual que el resto de la interfaz.
+ */
+const SECCIONES: Array<{ path: string; label: string; icon: LucideIcon }> = [
+  { path: '/bandeja', label: 'Bandeja', icon: MessageSquare },
+  { path: '/metricas', label: 'Métricas', icon: LayoutGrid },
+  { path: '/contactos', label: 'Contactos', icon: Contact },
+  { path: '/calendario', label: 'Calendario', icon: Calendar },
+  { path: '/productos', label: 'Productos', icon: Package },
+  { path: '/agente', label: 'Agente IA', icon: Bot },
+  { path: '/equipo', label: 'Equipo', icon: Users },
 ];
+
+/** Título de la barra superior, derivado de la URL. */
+function useTituloDeSeccion(): string {
+  const { pathname } = useLocation();
+  return SECCIONES.find((s) => pathname.startsWith(s.path))?.label ?? '';
+}
 
 export function AppShell(): JSX.Element {
   const { user, logout } = useAuth();
-  const [tab, setTab] = useState('inbox');
   const [profileOpen, setProfileOpen] = useState(false);
-  const pageTitle = useMemo(() => TABS.find((t) => t.value === tab)?.label ?? '', [tab]);
+  const pageTitle = useTituloDeSeccion();
 
   return (
-    <RadixTabs.Root value={tab} onValueChange={setTab} orientation="vertical" className="app-shell">
+    <div className="app-shell">
       <aside className="app-sidebar">
         <div className="app-sidebar__brand">
           <span className="app-sidebar__glyph">W</span>
           WhatsFlow&nbsp;AI
         </div>
 
-        <RadixTabs.List className="app-sidebar__nav" aria-label="Secciones">
-          {TABS.map((t) => {
-            const Icon = t.icon;
-            return (
-              <RadixTabs.Trigger key={t.value} value={t.value} className="app-sidebar__item">
-                <Icon size={17} strokeWidth={2} />
-                {t.label}
-              </RadixTabs.Trigger>
-            );
-          })}
-        </RadixTabs.List>
+        <nav className="app-sidebar__nav" aria-label="Secciones">
+          {SECCIONES.map(({ path, label, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              // NavLink marca la sección activa por la URL, no por un estado
+              // paralelo que se pueda desincronizar de ella.
+              className={({ isActive }) => 'app-sidebar__item'.concat(isActive ? ' is-active' : '')}
+            >
+              <Icon size={17} strokeWidth={2} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -84,33 +102,29 @@ export function AppShell(): JSX.Element {
         </header>
 
         <main className="flex-1 overflow-hidden">
-          <RadixTabs.Content value="inbox" className="h-full data-[state=inactive]:hidden" forceMount>
-            <InboxPage active={tab === 'inbox'} />
-          </RadixTabs.Content>
-          <RadixTabs.Content value="metrics" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
-            <Suspense fallback={null}>
-              <MetricsPage active={tab === 'metrics'} />
-            </Suspense>
-          </RadixTabs.Content>
-          <RadixTabs.Content value="contacts" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
-            <ContactsPage active={tab === 'contacts'} />
-          </RadixTabs.Content>
-          <RadixTabs.Content value="calendar" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
-            <CalendarPage active={tab === 'calendar'} />
-          </RadixTabs.Content>
-          <RadixTabs.Content value="products" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
-            <ProductsPage active={tab === 'products'} />
-          </RadixTabs.Content>
-          <RadixTabs.Content value="agent" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
-            <AiAgentPage active={tab === 'agent'} />
-          </RadixTabs.Content>
-          <RadixTabs.Content value="team" className="h-full overflow-y-auto data-[state=inactive]:hidden" forceMount>
-            <TeamPage active={tab === 'team'} />
-          </RadixTabs.Content>
+          {/* Un solo Suspense para todas: cada ruta perezosa necesita uno, y
+              repetirlo por página solo añadiría ruido. */}
+          <Suspense fallback={null}>
+            <Routes>
+              <Route path="/bandeja" element={<InboxPage />} />
+            {/* La conversación abierta va en la URL: así se puede enlazar una
+                conversación concreta y el botón "atrás" cierra el hilo. */}
+              <Route path="/bandeja/:conversationId" element={<InboxPage />} />
+              <Route path="/metricas" element={<MetricsPage />} />
+              <Route path="/contactos" element={<ContactsPage />} />
+              <Route path="/calendario" element={<CalendarPage />} />
+              <Route path="/productos" element={<ProductsPage />} />
+              <Route path="/agente" element={<AiAgentPage />} />
+              <Route path="/equipo" element={<TeamPage />} />
+            {/* Cualquier otra cosa cae en la bandeja, que es la pantalla de
+                trabajo. `replace` para no dejar basura en el historial. */}
+              <Route path="*" element={<Navigate to="/bandeja" replace />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
 
       <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
-    </RadixTabs.Root>
+    </div>
   );
 }

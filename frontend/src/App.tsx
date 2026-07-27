@@ -1,3 +1,4 @@
+import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { ToastProvider } from '@/lib/toast-context';
 import { AuthPage } from '@/features/auth/AuthPage';
@@ -12,7 +13,11 @@ export default function App(): JSX.Element {
   return (
     <ToastProvider>
       <AuthProvider>
-        <Root />
+        {/* El router envuelve todo, no solo el panel: `AuthPage` no tiene rutas
+            hoy, pero dejarlo fuera obligaría a moverlo el día que las tenga. */}
+        <BrowserRouter>
+          <Root />
+        </BrowserRouter>
       </AuthProvider>
     </ToastProvider>
   );

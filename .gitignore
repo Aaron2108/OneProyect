@@ -21,3 +21,8 @@ coverage/
 .claude-flow/
 .swarm/
 .mcp.json
+
+# Skills instalados con `npx skills add` (obra/superpowers, vercel-labs).
+# Se versiona el candado para poder reinstalar lo mismo; el contenido no, que
+# es codigo de terceros con su propio repositorio.
+.agents/

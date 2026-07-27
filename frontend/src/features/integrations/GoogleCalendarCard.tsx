@@ -12,7 +12,7 @@ import type { GoogleCalendarStatus } from '@/lib/types';
  * reflejan como eventos en el calendario conectado. Solo el OWNER conecta o
  * desconecta la cuenta (una por tenant).
  */
-export function GoogleCalendarCard({ active }: { active: boolean }): JSX.Element | null {
+export function GoogleCalendarCard(): JSX.Element | null {
   const { user } = useAuth();
   const toast = useToast();
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
@@ -23,8 +23,8 @@ export function GoogleCalendarCard({ active }: { active: boolean }): JSX.Element
   }
 
   useEffect(() => {
-    if (active) void load();
-  }, [active]);
+    void load();
+  }, []);
 
   // El backend redirige aquí tras el consentimiento en Google con ?googleCalendar=connected|error.
   useEffect(() => {

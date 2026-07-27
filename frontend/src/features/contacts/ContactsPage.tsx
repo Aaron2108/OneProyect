@@ -14,7 +14,7 @@ function fmtDate(d: string): string {
   return new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function ContactsPage({ active }: { active: boolean }): JSX.Element {
+export function ContactsPage(): JSX.Element {
   const toast = useToast();
   const [items, setItems] = useState<Contact[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -38,7 +38,6 @@ export function ContactsPage({ active }: { active: boolean }): JSX.Element {
   }
 
   useEffect(() => {
-    if (!active) return;
     clearTimeout(searchTimer.current);
     const delay = loadedOnce.current ? 300 : 0;
     searchTimer.current = setTimeout(() => {
@@ -47,7 +46,7 @@ export function ContactsPage({ active }: { active: boolean }): JSX.Element {
     }, delay);
     return () => clearTimeout(searchTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, query]);
+  }, [query]);
 
   async function addContact(ev: FormEvent): Promise<void> {
     ev.preventDefault();

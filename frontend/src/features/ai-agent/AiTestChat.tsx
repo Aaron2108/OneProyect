@@ -31,6 +31,47 @@ interface ChatTurn {
   simulatedTools?: SimulatedTool[];
 }
 
+/**
+ * La conversación de prueba se guarda en `sessionStorage`.
+ *
+ * Hace falta porque cada sección es una ruta y salir de "Agente IA" desmonta
+ * esta pantalla: sin esto, ir a Productos y volver borraba lo conversado.
+ * `sessionStorage` y no `localStorage` a propósito — es una prueba, no algo que
+ * deba seguir ahí mañana: vive mientras la pestaña esté abierta.
+ *
+ * La clave lleva versión: si algún día cambia la forma de un turno, lo viejo se
+ * descarta solo en vez de reventar al leerlo.
+ */
+const CLAVE_CHAT = 'whatsflow:test-chat:v1';
+
+function leerConversacionGuardada(): ChatTurn[] {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_CHAT);
+    if (!crudo) return [];
+    const turnos: unknown = JSON.parse(crudo);
+    if (!Array.isArray(turnos)) return [];
+    // Se valida la forma antes de confiar: lo que hay en el almacenamiento lo
+    // pudo escribir una versión anterior de la aplicación.
+    return turnos.filter(
+      (t): t is ChatTurn =>
+        !!t && typeof t === 'object' && typeof (t as ChatTurn).text === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+function guardarConversacion(turnos: ChatTurn[]): void {
+  try {
+    if (turnos.length === 0) sessionStorage.removeItem(CLAVE_CHAT);
+    else sessionStorage.setItem(CLAVE_CHAT, JSON.stringify(turnos));
+  } catch {
+    // Sin espacio o con el almacenamiento bloqueado: el chat sigue funcionando
+    // en memoria, solo que no sobrevive al cambio de sección. No vale romper la
+    // pantalla por esto.
+  }
+}
+
 /** Muestra lo que el agente habría hecho, sin haberlo hecho. */
 function SimulatedToolCard({ tool }: { tool: SimulatedTool }): JSX.Element {
   return (
@@ -62,7 +103,7 @@ function SimulatedToolCard({ tool }: { tool: SimulatedTool }): JSX.Element {
  */
 export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
   const toast = useToast();
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [turns, setTurns] = useState<ChatTurn[]>(leerConversacionGuardada);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -71,13 +112,19 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [turns, sending]);
 
+  /** Estado y almacenamiento van juntos: un solo sitio donde cambian los turnos. */
+  function actualizarTurnos(siguientes: ChatTurn[]): void {
+    setTurns(siguientes);
+    guardarConversacion(siguientes);
+  }
+
   async function send(ev: FormEvent): Promise<void> {
     ev.preventDefault();
     const text = draft.trim();
     if (!text || sending) return;
 
     const conHistorial = [...turns, { role: 'user' as const, text }];
-    setTurns(conHistorial);
+    actualizarTurnos(conHistorial);
     setDraft('');
     setSending(true);
     try {
@@ -91,7 +138,7 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
             .map((t) => ({ role: t.role, text: t.text })),
         },
       });
-      setTurns([
+      actualizarTurnos([
         ...conHistorial,
         { role: 'assistant', text: reply.text, simulatedTools: reply.simulatedTools },
       ]);
@@ -110,7 +157,7 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
           <Bot size={17} strokeWidth={2} className="text-ai" /> Probar el agente
         </h3>
         {turns.length > 0 && (
-          <Button size="sm" variant="sec" disabled={sending} onClick={() => setTurns([])}>
+          <Button size="sm" variant="sec" disabled={sending} onClick={() => actualizarTurnos([])}>
             <RotateCcw size={15} strokeWidth={2.25} /> Empezar de nuevo
           </Button>
         )}

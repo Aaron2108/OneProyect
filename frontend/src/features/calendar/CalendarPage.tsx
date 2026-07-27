@@ -18,7 +18,7 @@ const STATUS_PILL: Record<AppointmentStatus, PillKind> = {
   COMPLETED: 'completed',
 };
 
-export function CalendarPage({ active }: { active: boolean }): JSX.Element {
+export function CalendarPage(): JSX.Element {
   const toast = useToast();
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -41,9 +41,9 @@ export function CalendarPage({ active }: { active: boolean }): JSX.Element {
   }
 
   useEffect(() => {
-    if (active) void load();
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, month]);
+  }, [month]);
 
   function openCreate(): void {
     setEditing(null);
@@ -68,7 +68,7 @@ export function CalendarPage({ active }: { active: boolean }): JSX.Element {
         </Button>
       </div>
 
-      <GoogleCalendarCard active={active} />
+      <GoogleCalendarCard />
 
       <div className="flex flex-col gap-6 lg:flex-row">
         <div className="flex-1">

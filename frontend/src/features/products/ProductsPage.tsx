@@ -36,7 +36,7 @@ function formatPrice(product: Product): string {
  * resuelve subiendo un PDF con el inventario — un archivo es una foto de un
  * momento y el agente acabaría prometiendo existencias que ya no hay.
  */
-export function ProductsPage({ active }: { active: boolean }): JSX.Element {
+export function ProductsPage(): JSX.Element {
   const { user } = useAuth();
   const toast = useToast();
   const isOwner = user?.role === 'OWNER';
@@ -62,9 +62,9 @@ export function ProductsPage({ active }: { active: boolean }): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (active) void load(query);
+    void load(query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, []);
 
   async function crear(ev: FormEvent): Promise<void> {
     ev.preventDefault();

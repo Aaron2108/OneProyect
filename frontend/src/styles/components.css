@@ -229,11 +229,11 @@
   position: relative;
 }
 .app-sidebar__item:hover { background: var(--hover-bg); color: var(--ink); }
-.app-sidebar__item[data-state='active'] {
+.app-sidebar__item.is-active {
   background: var(--brand-tint);
   color: var(--brand);
 }
-.app-sidebar__item[data-state='active'] svg { color: var(--brand); }
+.app-sidebar__item.is-active svg { color: var(--brand); }
 .app-sidebar__item svg { flex-shrink: 0; }
 .app-sidebar__footer {
   border-top: 1px solid var(--line);

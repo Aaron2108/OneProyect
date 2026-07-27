@@ -46,6 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   function logout(): void {
     clearToken();
     localStorage.removeItem(USER_KEY);
+    // Lo guardado por sesión (hoy, la conversación del chat de prueba) se va con
+    // el usuario: en un equipo compartido, el siguiente en entrar no tiene por
+    // qué encontrarse lo que probó el anterior.
+    try {
+      sessionStorage.clear();
+    } catch {
+      // Almacenamiento bloqueado: no vale impedir el cierre de sesión por esto.
+    }
     setUser(null);
   }
 

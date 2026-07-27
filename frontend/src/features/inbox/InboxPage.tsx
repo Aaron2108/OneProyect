@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api, downloadFile } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import type { ConversationDetail, ConversationStatus, ConversationHandler, Page, ConversationSummary } from '@/lib/types';
@@ -6,15 +7,19 @@ import { ContactPanel } from './ContactPanel';
 import { Roster } from './Roster';
 import { Thread } from './Thread';
 
-export function InboxPage({ active }: { active: boolean }): JSX.Element {
+export function InboxPage(): JSX.Element {
   const toast = useToast();
+  // La conversación abierta vive en la URL, no en un estado aparte: así se
+  // puede enlazar una conversación concreta, el botón "atrás" cierra el hilo y
+  // recargar la página no te devuelve a la lista vacía.
+  const { conversationId: selectedId = null } = useParams();
+  const navigate = useNavigate();
   const [items, setItems] = useState<ConversationSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [handledBy, setHandledBy] = useState('');
   const [query, setQuery] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [mobileViewingThread, setMobileViewingThread] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -42,7 +47,6 @@ export function InboxPage({ active }: { active: boolean }): JSX.Element {
 
   // Carga inicial + recarga al cambiar filtros (con debounce en la búsqueda).
   useEffect(() => {
-    if (!active) return;
     clearTimeout(searchTimer.current);
     const delay = loadedOnce.current ? 300 : 0;
     searchTimer.current = setTimeout(() => {
@@ -51,19 +55,40 @@ export function InboxPage({ active }: { active: boolean }): JSX.Element {
     }, delay);
     return () => clearTimeout(searchTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, status, handledBy, query]);
+  }, [status, handledBy, query]);
 
-  async function openConversation(id: string): Promise<void> {
-    setSelectedId(id);
+  function openConversation(id: string): void {
     setMobileViewingThread(true);
-    const c = await api<ConversationDetail>(`/conversations/${id}`);
-    setConversation(c);
-    if (c.unreadCount > 0) {
-      api(`/conversations/${id}/read`, { method: 'POST' })
-        .then(() => setItems((prev) => prev.map((x) => (x.id === id ? { ...x, unreadCount: 0 } : x))))
-        .catch(() => {});
-    }
+    navigate(`/bandeja/${id}`);
   }
+
+  // Trae el hilo de la conversación que indique la URL. Vale tanto al hacer
+  // clic como al entrar directamente por el enlace o darle a "atrás".
+  useEffect(() => {
+    if (!selectedId) {
+      setConversation(null);
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      try {
+        const c = await api<ConversationDetail>(`/conversations/${selectedId}`);
+        if (cancelado) return;
+        setConversation(c);
+        if (c.unreadCount > 0) {
+          await api(`/conversations/${selectedId}/read`, { method: 'POST' });
+          if (cancelado) return;
+          setItems((prev) => prev.map((x) => (x.id === selectedId ? { ...x, unreadCount: 0 } : x)));
+        }
+      } catch (e) {
+        if (!cancelado) toast.show(e instanceof Error ? e.message : 'No se pudo abrir la conversación', 'error');
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   async function refreshConversation(): Promise<void> {
     if (!selectedId) return;
@@ -104,7 +129,10 @@ export function InboxPage({ active }: { active: boolean }): JSX.Element {
       />
       <Thread
         conversation={conversation}
-        onBack={() => setMobileViewingThread(false)}
+        onBack={() => {
+          setMobileViewingThread(false);
+          navigate('/bandeja');
+        }}
         onSend={sendMessage}
         onHandoff={() => act('/handoff', 'Tomaste la conversación')}
         onHandback={() => act('/handback', 'Devuelto a la IA', 'ai')}
