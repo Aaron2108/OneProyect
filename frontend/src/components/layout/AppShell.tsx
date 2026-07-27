@@ -3,6 +3,7 @@ import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
+import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { ProfileDialog } from '@/features/account/ProfileDialog';
 // La bandeja es la pantalla de trabajo y la primera que se ve: va en el bundle
 // inicial. El resto se carga al entrar en su ruta — quien abre el panel para
@@ -58,6 +59,7 @@ export function AppShell(): JSX.Element {
   const { user, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const pageTitle = useTituloDeSeccion();
+  const { pathname } = useLocation();
 
   return (
     <div className="app-shell">
@@ -114,30 +116,35 @@ export function AppShell(): JSX.Element {
         </header>
 
         <main className="flex-1 overflow-hidden">
-          {/* Un solo Suspense para todas: cada ruta perezosa necesita uno, y
-              repetirlo por página solo añadiría ruido. */}
-          <Suspense fallback={null}>
-            <Routes>
-              {/* La bandeja ocupa el alto completo y reparte el scroll entre
-                  sus columnas; no lleva envoltorio con scroll propio. */}
-              <Route path="/bandeja" element={<div className="h-full"><InboxPage /></div>} />
-              {/* La conversación abierta va en la URL: así se puede enlazar una
-                  conversación concreta y el botón "atrás" cierra el hilo. */}
-              <Route
-                path="/bandeja/:conversationId"
-                element={<div className="h-full"><InboxPage /></div>}
-              />
-              <Route path="/metricas" element={<Desplazable><MetricsPage /></Desplazable>} />
-              <Route path="/contactos" element={<Desplazable><ContactsPage /></Desplazable>} />
-              <Route path="/calendario" element={<Desplazable><CalendarPage /></Desplazable>} />
-              <Route path="/productos" element={<Desplazable><ProductsPage /></Desplazable>} />
-              <Route path="/agente" element={<Desplazable><AiAgentPage /></Desplazable>} />
-              <Route path="/equipo" element={<Desplazable><TeamPage /></Desplazable>} />
-            {/* Cualquier otra cosa cae en la bandeja, que es la pantalla de
-                trabajo. `replace` para no dejar basura en el historial. */}
-              <Route path="*" element={<Navigate to="/bandeja" replace />} />
-            </Routes>
-          </Suspense>
+          {/* Segunda frontera, por dentro del armazón: si revienta una página, se
+              cae solo el contenido y quedan la barra lateral y la superior para
+              irse a otra sección. Al cambiar de ruta se descarta el error. */}
+          <ErrorBoundary claveReinicio={pathname}>
+            {/* Un solo Suspense para todas: cada ruta perezosa necesita uno, y
+                repetirlo por página solo añadiría ruido. */}
+            <Suspense fallback={null}>
+              <Routes>
+                {/* La bandeja ocupa el alto completo y reparte el scroll entre
+                    sus columnas; no lleva envoltorio con scroll propio. */}
+                <Route path="/bandeja" element={<div className="h-full"><InboxPage /></div>} />
+                {/* La conversación abierta va en la URL: así se puede enlazar una
+                    conversación concreta y el botón "atrás" cierra el hilo. */}
+                <Route
+                  path="/bandeja/:conversationId"
+                  element={<div className="h-full"><InboxPage /></div>}
+                />
+                <Route path="/metricas" element={<Desplazable><MetricsPage /></Desplazable>} />
+                <Route path="/contactos" element={<Desplazable><ContactsPage /></Desplazable>} />
+                <Route path="/calendario" element={<Desplazable><CalendarPage /></Desplazable>} />
+                <Route path="/productos" element={<Desplazable><ProductsPage /></Desplazable>} />
+                <Route path="/agente" element={<Desplazable><AiAgentPage /></Desplazable>} />
+                <Route path="/equipo" element={<Desplazable><TeamPage /></Desplazable>} />
+                {/* Cualquier otra cosa cae en la bandeja, que es la pantalla de
+                    trabajo. `replace` para no dejar basura en el historial. */}
+                <Route path="*" element={<Navigate to="/bandeja" replace />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 
