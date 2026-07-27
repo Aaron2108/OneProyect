@@ -1,6 +1,5 @@
 import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
 import { EmbeddingsService } from '../../src/ai/embeddings.service';
-import { PiiCryptoService } from '../../src/common/pii-crypto.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { makeTestPiiCrypto } from '../helpers/pii-crypto.stub';
 

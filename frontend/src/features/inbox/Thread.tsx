@@ -77,20 +77,28 @@ export function Thread(props: ThreadProps): JSX.Element {
   const { conversation: c } = props;
   const toast = useToast();
   const [notesOpen, setNotesOpen] = useState(false);
-  const [summary, setSummary] = useState<ConversationSummaryResult | null>(null);
+  // Guarda SOLO el resumen recién generado; el resto sale de la conversación.
+  // Antes se copiaba el de props a estado en un efecto, y bastaba con que el
+  // padre recargara el hilo para que el resumen que acabas de pedir
+  // desapareciera de la pantalla.
+  const [generado, setGenerado] = useState<ConversationSummaryResult | null>(null);
   const [summarizing, setSummarizing] = useState(false);
 
-  // Al cambiar de conversación se descarta el resumen anterior: dejarlo puesto
-  // mostraría el de un cliente sobre el hilo de otro.
+  // Al cambiar de conversación se descarta: dejarlo puesto mostraría el resumen
+  // de un cliente sobre el hilo de otro.
   useEffect(() => {
-    setSummary(c ? { summary: c.summary, summaryAt: c.summaryAt, summaryStale: c.summaryStale } : null);
-  }, [c?.id, c?.summary, c?.summaryAt, c?.summaryStale]);
+    setGenerado(null);
+  }, [c?.id]);
+
+  const summary: ConversationSummaryResult | null =
+    generado ??
+    (c ? { summary: c.summary, summaryAt: c.summaryAt, summaryStale: c.summaryStale } : null);
 
   async function generarResumen(force: boolean): Promise<void> {
     if (!c) return;
     setSummarizing(true);
     try {
-      setSummary(
+      setGenerado(
         await api<ConversationSummaryResult>(
           `/conversations/${c.id}/summary${force ? '?force=true' : ''}`,
           { method: 'POST' },

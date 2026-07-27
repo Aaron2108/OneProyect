@@ -61,6 +61,10 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   );
 }
 
+// El hook vive junto a su proveedor a proposito: separarlos obligaria a
+// importar de dos sitios para usar un unico contexto. Solo cuesta que Fast
+// Refresh recargue el modulo entero al editarlo, en desarrollo.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast debe usarse dentro de <ToastProvider>');

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { KnowledgeDocumentStatus, KnowledgeExtractionMethod } from '@prisma/client';
-import { EMBEDDING_DIMENSIONS, EmbeddingsService } from '../ai/embeddings.service';
+import { EmbeddingsService } from '../ai/embeddings.service';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { chunkText } from './knowledge-chunker.util';

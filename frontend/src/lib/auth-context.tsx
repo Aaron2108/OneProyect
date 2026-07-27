@@ -71,6 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// El hook vive junto a su proveedor a proposito: separarlos obligaria a
+// importar de dos sitios para usar un unico contexto. Solo cuesta que Fast
+// Refresh recargue el modulo entero al editarlo, en desarrollo.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth debe usarse dentro de <AuthProvider>');
