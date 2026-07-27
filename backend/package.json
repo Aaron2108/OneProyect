@@ -22,6 +22,7 @@
     "prisma:check-indexes": "ts-node prisma/check-vector-indexes.ts",
     "prisma:studio": "prisma studio",
     "prisma:encrypt-pii": "ts-node prisma/encrypt-existing-pii.ts",
+    "seed:demo": "ts-node prisma/seed-demo.ts",
     "embeddings:reindex": "ts-node prisma/reindex-embeddings.ts",
     "db:up": "docker compose -f ../docker-compose.yml up -d postgres redis",
     "db:down": "docker compose -f ../docker-compose.yml down"
