@@ -59,7 +59,10 @@ export class ProductsService {
    */
   async searchForAi(tenantId: string, query: string, limit = 5): Promise<Product[]> {
     const terminos = buildSearchTerms(query);
-    if (terminos.length === 0) return [];
+    // Sin términos útiles la pregunta no es "¿tienen X?" sino "¿qué tienen?".
+    // Devolver vacío hacía que el agente respondiera que no hay nada; lo que
+    // corresponde es enseñar el catálogo.
+    if (terminos.length === 0) return this.sampleForAi(tenantId, limit);
 
     // Basta con que coincida UN término; el orden final lo decide cuántos
     // coinciden, así que "pantalon negro" gana a "pantalon beige" sin excluirlo.
@@ -87,6 +90,25 @@ export class ProductsService {
     // Nada coincide literalmente: puede ser una errata ("pantalonn"). Antes de
     // decirle al cliente que no existe, se reintenta por parecido.
     return this.searchByLikeness(tenantId, terminos, limit);
+  }
+
+  /**
+   * Muestra del catálogo, para cuando preguntan qué se vende en general.
+   *
+   * Se ordena por stock descendente: si hay que enseñar solo unos pocos, que
+   * sean los que de verdad se pueden vender hoy y no los agotados.
+   */
+  private sampleForAi(tenantId: string, limit: number): Promise<Product[]> {
+    return this.prisma.product.findMany({
+      where: { tenantId, active: true },
+      orderBy: [{ stock: 'desc' }, { name: 'asc' }],
+      take: limit,
+    });
+  }
+
+  /** Cuántos productos activos tiene el negocio (para avisar de que hay más). */
+  countActive(tenantId: string): Promise<number> {
+    return this.prisma.product.count({ where: { tenantId, active: true } });
   }
 
   /**
@@ -321,18 +343,50 @@ export function buildSearchText(
  *
  * Los términos salen ya normalizados para poder compararlos con `searchText`.
  */
+/**
+ * Palabras que no distinguen un producto de otro y solo generan ruido.
+ *
+ * Dos grupos: las de relleno del español (ya sin las de menos de 3 letras, que
+ * se descartan por longitud) y las que nombran la categoría en vez del
+ * artículo — "producto", "artículo", "catálogo".
+ *
+ * El segundo grupo importa más de lo que parece. Con la pregunta "¿qué otros
+ * productos tienes?", el término "producto" casaba con el único artículo cuya
+ * descripción decía "no es producto de venta": el agente respondía con lo
+ * único que NO estaba a la venta, y daba por vacío el resto del catálogo.
+ */
+const PALABRAS_VACIAS = new Set([
+  'que', 'cual', 'cuales', 'quien', 'como', 'cuando', 'donde', 'cuanto', 'cuanta',
+  'cuantos', 'cuantas', 'otro', 'otra', 'otros', 'otras', 'mas', 'menos', 'muy',
+  'todo', 'toda', 'todos', 'todas', 'algo', 'algun', 'alguna', 'alguno', 'algunos',
+  'algunas', 'nada', 'cosa', 'cosas', 'para', 'por', 'con', 'sin', 'los', 'las',
+  'del', 'una', 'uno', 'unos', 'unas', 'este', 'esta', 'esto', 'estos', 'estas',
+  'ese', 'esa', 'eso', 'esos', 'esas', 'aqui', 'ahi', 'alli', 'pero', 'porque',
+  'hay', 'tiene', 'tienen', 'tienes', 'tenes', 'tengo', 'quiero', 'quisiera',
+  'necesito', 'busco', 'buscar', 'vende', 'venden', 'vendes', 'ver', 'dame',
+  'hola', 'gracias', 'favor', 'buenas', 'buenos', 'dias', 'tardes', 'noches',
+  // Nombran la categoría, no el artículo.
+  'producto', 'productos', 'articulo', 'articulos', 'catalogo', 'stock',
+  'precio', 'precios', 'disponible', 'disponibles', 'disponibilidad',
+]);
+
 export function buildSearchTerms(query: string): string[] {
   const palabras = normalizeForSearch(query)
     .split(/[^\p{L}\p{N}-]+/u)
-    .filter((palabra) => palabra.length >= 3);
+    .filter((palabra) => palabra.length >= 3 && !PALABRAS_VACIAS.has(palabra));
 
   const terminos = new Set<string>();
+  const agregar = (t: string): void => {
+    // La forma recortada también puede caer en la lista: "productos" ya se
+    // filtró, pero conviene que "producto" tampoco entre por esta puerta.
+    if (!PALABRAS_VACIAS.has(t)) terminos.add(t);
+  };
   for (const palabra of palabras) {
-    terminos.add(palabra);
+    agregar(palabra);
     if (palabra.endsWith('es') && palabra.length > 4) {
-      terminos.add(palabra.slice(0, -2)); // "pantalones" -> "pantalon"
+      agregar(palabra.slice(0, -2)); // "pantalones" -> "pantalon"
     } else if (palabra.endsWith('s') && palabra.length > 3) {
-      terminos.add(palabra.slice(0, -1)); // "remeras" -> "remera"
+      agregar(palabra.slice(0, -1)); // "remeras" -> "remera"
     }
   }
   return [...terminos];

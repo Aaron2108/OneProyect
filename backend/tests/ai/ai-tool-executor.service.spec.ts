@@ -15,7 +15,7 @@ describe('AiToolExecutorService', () => {
     conversationNote: { create: jest.Mock };
   };
   let appointments: { create: jest.Mock };
-  let products: { searchForAi: jest.Mock };
+  let products: { searchForAi: jest.Mock; countActive: jest.Mock };
 
   const ctx: ConversationContext = {
     tenantId: 'tenant-1',
@@ -34,7 +34,10 @@ describe('AiToolExecutorService', () => {
       conversationNote: { create: jest.fn().mockResolvedValue({ id: 'nota-1' }) },
     };
     appointments = { create: jest.fn().mockResolvedValue({ id: 'appt-1' }) };
-    products = { searchForAi: jest.fn().mockResolvedValue([]) };
+    products = {
+      searchForAi: jest.fn().mockResolvedValue([]),
+      countActive: jest.fn().mockResolvedValue(0),
+    };
     executor = new AiToolExecutorService(
       prisma as unknown as PrismaService,
       makeTestPiiCrypto(),
@@ -267,10 +270,40 @@ describe('AiToolExecutorService', () => {
       expect(prisma.contact.update).not.toHaveBeenCalled();
     });
 
-    it('sin consulta no busca', async () => {
+    it('sin consulta enseña el catálogo en vez de pedir que precise', async () => {
+      // "¿que otro productos tienes?" es una pregunta legitima: antes se
+      // respondia "falta indicar que producto buscar", o peor, con el unico
+      // articulo cuya descripcion mencionaba la palabra "producto".
+      products.searchForAi.mockResolvedValue([
+        { name: 'Shampoo', sku: null, priceCents: 1890, currency: 'PEN', stock: 12 },
+      ]);
+      products.countActive.mockResolvedValue(1);
+
       const result = await executor.execute('consultar_producto', { consulta: '  ' }, ctx);
-      expect(products.searchForAi).not.toHaveBeenCalled();
-      expect(result).toContain('Falta indicar');
+
+      expect(products.searchForAi).toHaveBeenCalled();
+      expect(result).toContain('Catálogo completo');
+      expect(result).toContain('Shampoo');
+    });
+
+    it('si hay más productos que los mostrados, lo dice', async () => {
+      // Sin esto, el agente daba a entender que el catalogo entero eran los
+      // pocos que le llegaron.
+      products.searchForAi.mockResolvedValue([
+        { name: 'Shampoo', sku: null, priceCents: 1890, currency: 'PEN', stock: 12 },
+      ]);
+      products.countActive.mockResolvedValue(9);
+
+      const result = await executor.execute('consultar_producto', {}, ctx);
+
+      expect(result).toContain('9 productos');
+      expect(result).toMatch(/ofrece buscar algo concreto/i);
+    });
+
+    it('con el catálogo vacío no afirma que no se vende nada', async () => {
+      products.searchForAi.mockResolvedValue([]);
+      const result = await executor.execute('consultar_producto', {}, ctx);
+      expect(result).toMatch(/no afirmes que no vendemos nada/i);
     });
   });
 

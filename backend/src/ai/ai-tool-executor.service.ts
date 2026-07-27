@@ -64,17 +64,16 @@ export const AI_TOOLS: Anthropic.Tool[] = [
   {
     name: TOOL_CHECK_PRODUCT,
     description:
-      'Consulta el catálogo del negocio para saber si un producto existe, a qué precio y cuánto stock queda. Úsala SIEMPRE que el cliente pregunte por disponibilidad, precio o existencias: nunca respondas de memoria, porque el stock cambia.',
+      'Consulta el catálogo del negocio: si un producto existe, a qué precio y cuánto stock queda. Úsala SIEMPRE que el cliente pregunte por disponibilidad, precio o existencias — nunca respondas de memoria, porque el stock cambia. Si pregunta en general qué se vende, llámala con `consulta` vacía y devuelve el catálogo.',
     input_schema: {
       type: 'object',
       properties: {
         consulta: {
           type: 'string',
           description:
-            'Lo que busca el cliente: nombre del producto o código. Ej. "remera azul", "SKU-123".',
+            'Lo que busca el cliente: nombre del producto o código. Ej. "remera azul", "SKU-123". Déjala vacía si pregunta en general qué productos hay.',
         },
       },
-      required: ['consulta'],
     },
   },
   {
@@ -266,8 +265,7 @@ export class AiToolExecutorService {
     input: Record<string, unknown>,
     ctx: ConversationContext,
   ): Promise<string> {
-    const consulta = typeof input.consulta === 'string' ? input.consulta : '';
-    if (!consulta.trim()) return 'Falta indicar qué producto buscar.';
+    const consulta = typeof input.consulta === 'string' ? input.consulta.trim() : '';
 
     const encontrados = await this.products.searchForAi(
       ctx.tenantId,
@@ -277,7 +275,9 @@ export class AiToolExecutorService {
     if (encontrados.length === 0) {
       // Importa distinguir "no lo tenemos" de "no lo encontré": el modelo debe
       // ofrecer confirmar con una persona, no afirmar que no existe.
-      return `No hay ningún producto que coincida con "${consulta}" en el catálogo. Puede que no lo vendamos o que esté guardado con otro nombre: ofrécele confirmarlo con el equipo.`;
+      return consulta
+        ? `No hay ningún producto que coincida con "${consulta}" en el catálogo. Puede que no lo vendamos o que esté guardado con otro nombre: ofrécele confirmarlo con el equipo.`
+        : 'El catálogo del negocio está vacío. No afirmes que no vendemos nada: dile que lo confirme con el equipo.';
     }
 
     const lineas = encontrados.map((p) => {
@@ -300,14 +300,31 @@ export class AiToolExecutorService {
       return `- ${p.name}: ${precio}, ${stock}.`;
     });
     this.logger.log(
-      `Catálogo consultado por la IA (tenant ${ctx.tenantId}): "${consulta}" -> ` +
+      `Catálogo consultado por la IA (tenant ${ctx.tenantId}): "${consulta || '(general)'}" -> ` +
         encontrados.map((p) => p.sku ?? p.name).join(', '),
     );
+
+    // Una pregunta general ("¿qué venden?") no es una búsqueda: se enseña una
+    // muestra y hay que decir cuántos hay en total. Sin esto, el agente daba a
+    // entender que el catálogo entero eran los pocos que le llegaron.
+    let encabezado: string;
+    if (consulta) {
+      encabezado = `Resultado del catálogo para "${consulta}":`;
+    } else {
+      const total = await this.products.countActive(ctx.tenantId);
+      encabezado =
+        total > encontrados.length
+          ? `El negocio tiene ${total} productos. Estos son ${encontrados.length}; menciónalos y ofrece buscar algo concreto:`
+          : 'Catálogo completo del negocio:';
+    }
+
     return (
-      `Resultado del catálogo para "${consulta}":\n${lineas.join('\n')}\n` +
+      `${encabezado}\n${lineas.join('\n')}\n` +
       // La consulta es de solo lectura: no hay reserva ni pedido en el sistema.
-      // Sin esto el agente ofrecía "reservarlo", que nadie puede cumplir.
-      'Informa disponibilidad y precio; NO ofrezcas reservar, apartar ni encargar: el negocio no tiene esa función.'
+      // Sin esto el agente ofrecía "reservarlo", que nadie puede cumplir. El
+      // paréntesis final hace falta porque el modelo repetía la restricción tal
+      // cual al cliente ("No ofrezco reservas"), que nadie le había preguntado.
+      'Informa disponibilidad y precio. No ofrezcas reservar, apartar ni encargar (no menciones esta limitación salvo que el cliente pida reservar).'
     );
   }
 

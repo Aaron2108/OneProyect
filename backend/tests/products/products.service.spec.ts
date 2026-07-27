@@ -24,6 +24,7 @@ describe('ProductsService', () => {
       create: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
+      count: jest.Mock;
     };
     $queryRaw: jest.Mock;
   };
@@ -37,6 +38,7 @@ describe('ProductsService', () => {
         create: jest.fn().mockImplementation(({ data }) => ({ id: 'p1', ...data })),
         update: jest.fn().mockImplementation(({ data }) => ({ id: 'p1', ...data })),
         delete: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(0),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),
     };
@@ -59,9 +61,19 @@ describe('ProductsService', () => {
       expect(where.active).toBe(true);
     });
 
-    it('la búsqueda de la IA con consulta vacía no toca la BD', async () => {
-      expect(await service.searchForAi('t1', '   ')).toEqual([]);
-      expect(prisma.product.findMany).not.toHaveBeenCalled();
+    it('la consulta vacía enseña el catálogo, y sigue acotada al tenant', async () => {
+      // Antes devolvía [] sin tocar la base. Se cambió a propósito: una consulta
+      // sin términos es "¿qué venden?", no un error — pero el aislamiento entre
+      // negocios vale igual en ese camino.
+      prisma.product.findMany.mockResolvedValue([producto('1', 'Shampoo')]);
+
+      const resultado = await service.searchForAi('t1', '   ');
+
+      expect(resultado).toHaveLength(1);
+      expect(prisma.product.findMany.mock.calls[0][0].where).toEqual({
+        tenantId: 't1',
+        active: true,
+      });
     });
   });
 
@@ -97,6 +109,57 @@ describe('ProductsService', () => {
       // Sigue ofreciendo el beige: es mejor mostrar una alternativa que decir
       // que no hay nada.
       expect(resultado).toHaveLength(1);
+    });
+  });
+
+  describe('preguntas generales y palabras de relleno', () => {
+    it('descarta las palabras que no distinguen un producto de otro', () => {
+      // Caso real: con "¿que otro productos tienes?" el termino "producto"
+      // casaba con el UNICO articulo cuya descripcion decia "no es producto de
+      // venta". El agente respondio con lo unico que NO estaba a la venta y dio
+      // por vacio el resto del catalogo.
+      expect(buildSearchTerms('que otro productos tienes?')).toEqual([]);
+    });
+
+    it('tampoco deja pasar la forma recortada de una palabra de relleno', () => {
+      // "productos" se filtra, pero el recorte del plural no puede colarla.
+      expect(buildSearchTerms('productos')).toEqual([]);
+    });
+
+    it('sigue conservando lo que sí identifica un producto', () => {
+      expect(buildSearchTerms('tienen shampoo hidratante?')).toEqual(
+        expect.arrayContaining(['shampoo', 'hidratante']),
+      );
+      expect(buildSearchTerms('quiero un shampoo')).toEqual(['shampoo']);
+    });
+
+    it('una pregunta general devuelve el catálogo, no una lista vacía', async () => {
+      // Devolver vacío hacía que el agente dijera que no hay nada.
+      prisma.product.findMany.mockResolvedValue([producto('1', 'Shampoo')]);
+
+      const resultado = await service.searchForAi('t1', '¿que productos tienen?');
+
+      const where = prisma.product.findMany.mock.calls[0][0].where;
+      expect(where).toEqual({ tenantId: 't1', active: true });
+      expect(resultado).toHaveLength(1);
+    });
+
+    it('la muestra prioriza lo que sí se puede vender hoy', async () => {
+      // Si solo caben unos pocos, que no sean los agotados.
+      prisma.product.findMany.mockResolvedValue([]);
+      await service.searchForAi('t1', 'que venden');
+      expect(prisma.product.findMany.mock.calls[0][0].orderBy).toEqual([
+        { stock: 'desc' },
+        { name: 'asc' },
+      ]);
+    });
+
+    it('countActive cuenta solo los activos del negocio', async () => {
+      prisma.product.count.mockResolvedValue(7);
+      expect(await service.countActive('t1')).toBe(7);
+      expect(prisma.product.count).toHaveBeenCalledWith({
+        where: { tenantId: 't1', active: true },
+      });
     });
   });
 
