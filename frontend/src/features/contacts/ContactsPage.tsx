@@ -1,13 +1,14 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { Download, Plus, Search, TriangleAlert, UserRound } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, downloadFile, esCancelacion } from '@/lib/api';
+import { useState, type FormEvent } from 'react';
+import { api, downloadFile } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
+import { useListaPaginada } from '@/lib/use-recurso';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import type { Contact, Page } from '@/lib/types';
+import type { Contact } from '@/lib/types';
 import { EditContactDialog } from './EditContactDialog';
 
 function fmtDate(d: string): string {
@@ -16,57 +17,24 @@ function fmtDate(d: string): string {
 
 export function ContactsPage(): JSX.Element {
   const toast = useToast();
-  const [items, setItems] = useState<Contact[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
-  // Separado del error del formulario: sirve para no enseñar "aún no tienes
-  // contactos" cuando la lista está vacía porque la petición falló.
-  const [errorCarga, setErrorCarga] = useState('');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
-  const loadedOnce = useRef(false);
 
-  async function load(reset: boolean, signal?: AbortSignal): Promise<void> {
-    const qs = new URLSearchParams();
-    if (query.trim()) qs.set('q', query.trim());
-    if (!reset && cursor) qs.set('cursor', cursor);
-    try {
-      const res = await api<Page<Contact>>(`/contacts?${qs.toString()}`, { signal });
-      setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-      setCursor(res.nextCursor);
-      setErrorCarga('');
-    } catch (e) {
-      // Cancelada porque se siguió tecleando o se salió de la pantalla: su
-      // respuesta ya no vale y no hay error que enseñar.
-      if (esCancelacion(e)) return;
-      const mensaje = e instanceof Error ? e.message : 'No se pudieron cargar los contactos';
-      setErrorCarga(mensaje);
-      toast.show(mensaje, 'error');
-    }
-  }
-
-  useEffect(() => {
-    clearTimeout(searchTimer.current);
-    // El rebote no basta: si una búsqueda tarda más que la siguiente, su
-    // respuesta llegaba después y pisaba la lista con resultados de un texto que
-    // el usuario ya había cambiado. Cancelarla al salir del efecto lo impide.
-    const control = new AbortController();
-    const delay = loadedOnce.current ? 300 : 0;
-    searchTimer.current = setTimeout(() => {
-      loadedOnce.current = true;
-      void load(true, control.signal);
-    }, delay);
-    return () => {
-      clearTimeout(searchTimer.current);
-      control.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  // La ruta lleva ya el filtro; el hook se encarga del rebote, de cancelar la
+  // búsqueda anterior, del cursor y del aviso si falla.
+  const ruta = query.trim() ? `/contacts?q=${encodeURIComponent(query.trim())}` : '/contacts';
+  const {
+    items,
+    cursor,
+    error: errorCarga,
+    cargarMas,
+    recargar,
+  } = useListaPaginada<Contact>(ruta, 'No se pudieron cargar los contactos');
 
   async function addContact(ev: FormEvent): Promise<void> {
     ev.preventDefault();
@@ -77,7 +45,7 @@ export function ContactsPage(): JSX.Element {
       setName('');
       setAdding(false);
       toast.show('Contacto añadido');
-      void load(true);
+      void recargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo añadir el contacto');
     }
@@ -138,7 +106,7 @@ export function ContactsPage(): JSX.Element {
             title="No se pudieron cargar los contactos"
             description={errorCarga}
             action={
-              <Button size="sm" variant="sec" onClick={() => void load(true)}>
+              <Button size="sm" variant="sec" onClick={() => void recargar()}>
                 Reintentar
               </Button>
             }
@@ -187,13 +155,13 @@ export function ContactsPage(): JSX.Element {
           </>
         )}
         {cursor && (
-          <button onClick={() => load(false)} className="block w-full border-t border-line py-3 text-[13px] font-semibold text-ink-soft transition-colors duration-fast hover:text-brand">
+          <button onClick={() => void cargarMas()} className="block w-full border-t border-line py-3 text-[13px] font-semibold text-ink-soft transition-colors duration-fast hover:text-brand">
             Cargar más contactos
           </button>
         )}
       </div>
 
-      <EditContactDialog contact={editing} onOpenChange={(o) => !o && setEditing(null)} onSaved={() => load(true)} />
+      <EditContactDialog contact={editing} onOpenChange={(o) => !o && setEditing(null)} onSaved={() => void recargar()} />
     </div>
   );
 }
