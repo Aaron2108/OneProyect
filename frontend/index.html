@@ -4,13 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Panel de WhatsFlow AI: tu empleado digital de WhatsApp." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%AC%3C/text%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      Inter se sirve desde este mismo origen (ver el @font-face de tokens.css).
+      El `preload` la pide en paralelo con el CSS en vez de esperar a que el
+      navegador descubra la regla; `crossorigin` es obligatorio incluso siendo
+      del mismo origen, porque las fuentes siempre se piden en modo CORS y sin
+      él el navegador descargaría el archivo dos veces.
+    -->
+    <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>WhatsFlow AI — Panel</title>
   </head>
   <body>

@@ -6,6 +6,30 @@
  * sombras suaves sin negro puro, motion corto y con intención.
  */
 
+/*
+ * Inter, servida por el propio panel.
+ *
+ * Antes se pedía a fonts.googleapis.com + fonts.gstatic.com: dos conexiones a
+ * un tercero antes de poder pintar texto, y la dirección IP de cada usuario del
+ * panel llegando a Google en cada visita — algo que en un producto que trata
+ * conversaciones de clientes conviene no regalar.
+ *
+ * Es la fuente variable: un único archivo cubre de 500 a 700, que son los pesos
+ * que usa la interfaz. Un peso mayor (`font-extrabold`) se sujeta a 700, igual
+ * que ocurría antes con las tres declaraciones separadas de Google.
+ */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  /* Subconjunto latino: cubre el español (acentos, ñ, ¿, ¡) y los signos
+     tipográficos que usa la interfaz (comillas «», guiones largos, €). */
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* ---- Superficies ---- */
   --canvas: #07130f;

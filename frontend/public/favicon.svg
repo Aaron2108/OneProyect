@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Isotipo de WhatsFlow AI: la misma "W" sobre degradado marca→IA que el glifo
+  del sidebar (.app-sidebar__glyph) y el de la pantalla de acceso.
+  Los colores van literales porque un favicon se dibuja aislado, sin acceso a
+  las variables de tokens.css: son --brand (#35f0a3), --ai (#6c7bff) y
+  --on-brand (#052a1d). Si cambian allí, hay que cambiarlos aquí.
+  La W es un trazo y no un <text> para no depender de que la fuente exista.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="marca" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#35f0a3" />
+      <stop offset="1" stop-color="#6c7bff" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#marca)" />
+  <path
+    d="M13 19 L23 45 L32 29 L41 45 L51 19"
+    fill="none"
+    stroke="#052a1d"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
