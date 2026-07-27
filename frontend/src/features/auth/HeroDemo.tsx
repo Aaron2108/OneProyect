@@ -24,7 +24,7 @@ export function HeroDemo(): JSX.Element {
         transition={{ delay: 0.3, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="mb-2 flex"
       >
-        <div className="auth-demo__bubble" style={{ background: '#eef4f1', color: '#0d1c17', borderBottomLeftRadius: 4 }}>
+        <div className="auth-demo__bubble" style={{ background: 'var(--demo-in-bg)', color: 'var(--demo-in-ink)', borderBottomLeftRadius: 4 }}>
           Hola, ¿tienen cita para el martes?
         </div>
       </motion.div>
@@ -52,7 +52,7 @@ export function HeroDemo(): JSX.Element {
         transition={{ delay: 2.2, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="flex justify-end"
       >
-        <div className="auth-demo__bubble" style={{ background: 'var(--ai)', color: '#fff', borderBottomRightRadius: 4 }}>
+        <div className="auth-demo__bubble" style={{ background: 'var(--ai)', color: 'var(--on-ai)', borderBottomRightRadius: 4 }}>
           <span className="mb-1 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide opacity-85">
             <Bot size={11} strokeWidth={2.5} /> IA
           </span>

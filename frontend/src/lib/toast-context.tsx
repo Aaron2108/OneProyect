@@ -51,7 +51,7 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
               className="tick"
               style={{
                 background: t.kind === 'ai' ? 'var(--ai)' : t.kind === 'error' ? 'var(--danger)' : 'var(--brand)',
-                color: t.kind === 'ai' ? '#fff' : t.kind === 'error' ? '#fff' : 'var(--on-brand)',
+                color: t.kind === 'ai' ? 'var(--on-ai)' : t.kind === 'error' ? 'var(--on-danger)' : 'var(--on-brand)',
               }}
             >
               {t.kind === 'error' ? (

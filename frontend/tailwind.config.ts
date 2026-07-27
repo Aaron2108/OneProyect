@@ -31,6 +31,7 @@ export default {
           700: 'var(--ai-700)',
           hover: 'var(--ai-hover)',
           tint: 'var(--ai-tint)',
+          on: 'var(--on-ai)',
         },
         success: { DEFAULT: 'var(--success)', tint: 'var(--success-tint)' },
         warn: { DEFAULT: 'var(--warn)', tint: 'var(--warn-tint)' },

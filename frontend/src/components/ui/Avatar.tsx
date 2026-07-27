@@ -1,16 +1,17 @@
 /**
  * Paleta curada (no HSL aleatorio en 360°): un set fijo de gradientes que
  * conviven con el verde/índigo de marca sin desentonar — nada de tonos
- * neón ni saturados al azar.
+ * neón ni saturados al azar. Los colores viven en `tokens.css`; aquí solo se
+ * elige cuál toca.
  */
 const GRADIENTS = [
-  'linear-gradient(150deg, #35f0a3, #1f8f63)',
-  'linear-gradient(150deg, #6c7bff, #4a4fc9)',
-  'linear-gradient(150deg, #4fb8e0, #2f7fa8)',
-  'linear-gradient(150deg, #f6c453, #c98f2c)',
-  'linear-gradient(150deg, #ff8fa3, #c9536a)',
-  'linear-gradient(150deg, #9d8cff, #6c56d8)',
-  'linear-gradient(150deg, #4fd6c4, #2a9484)',
+  'var(--avatar-1)',
+  'var(--avatar-2)',
+  'var(--avatar-3)',
+  'var(--avatar-4)',
+  'var(--avatar-5)',
+  'var(--avatar-6)',
+  'var(--avatar-7)',
 ];
 
 function gradientFromSeed(seed: string): string {

@@ -22,6 +22,12 @@
   --line: rgba(255, 255, 255, 0.05);
   --line-strong: rgba(255, 255, 255, 0.1);
 
+  /* Superficies elevadas (por encima de --surface). Opacas a propósito: llevan
+     sombra y no deben dejar ver lo que hay debajo. */
+  --surface-raised: #0f221c; /* diálogos y popovers */
+  --surface-toast: #142a22;
+  --surface-tooltip: #10241d; /* tooltip de los gráficos */
+
   /* ---- Texto ---- */
   --ink: #f8fafc;
   --ink-soft: #a0a8b5;
@@ -42,6 +48,7 @@
   --ai-hover: #8793ff;
   --ai-tint: rgba(108, 123, 255, 0.16);
   --ai-glow: rgba(108, 123, 255, 0.34);
+  --on-ai: #ffffff; /* texto/glifos sobre fondo --ai, igual que --on-brand para la marca */
 
   --success: #3de67b;
   --success-tint: rgba(61, 230, 123, 0.16);
@@ -49,6 +56,30 @@
   --warn-tint: rgba(246, 196, 83, 0.16);
   --danger: #ff6b6b;
   --danger-tint: rgba(255, 107, 107, 0.16);
+  --on-danger: #ffffff;
+
+  /* Paleta de avatares: se elige una por contacto a partir de su id, así el
+     mismo contacto conserva siempre su color. Vive aquí y no en el componente
+     porque es parte del sistema de color, no de la lógica del avatar. */
+  --avatar-1: linear-gradient(150deg, #35f0a3, #1f8f63);
+  --avatar-2: linear-gradient(150deg, #6c7bff, #4a4fc9);
+  --avatar-3: linear-gradient(150deg, #4fb8e0, #2f7fa8);
+  --avatar-4: linear-gradient(150deg, #f6c453, #c98f2c);
+  --avatar-5: linear-gradient(150deg, #ff8fa3, #c9536a);
+  --avatar-6: linear-gradient(150deg, #9d8cff, #6c56d8);
+  --avatar-7: linear-gradient(150deg, #4fd6c4, #2a9484);
+
+  /* Pantalla de acceso (marketing): su propio fondo y sus dos velos de vidrio.
+     Son valores de esa pantalla y de ninguna otra. */
+  --auth-hero-bg: radial-gradient(120% 120% at 12% 8%, #0e2a20 0%, #0a1d16 58%, #07130f 100%);
+  --auth-glow: rgba(108, 123, 255, 0.28);
+  --auth-demo-bg: rgba(255, 255, 255, 0.04);
+  --auth-card-bg: rgba(255, 255, 255, 0.03);
+  --demo-in-bg: #eef4f1; /* burbuja del cliente en la demo del hero (fondo claro) */
+  --demo-in-ink: #0d1c17;
+
+  /* Aro del spinner: la parte que no gira, sobre cualquier fondo de botón. */
+  --spinner-track: rgba(255, 255, 255, 0.35);
 
   /* ---- Radios: escala de 4 pasos, 20px para tarjetas ---- */
   --radius-xs: 10px;

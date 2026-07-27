@@ -14,7 +14,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const VARIANT_CLS: Record<Variant, string> = {
   brand:
     'bg-brand text-brand-on shadow-[0_8px_20px_-8px_var(--brand-glow)] hover:bg-brand-hover hover:shadow-[0_12px_28px_-8px_var(--brand-glow)]',
-  ai: 'bg-ai text-white shadow-[0_8px_20px_-8px_var(--ai-glow)] hover:bg-ai-hover',
+  ai: 'bg-ai text-ai-on shadow-[0_8px_20px_-8px_var(--ai-glow)] hover:bg-ai-hover',
   ghost: 'bg-transparent border border-line-strong text-ink hover:border-brand/60 hover:text-brand hover:bg-brand-tint',
   danger: 'bg-transparent border border-line-strong text-danger hover:border-danger hover:bg-danger-tint',
   sec: 'bg-[var(--muted-bg)] text-ink border border-line hover:border-line-strong hover:brightness-110',
@@ -53,7 +53,7 @@ export function Spinner({ className }: { className?: string }): JSX.Element {
   return (
     <span
       className={clsx('inline-block h-[15px] w-[15px] rounded-full animate-spin', className)}
-      style={{ border: '2px solid rgba(255,255,255,.35)', borderTopColor: 'currentColor' }}
+      style={{ border: '2px solid var(--spinner-track)', borderTopColor: 'currentColor' }}
       aria-hidden="true"
     />
   );

@@ -54,7 +54,7 @@ function Turn({ m, contactName, index }: { m: Message; contactName: string | nul
     >
       <span className="mb-1 mx-1 inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-disabled">
         {kind === 'ai' && (
-          <span className="grid h-3.5 w-3.5 place-items-center rounded text-white" style={{ background: 'var(--ai)' }}>
+          <span className="grid h-3.5 w-3.5 place-items-center rounded text-ai-on" style={{ background: 'var(--ai)' }}>
             <Bot size={9} strokeWidth={2.5} />
           </span>
         )}
