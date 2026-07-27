@@ -3,10 +3,6 @@
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
 }
-@keyframes bubbleIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.96); }
-  to { opacity: 1; transform: none; }
-}
 @keyframes popIn {
   from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: none; }
@@ -36,10 +32,6 @@
   0% { box-shadow: 0 0 0 0 var(--ai-glow); }
   70% { box-shadow: 0 0 24px 6px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
-}
-@keyframes sweepHandoff {
-  from { background-position: 200% 0; }
-  to { background-position: -20% 0; }
 }
 @keyframes overlayFade {
   from { opacity: 0; }
@@ -240,12 +232,6 @@
 }
 .app-sidebar__item.is-active svg { color: var(--brand); }
 .app-sidebar__item svg { flex-shrink: 0; }
-.app-sidebar__footer {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-  margin-top: 8px;
-}
-
 .app-topbar {
   position: sticky;
   top: 0;
@@ -337,20 +323,11 @@
   border-bottom-right-radius: 5px;
 }
 
-.turn-enter { animation: bubbleIn 0.4s var(--ease-out) both; }
-
 .composer-bar {
   background: var(--surface-glass);
   backdrop-filter: saturate(140%) blur(14px);
   -webkit-backdrop-filter: saturate(140%) blur(14px);
   border-top: 1px solid var(--line);
-}
-
-/* Barrido de acento en el handoff: índigo -> verde (o viceversa) */
-.handoff-sweep {
-  background-size: 220% 100%;
-  background-image: linear-gradient(90deg, var(--ai) 0%, var(--ai) 45%, var(--brand) 55%, var(--brand) 100%);
-  animation: sweepHandoff 0.5s var(--ease) forwards;
 }
 
 /* ===== Skeleton shimmer ===== */

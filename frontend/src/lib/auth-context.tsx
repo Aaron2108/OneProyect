@@ -65,7 +65,12 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     () => ({
       user,
       isAuthenticated: !!user && !!getToken(),
-      login: async (input) => persist(await api<AuthResult>('/auth/login', { method: 'POST', body: input })),
+      // `skipAuthRedirect` estaba previsto en `api()` para esto exactamente, pero
+      // no se pasaba nunca: si quedaba un token viejo en el navegador, fallar el
+      // inicio de sesión disparaba el manejador global de 401 y el usuario leía
+      // "tu sesión expiró" en vez del motivo real del rechazo.
+      login: async (input) =>
+        persist(await api<AuthResult>('/auth/login', { method: 'POST', body: input, skipAuthRedirect: true })),
       register: async (input) => persist(await api<AuthResult>('/auth/register', { method: 'POST', body: input })),
       loginWithResult: persist,
       logout,

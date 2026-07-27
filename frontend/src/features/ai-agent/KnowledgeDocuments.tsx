@@ -228,6 +228,14 @@ export function KnowledgeDocuments({
               </span>
 
               {doc.status === 'ACTIVE' && <Pill kind="ai" label={STATUS_LABEL.ACTIVE} />}
+              {/* Estaba en STATUS_LABEL pero no se pintaba en ninguna parte: un
+                  documento recién subido aparecía sin estado, como si no le
+                  pasara nada, mientras el servidor seguía extrayendo su texto. */}
+              {doc.status === 'EXTRACTING' && (
+                <span className="inline-flex items-center gap-1 rounded-xs bg-[var(--muted-bg)] px-2 py-0.5 text-[11.5px] text-ink-soft">
+                  <Loader2 size={12} strokeWidth={2.25} className="animate-spin" /> {STATUS_LABEL.EXTRACTING}
+                </span>
+              )}
               {doc.status === 'PENDING_REVIEW' && (
                 <span className="inline-flex items-center gap-1 rounded-xs bg-warn-tint px-2 py-0.5 text-[11.5px] text-warn">
                   {STATUS_LABEL.PENDING_REVIEW}

@@ -13,7 +13,7 @@ de esta carpeta. Ese trabajo se hace en `/backend`.**
 ## Stack
 
 React 18 + TypeScript + Vite · Tailwind CSS (variables CSS en `src/styles/tokens.css`
-como fuente única de verdad del design system) · Radix UI (tabs, dialog, dropdown-menu,
+como fuente única de verdad del design system) · Radix UI (dialog, dropdown-menu,
 popover, toast) · Framer Motion · Recharts · lucide-react (iconos) · `@formkit/auto-animate`.
 
 ## Instalación y ejecución

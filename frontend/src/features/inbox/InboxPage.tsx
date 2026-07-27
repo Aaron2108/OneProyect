@@ -183,5 +183,3 @@ export function InboxPage(): JSX.Element {
     </div>
   );
 }
-
-export type { ConversationStatus, ConversationHandler };
