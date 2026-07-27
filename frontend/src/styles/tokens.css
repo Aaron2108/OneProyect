@@ -105,6 +105,15 @@
   /* Aro del spinner: la parte que no gira, sobre cualquier fondo de botón. */
   --spinner-track: rgba(255, 255, 255, 0.35);
 
+  /* Desplegable de selección. Comparte superficie con diálogos y popovers para
+     que floten con el mismo material; lo propio son el fondo del elemento bajo
+     el cursor y el del ya elegido, que necesitan pesos distintos: el primero es
+     un acompañamiento del puntero y el segundo, un estado. */
+  --select-item-hover: rgba(255, 255, 255, 0.06);
+  --select-item-active: var(--brand-tint);
+  --select-scroll-thumb: rgba(255, 255, 255, 0.16);
+  --select-scroll-thumb-hover: rgba(255, 255, 255, 0.26);
+
   /* ---- Radios: escala de 4 pasos, 20px para tarjetas ---- */
   --radius-xs: 10px;
   --radius-sm: 12px;

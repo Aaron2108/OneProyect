@@ -34,7 +34,8 @@ export default defineConfig({
     // (`sessionStorage`); las funciones puras no lo necesitan, pero tener un
     // solo entorno evita configurar cada archivo por separado.
     environment: 'jsdom',
-    include: ['src/**/*.test.ts'],
+    // `.tsx` además de `.ts`: las pruebas de componente necesitan JSX.
+    include: ['src/**/*.test.{ts,tsx}'],
   },
   server: {
     port: 5173,
@@ -65,6 +66,7 @@ export default defineConfig({
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-popover',
+            '@radix-ui/react-select',
             '@radix-ui/react-toast',
           ],
         },
