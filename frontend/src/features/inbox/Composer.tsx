@@ -11,9 +11,15 @@ export function Composer({ onSend }: { onSend: (text: string) => Promise<void> }
     const value = text.trim();
     if (!value || sending) return;
     setSending(true);
-    setText('');
     try {
       await onSend(value);
+      // El cuadro se vacía solo cuando el mensaje salió de verdad. Vaciarlo
+      // antes de esperar borraba lo escrito si el envío fallaba, y el agente
+      // tenía que reescribir su respuesta de memoria.
+      setText('');
+    } catch {
+      // Del aviso se encarga quien envía (InboxPage muestra el toast); aquí lo
+      // único que importa es no perder el texto.
     } finally {
       setSending(false);
       inputRef.current?.focus();

@@ -35,8 +35,15 @@ export function NotesDialog({
   }, [open, conversationId]);
 
   async function load(): Promise<void> {
-    const data = await api<ConversationNote[]>(`/conversations/${conversationId}/notes`);
-    setNotes(data);
+    try {
+      const data = await api<ConversationNote[]>(`/conversations/${conversationId}/notes`);
+      setNotes(data);
+    } catch (e) {
+      // Callarlo hacía creer que la conversación no tenía notas, que es
+      // justo lo contrario de lo que hay que saber antes de responder.
+      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las notas', 'error');
+      return;
+    }
     requestAnimationFrame(() => {
       if (listEl.current) listEl.current.scrollTop = listEl.current.scrollHeight;
     });
@@ -47,10 +54,13 @@ export function NotesDialog({
     setSaving(true);
     try {
       await api(`/conversations/${conversationId}/notes`, { method: 'POST', body: { body: body.trim() } });
+      // El texto solo se descarta cuando la nota quedó guardada.
       setBody('');
       await load();
       onChanged();
       toast.show('Nota añadida');
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'No se pudo guardar la nota', 'error');
     } finally {
       setSaving(false);
     }

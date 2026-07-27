@@ -41,6 +41,11 @@ export function InboxPage(): JSX.Element {
       const res = await api<Page<ConversationSummary>>(`/conversations?${qs.toString()}`);
       setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
       setCursor(res.nextCursor);
+    } catch (e) {
+      // Sin esto la lista se quedaba como estaba, sin decir nada: parecía que
+      // el negocio no tenía conversaciones nuevas cuando lo que había caído era
+      // la petición.
+      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las conversaciones', 'error');
     } finally {
       setLoading(false);
     }
@@ -93,20 +98,40 @@ export function InboxPage(): JSX.Element {
 
   async function refreshConversation(): Promise<void> {
     if (!selectedId) return;
-    setConversation(await api<ConversationDetail>(`/conversations/${selectedId}`));
+    try {
+      setConversation(await api<ConversationDetail>(`/conversations/${selectedId}`));
+    } catch (e) {
+      // No se relanza: quien llama ya hizo su trabajo (enviar, cerrar, anotar) y
+      // que falle el refresco no significa que aquello fallara.
+      toast.show(e instanceof Error ? e.message : 'No se pudo actualizar la conversación', 'error');
+      return;
+    }
     void load(true);
   }
 
   async function sendMessage(text: string): Promise<void> {
     if (!selectedId) return;
-    await api(`/conversations/${selectedId}/messages`, { method: 'POST', body: { text } });
+    try {
+      await api(`/conversations/${selectedId}/messages`, { method: 'POST', body: { text } });
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'No se pudo enviar el mensaje', 'error');
+      // Se relanza para que el Composer conserve el texto y se pueda reintentar.
+      throw e;
+    }
     toast.show('Mensaje enviado');
     await refreshConversation();
   }
 
   async function act(path: string, message: string, kind?: 'ai'): Promise<void> {
     if (!selectedId) return;
-    await api(`/conversations/${selectedId}${path}`, { method: 'POST' });
+    try {
+      await api(`/conversations/${selectedId}${path}`, { method: 'POST' });
+    } catch (e) {
+      // Antes el botón no daba señal alguna: la conversación seguía como estaba
+      // y parecía que el clic no había llegado a registrarse.
+      toast.show(e instanceof Error ? e.message : 'No se pudo completar la acción', 'error');
+      return;
+    }
     toast.show(message, kind);
     await refreshConversation();
   }

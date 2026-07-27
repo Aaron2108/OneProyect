@@ -1,5 +1,5 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
-import { Download, Plus, Search, UserRound } from 'lucide-react';
+import { Download, Plus, Search, TriangleAlert, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, downloadFile } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
@@ -22,6 +22,9 @@ export function ContactsPage(): JSX.Element {
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  // Separado del error del formulario: sirve para no enseñar "aún no tienes
+  // contactos" cuando la lista está vacía porque la petición falló.
+  const [errorCarga, setErrorCarga] = useState('');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
@@ -32,9 +35,16 @@ export function ContactsPage(): JSX.Element {
     const qs = new URLSearchParams();
     if (query.trim()) qs.set('q', query.trim());
     if (!reset && cursor) qs.set('cursor', cursor);
-    const res = await api<Page<Contact>>(`/contacts?${qs.toString()}`);
-    setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-    setCursor(res.nextCursor);
+    try {
+      const res = await api<Page<Contact>>(`/contacts?${qs.toString()}`);
+      setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
+      setCursor(res.nextCursor);
+      setErrorCarga('');
+    } catch (e) {
+      const mensaje = e instanceof Error ? e.message : 'No se pudieron cargar los contactos';
+      setErrorCarga(mensaje);
+      toast.show(mensaje, 'error');
+    }
   }
 
   useEffect(() => {
@@ -109,7 +119,18 @@ export function ContactsPage(): JSX.Element {
       </div>
 
       <div className="overflow-hidden rounded-lg border border-line bg-surface">
-        {items.length === 0 ? (
+        {items.length === 0 && errorCarga ? (
+          <EmptyState
+            icon={TriangleAlert}
+            title="No se pudieron cargar los contactos"
+            description={errorCarga}
+            action={
+              <Button size="sm" variant="sec" onClick={() => void load(true)}>
+                Reintentar
+              </Button>
+            }
+          />
+        ) : items.length === 0 ? (
           <EmptyState
             icon={UserRound}
             title={query ? 'Sin resultados' : 'Aún no tienes contactos'}

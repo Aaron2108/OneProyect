@@ -19,11 +19,21 @@ export function GoogleCalendarCard(): JSX.Element | null {
   const [busy, setBusy] = useState(false);
 
   async function load(): Promise<void> {
-    setStatus(await api<GoogleCalendarStatus>('/integrations/google-calendar/status'));
+    try {
+      setStatus(await api<GoogleCalendarStatus>('/integrations/google-calendar/status'));
+    } catch (e) {
+      // Si no se sabe el estado, la tarjeta se queda con el texto de "no
+      // conectado": sin aviso, el dueño creería que se le desconectó el
+      // calendario cuando lo que falló fue la consulta.
+      toast.show(e instanceof Error ? e.message : 'No se pudo consultar Google Calendar', 'error');
+    }
   }
 
+  // Solo al montar: `load` se recrea en cada render, así que declararla como
+  // dependencia volvería a consultar el estado sin parar.
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // El backend redirige aquí tras el consentimiento en Google con ?googleCalendar=connected|error.

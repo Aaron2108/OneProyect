@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from 'recharts';
 import { CalendarClock, Coins, MessageSquare, Send, Sparkles, Users } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useToast } from '@/lib/toast-context';
 import { Select } from '@/components/ui/Input';
 import { CountUp } from '@/components/ui/CountUp';
 import { RadialGauge } from '@/components/ui/RadialGauge';
@@ -63,6 +64,7 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>):
 }
 
 export function MetricsPage(): JSX.Element {
+  const toast = useToast();
   const [range, setRange] = useState(7);
   const [data, setData] = useState<MetricsOverview | null>(null);
   const [usage, setUsage] = useState<AiUsageTotals | null>(null);
@@ -79,15 +81,21 @@ export function MetricsPage(): JSX.Element {
     const from = new Date(to.getTime() - (range - 1) * 86400000);
     from.setHours(0, 0, 0, 0);
     const qs = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
-    // En paralelo: son dos preguntas distintas (cuánto se trabajó y cuánto
-    // costó) y ninguna debe esperar a la otra.
-    const [overview, consumo] = await Promise.all([
-      api<MetricsOverview>(`/metrics/overview?${qs}`),
-      api<AiUsageTotals>(`/metrics/ai-usage?${qs}`),
-    ]);
-    setData(overview);
-    setUsage(consumo);
-    setLoadedOnce(true);
+    try {
+      // En paralelo: son dos preguntas distintas (cuánto se trabajó y cuánto
+      // costó) y ninguna debe esperar a la otra.
+      const [overview, consumo] = await Promise.all([
+        api<MetricsOverview>(`/metrics/overview?${qs}`),
+        api<AiUsageTotals>(`/metrics/ai-usage?${qs}`),
+      ]);
+      setData(overview);
+      setUsage(consumo);
+      setLoadedOnce(true);
+    } catch (e) {
+      // Sin aviso, al cambiar de período se quedaban las cifras anteriores en
+      // pantalla (o el esqueleto girando) y nadie sabía que no eran las pedidas.
+      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las métricas', 'error');
+    }
   }
 
   const chartData = useMemo(

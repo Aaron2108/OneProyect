@@ -17,10 +17,19 @@ export function QuickRepliesPopover({ onInsert }: { onInsert: (body: string) => 
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 180 });
 
   async function load(): Promise<void> {
-    setItems(await api<QuickReply[]>('/quick-replies'));
+    try {
+      setItems(await api<QuickReply[]>('/quick-replies'));
+    } catch (e) {
+      // Antes el popover se abría vacío y parecía que el equipo no tenía
+      // respuestas guardadas.
+      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las respuestas rápidas', 'error');
+    }
   }
+  // Solo al montar: `load` se recrea en cada render, así que declararla como
+  // dependencia volvería a pedir la lista sin parar.
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function onSubmit(ev: FormEvent): Promise<void> {
@@ -29,17 +38,27 @@ export function QuickRepliesPopover({ onInsert }: { onInsert: (body: string) => 
     setSaving(true);
     try {
       await api('/quick-replies', { method: 'POST', body: { title: title.trim(), body: body.trim() } });
+      // Los campos se vacían solo si la respuesta llegó a guardarse.
       setTitle('');
       setBody('');
       await load();
       toast.show('Respuesta guardada');
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'No se pudo guardar la respuesta', 'error');
     } finally {
       setSaving(false);
     }
   }
 
   async function remove(id: string): Promise<void> {
-    await api(`/quick-replies/${id}`, { method: 'DELETE' });
+    try {
+      await api(`/quick-replies/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      // Sin aviso, la respuesta seguía en la lista y parecía que el botón de
+      // borrar no funcionaba.
+      toast.show(e instanceof Error ? e.message : 'No se pudo eliminar la respuesta', 'error');
+      return;
+    }
     await load();
   }
 

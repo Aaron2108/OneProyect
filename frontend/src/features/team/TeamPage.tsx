@@ -1,5 +1,5 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
-import { Plus, UserPlus } from 'lucide-react';
+import { Plus, TriangleAlert, UserPlus } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -20,13 +20,26 @@ export function TeamPage(): JSX.Element {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('AGENT');
   const [error, setError] = useState('');
+  // Separado del error del formulario: sirve para no enseñar "aún no hay más
+  // miembros" cuando la rejilla está vacía porque la petición falló.
+  const [errorCarga, setErrorCarga] = useState('');
   const [gridRef] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
 
   async function load(): Promise<void> {
-    setItems(await api<TeamMember[]>('/users'));
+    try {
+      setItems(await api<TeamMember[]>('/users'));
+      setErrorCarga('');
+    } catch (e) {
+      const mensaje = e instanceof Error ? e.message : 'No se pudo cargar el equipo';
+      setErrorCarga(mensaje);
+      toast.show(mensaje, 'error');
+    }
   }
+  // Solo al montar: `load` se recrea en cada render, así que declararla como
+  // dependencia volvería a pedir la lista sin parar.
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function invite(ev: FormEvent): Promise<void> {
@@ -90,12 +103,21 @@ export function TeamPage(): JSX.Element {
             <Pill kind={u.role === 'OWNER' ? 'owner' : 'agent'} />
           </div>
         ))}
-        {items.length === 0 && (
-          <div className="col-span-full flex flex-col items-center gap-2 py-10 text-center text-ink-disabled">
-            <UserPlus size={26} strokeWidth={1.75} />
-            <p className="m-0 text-sm">Aún no hay más miembros en el equipo.</p>
-          </div>
-        )}
+        {items.length === 0 &&
+          (errorCarga ? (
+            <div className="col-span-full flex flex-col items-center gap-2 py-10 text-center text-ink-disabled">
+              <TriangleAlert size={26} strokeWidth={1.75} className="text-danger" />
+              <p className="m-0 text-sm">No se pudo cargar el equipo. {errorCarga}</p>
+              <Button size="sm" variant="sec" onClick={() => void load()}>
+                Reintentar
+              </Button>
+            </div>
+          ) : (
+            <div className="col-span-full flex flex-col items-center gap-2 py-10 text-center text-ink-disabled">
+              <UserPlus size={26} strokeWidth={1.75} />
+              <p className="m-0 text-sm">Aún no hay más miembros en el equipo.</p>
+            </div>
+          ))}
       </div>
     </div>
   );
