@@ -133,6 +133,12 @@ export interface GoogleCalendarStatus {
   connected: boolean;
   googleAccountEmail: string | null;
   connectedAt: string | null;
+  /** Hay cuenta guardada pero sus credenciales ya no sirven: hay que reconectar. */
+  needsReconnect: boolean;
+  /** Citas cuya sincronización falló y sigue reintentándose. */
+  pendingSyncCount: number;
+  /** Último error de sincronización que reportó el servidor. */
+  lastSyncError: string | null;
 }
 
 export interface ActivityPoint {

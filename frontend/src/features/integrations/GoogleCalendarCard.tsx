@@ -1,4 +1,4 @@
-import { CalendarCheck2 } from 'lucide-react';
+import { CalendarCheck2, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
@@ -88,27 +88,59 @@ export function GoogleCalendarCard(): JSX.Element | null {
     }
   }
 
+  // Conectado pero sin credenciales utilizables: la cuenta sigue guardada y el
+  // panel decía "conectado", mientras las citas no llegaban a Google. Se avisa
+  // aparte de "no conectado" porque la acción es distinta — reconectar, no
+  // conectar de cero — y porque hay citas ya agendadas que no se reflejaron.
+  const caducado = status?.connected === true && status.needsReconnect;
+  const fallosPendientes = status?.pendingSyncCount ?? 0;
+
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-4 kpi-card">
-      <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-sm bg-brand-tint text-brand">
-        <CalendarCheck2 size={18} strokeWidth={2} />
+    <div className="mb-6 kpi-card">
+      <div className="flex flex-wrap items-center gap-4">
+        <div
+          className={`grid h-10 w-10 flex-shrink-0 place-items-center rounded-sm ${
+            caducado ? 'bg-danger-tint text-danger' : 'bg-brand-tint text-brand'
+          }`}
+        >
+          {caducado ? (
+            <TriangleAlert size={18} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <CalendarCheck2 size={18} strokeWidth={2} aria-hidden="true" />
+          )}
+        </div>
+        <div className="flex-1">
+          <div className="text-[14.5px] font-semibold">Google Calendar</div>
+          <p className="text-[13px] text-ink-soft">
+            {caducado
+              ? `La conexión con ${status?.googleAccountEmail} caducó: las citas nuevas no se están enviando a Google. Vuelve a conectar la cuenta.`
+              : status?.connected
+                ? `Conectado como ${status.googleAccountEmail}. Las citas se reflejan como eventos.`
+                : 'Conecta el calendario del negocio para reflejar las citas automáticamente.'}
+          </p>
+        </div>
+        {caducado ? (
+          <Button variant="brand" disabled={busy} onClick={connect}>
+            Reconectar
+          </Button>
+        ) : status?.connected ? (
+          <Button variant="danger" disabled={busy} onClick={disconnect}>
+            Desconectar
+          </Button>
+        ) : (
+          <Button variant="sec" disabled={busy} onClick={connect}>
+            Conectar
+          </Button>
+        )}
       </div>
-      <div className="flex-1">
-        <div className="text-[14.5px] font-semibold">Google Calendar</div>
-        <p className="text-[13px] text-ink-soft">
-          {status?.connected
-            ? `Conectado como ${status.googleAccountEmail}. Las citas se reflejan como eventos.`
-            : 'Conecta el calendario del negocio para reflejar las citas automáticamente.'}
+
+      {fallosPendientes > 0 && (
+        <p className="mt-3 border-t border-line pt-3 text-[12.5px] text-ink-faint">
+          {fallosPendientes === 1
+            ? '1 cita no se ha podido enviar a Google y se sigue reintentando.'
+            : `${fallosPendientes} citas no se han podido enviar a Google y se siguen reintentando.`}
+          {status?.lastSyncError ? ` Último error: ${status.lastSyncError}` : ''}
         </p>
-      </div>
-      {status?.connected ? (
-        <Button variant="danger" disabled={busy} onClick={disconnect}>
-          Desconectar
-        </Button>
-      ) : (
-        <Button variant="sec" disabled={busy} onClick={connect}>
-          Conectar
-        </Button>
       )}
     </div>
   );
