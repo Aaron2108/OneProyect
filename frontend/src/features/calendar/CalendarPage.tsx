@@ -1,6 +1,6 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
@@ -52,9 +52,15 @@ export function CalendarPage(): JSX.Element {
     setDialogOpen(true);
   }
 
-  const dayAppointments = appointments
-    .filter((a) => isSameDay(new Date(a.scheduledAt), selectedDate))
-    .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+  // Filtrar y ordenar solo cuando cambian el día elegido o las citas: antes se
+  // rehacía en cada render, incluido el de abrir o cerrar el diálogo.
+  const dayAppointments = useMemo(
+    () =>
+      appointments
+        .filter((a) => isSameDay(new Date(a.scheduledAt), selectedDate))
+        .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
+    [appointments, selectedDate],
+  );
 
   return (
     <div className="mx-auto max-w-[1100px] p-6 sm:p-10">

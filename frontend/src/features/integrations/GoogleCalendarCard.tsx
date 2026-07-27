@@ -1,5 +1,6 @@
 import { CalendarCheck2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
@@ -15,6 +16,7 @@ import type { GoogleCalendarStatus } from '@/lib/types';
 export function GoogleCalendarCard(): JSX.Element | null {
   const { user } = useAuth();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -36,10 +38,15 @@ export function GoogleCalendarCard(): JSX.Element | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // El backend redirige aquí tras el consentimiento en Google con ?googleCalendar=connected|error.
+  // El backend redirige aquí tras el consentimiento en Google con
+  // ?googleCalendar=connected|error.
+  //
+  // Se lee con `useSearchParams` en vez de `window.location` + `replaceState`:
+  // escribir la URL por debajo del router lo deja con una `location` que ya no
+  // es la real, y cualquier componente que dependa de ella se queda con la
+  // anterior.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const result = params.get('googleCalendar');
+    const result = searchParams.get('googleCalendar');
     if (!result) return;
     if (result === 'connected') {
       toast.show('Google Calendar conectado');
@@ -47,9 +54,11 @@ export function GoogleCalendarCard(): JSX.Element | null {
     } else {
       toast.show('No se pudo conectar Google Calendar', 'error');
     }
-    params.delete('googleCalendar');
-    const query = params.toString();
-    window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+    const restantes = new URLSearchParams(searchParams);
+    restantes.delete('googleCalendar');
+    // `replace` para que el parámetro consumido no quede en el historial y
+    // volver atrás no repita el aviso.
+    setSearchParams(restantes, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

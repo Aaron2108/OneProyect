@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { useMemo } from 'react';
 import type { Appointment, AppointmentStatus } from '@/lib/types';
 import { buildMonthGrid, isSameDay, toDateKey, WEEKDAY_LABELS } from './calendar.util';
 
@@ -21,14 +22,21 @@ export function MonthGrid({
   selectedDate: Date;
   onSelectDate: (d: Date) => void;
 }): JSX.Element {
-  const days = buildMonthGrid(month);
-  const byDay = new Map<string, Appointment[]>();
-  for (const appt of appointments) {
-    const key = toDateKey(new Date(appt.scheduledAt));
-    const list = byDay.get(key);
-    if (list) list.push(appt);
-    else byDay.set(key, [appt]);
-  }
+  // La grilla son 42 `new Date` y el índice recorre todas las citas del mes.
+  // Sin memorizar, ambas cosas se rehacían en cada render — y esta vista
+  // re-renderiza al elegir un día, al abrir el diálogo y al cerrarlo, sin que
+  // ni el mes ni las citas hayan cambiado.
+  const days = useMemo(() => buildMonthGrid(month), [month]);
+  const byDay = useMemo(() => {
+    const mapa = new Map<string, Appointment[]>();
+    for (const appt of appointments) {
+      const key = toDateKey(new Date(appt.scheduledAt));
+      const list = mapa.get(key);
+      if (list) list.push(appt);
+      else mapa.set(key, [appt]);
+    }
+    return mapa;
+  }, [appointments]);
 
   return (
     <div className="overflow-hidden rounded-lg bg-surface shadow-1">

@@ -5,7 +5,7 @@ import { Pill } from '@/components/ui/Pill';
 import { RosterSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Select } from '@/components/ui/Input';
-import type { ConversationSummary } from '@/lib/types';
+import type { ConversationHandler, ConversationStatus, ConversationSummary } from '@/lib/types';
 
 function fmt(d: string): string {
   return new Date(d).toLocaleString('es', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -16,11 +16,12 @@ interface RosterProps {
   loading: boolean;
   selectedId: string | null;
   hasMore: boolean;
-  status: string;
-  handledBy: string;
+  /** '' = sin filtrar. Tipado para que no llegue un estado que la API no conoce. */
+  status: ConversationStatus | '';
+  handledBy: ConversationHandler | '';
   query: string;
-  onStatusChange: (v: string) => void;
-  onHandledByChange: (v: string) => void;
+  onStatusChange: (v: ConversationStatus | '') => void;
+  onHandledByChange: (v: ConversationHandler | '') => void;
   onQueryChange: (v: string) => void;
   onSelect: (id: string) => void;
   onLoadMore: () => void;
@@ -39,7 +40,7 @@ export function Roster(props: RosterProps): JSX.Element {
           <Select
             aria-label="Filtrar por estado"
             value={status}
-            onChange={(e) => props.onStatusChange(e.target.value)}
+            onChange={(e) => props.onStatusChange(e.target.value as ConversationStatus | '')}
             className="flex-1 !py-2 !text-[12.5px]"
           >
             <option value="">Todas</option>
@@ -49,7 +50,7 @@ export function Roster(props: RosterProps): JSX.Element {
           <Select
             aria-label="Filtrar por quién atiende"
             value={handledBy}
-            onChange={(e) => props.onHandledByChange(e.target.value)}
+            onChange={(e) => props.onHandledByChange(e.target.value as ConversationHandler | '')}
             className="flex-1 !py-2 !text-[12.5px]"
           >
             <option value="">IA y humano</option>

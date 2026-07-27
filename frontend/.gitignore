@@ -1,3 +1,17 @@
+# El frontend está pensado para vivir en su propio repositorio (ver CLAUDE.md),
+# así que este archivo tiene que bastarse solo: hoy se apoya en parte en el
+# .gitignore de la raíz del monorepo, que desaparecerá al separarlos.
 node_modules/
 dist/
+coverage/
+
+# Variables de entorno: todo lo que empieza por VITE_ acaba dentro del bundle
+# público, razón de más para no versionar el archivo real. `.env.example` sí.
+.env
+.env.local
+.env.*.local
 *.local
+
+# Cachés de TypeScript y logs
+*.tsbuildinfo
+*.log

@@ -17,8 +17,11 @@ export function InboxPage(): JSX.Element {
   const [items, setItems] = useState<ConversationSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('');
-  const [handledBy, setHandledBy] = useState('');
+  // '' es "sin filtrar". Tipados así, el compilador no deja pasar un valor que
+  // el backend no entienda: antes eran `string` y `setStatus('OPENN')` habría
+  // compilado y devuelto una lista vacía sin explicación.
+  const [status, setStatus] = useState<ConversationStatus | ''>('');
+  const [handledBy, setHandledBy] = useState<ConversationHandler | ''>('');
   const [query, setQuery] = useState('');
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [mobileViewingThread, setMobileViewingThread] = useState(false);

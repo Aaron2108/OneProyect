@@ -19,5 +19,8 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  // La configuración también se comprueba: un error de tipos en
+  // `tailwind.config.ts` (un token mal escrito, una clave que ya no existe)
+  // rompía el diseño sin que `tsc --noEmit` dijera nada.
+  "include": ["src", "vite.config.ts", "tailwind.config.ts"]
 }

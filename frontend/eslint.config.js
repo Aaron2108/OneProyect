@@ -8,7 +8,24 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+  },
+  // La configuración del proyecto (Vite, Tailwind, PostCSS y este mismo
+  // archivo) quedaba fuera del linter: se revisaba `src/` y nada más, así que
+  // un import sin usar o una variable muerta ahí no los veía nadie. Van con
+  // reglas mínimas — son archivos de Node, no componentes.
+  {
+    files: ['*.{ts,js}'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+      globals: { process: 'readonly' },
+    },
+    plugins: { '@typescript-eslint': tsPlugin },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
   },
   {
     files: ['src/**/*.{ts,tsx}'],
