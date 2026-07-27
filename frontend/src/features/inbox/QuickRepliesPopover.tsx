@@ -1,8 +1,9 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { X, Zap } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
+import { useRecurso } from '@/lib/use-recurso';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Input';
 import { Popover } from '@/components/ui/Popover';
@@ -10,27 +11,18 @@ import type { QuickReply } from '@/lib/types';
 
 export function QuickRepliesPopover({ onInsert }: { onInsert: (body: string) => void }): JSX.Element {
   const toast = useToast();
-  const [items, setItems] = useState<QuickReply[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 180 });
 
-  async function load(): Promise<void> {
-    try {
-      setItems(await api<QuickReply[]>('/quick-replies'));
-    } catch (e) {
-      // Antes el popover se abría vacío y parecía que el equipo no tenía
-      // respuestas guardadas.
-      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las respuestas rápidas', 'error');
-    }
-  }
-  // Solo al montar: `load` se recrea en cada render, así que declararla como
-  // dependencia volvería a pedir la lista sin parar.
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Si falla, el aviso lo da el hook: antes el popover se abría vacío y parecía
+  // que el equipo no tenía respuestas guardadas.
+  const { datos, recargar } = useRecurso<QuickReply[]>(
+    '/quick-replies',
+    'No se pudieron cargar las respuestas rápidas',
+  );
+  const items = datos ?? [];
 
   async function onSubmit(ev: FormEvent): Promise<void> {
     ev.preventDefault();
@@ -41,7 +33,7 @@ export function QuickRepliesPopover({ onInsert }: { onInsert: (body: string) => 
       // Los campos se vacían solo si la respuesta llegó a guardarse.
       setTitle('');
       setBody('');
-      await load();
+      await recargar();
       toast.show('Respuesta guardada');
     } catch (e) {
       toast.show(e instanceof Error ? e.message : 'No se pudo guardar la respuesta', 'error');
@@ -59,7 +51,7 @@ export function QuickRepliesPopover({ onInsert }: { onInsert: (body: string) => 
       toast.show(e instanceof Error ? e.message : 'No se pudo eliminar la respuesta', 'error');
       return;
     }
-    await load();
+    await recargar();
   }
 
   return (
