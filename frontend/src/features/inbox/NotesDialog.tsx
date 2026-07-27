@@ -2,6 +2,7 @@ import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
+import { useRecurso } from '@/lib/use-recurso';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field, Textarea } from '@/components/ui/Input';
@@ -23,31 +24,27 @@ export function NotesDialog({
   onChanged: () => void;
 }): JSX.Element {
   const toast = useToast();
-  const [notes, setNotes] = useState<ConversationNote[]>([]);
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
   const listEl = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (open) void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, conversationId]);
+  // Con el diálogo cerrado la ruta es null y no se pide nada. Si falla, el aviso
+  // lo da el hook: callarlo hacía creer que la conversación no tenía notas, que
+  // es justo lo contrario de lo que hay que saber antes de responder.
+  const { datos, recargar } = useRecurso<ConversationNote[]>(
+    open ? `/conversations/${conversationId}/notes` : null,
+    'No se pudieron cargar las notas',
+  );
+  const notes = datos ?? [];
 
-  async function load(): Promise<void> {
-    try {
-      const data = await api<ConversationNote[]>(`/conversations/${conversationId}/notes`);
-      setNotes(data);
-    } catch (e) {
-      // Callarlo hacía creer que la conversación no tenía notas, que es
-      // justo lo contrario de lo que hay que saber antes de responder.
-      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las notas', 'error');
-      return;
-    }
+  // Al fondo de la lista en cuanto llegan: la nota que importa es la última.
+  useEffect(() => {
+    if (!datos) return;
     requestAnimationFrame(() => {
       if (listEl.current) listEl.current.scrollTop = listEl.current.scrollHeight;
     });
-  }
+  }, [datos]);
 
   async function add(): Promise<void> {
     if (!body.trim()) return;
@@ -56,7 +53,7 @@ export function NotesDialog({
       await api(`/conversations/${conversationId}/notes`, { method: 'POST', body: { body: body.trim() } });
       // El texto solo se descarta cuando la nota quedó guardada.
       setBody('');
-      await load();
+      await recargar();
       onChanged();
       toast.show('Nota añadida');
     } catch (e) {
