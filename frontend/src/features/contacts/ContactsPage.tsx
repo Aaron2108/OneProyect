@@ -1,7 +1,7 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { Download, Plus, Search, TriangleAlert, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, downloadFile } from '@/lib/api';
+import { api, downloadFile, esCancelacion } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -31,16 +31,19 @@ export function ContactsPage(): JSX.Element {
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
   const loadedOnce = useRef(false);
 
-  async function load(reset: boolean): Promise<void> {
+  async function load(reset: boolean, signal?: AbortSignal): Promise<void> {
     const qs = new URLSearchParams();
     if (query.trim()) qs.set('q', query.trim());
     if (!reset && cursor) qs.set('cursor', cursor);
     try {
-      const res = await api<Page<Contact>>(`/contacts?${qs.toString()}`);
+      const res = await api<Page<Contact>>(`/contacts?${qs.toString()}`, { signal });
       setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
       setCursor(res.nextCursor);
       setErrorCarga('');
     } catch (e) {
+      // Cancelada porque se siguió tecleando o se salió de la pantalla: su
+      // respuesta ya no vale y no hay error que enseñar.
+      if (esCancelacion(e)) return;
       const mensaje = e instanceof Error ? e.message : 'No se pudieron cargar los contactos';
       setErrorCarga(mensaje);
       toast.show(mensaje, 'error');
@@ -49,12 +52,19 @@ export function ContactsPage(): JSX.Element {
 
   useEffect(() => {
     clearTimeout(searchTimer.current);
+    // El rebote no basta: si una búsqueda tarda más que la siguiente, su
+    // respuesta llegaba después y pisaba la lista con resultados de un texto que
+    // el usuario ya había cambiado. Cancelarla al salir del efecto lo impide.
+    const control = new AbortController();
     const delay = loadedOnce.current ? 300 : 0;
     searchTimer.current = setTimeout(() => {
       loadedOnce.current = true;
-      void load(true);
+      void load(true, control.signal);
     }, delay);
-    return () => clearTimeout(searchTimer.current);
+    return () => {
+      clearTimeout(searchTimer.current);
+      control.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 

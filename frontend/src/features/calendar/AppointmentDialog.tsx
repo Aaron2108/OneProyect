@@ -71,15 +71,25 @@ export function AppointmentDialog({
       setContactResults([]);
       return;
     }
+    // Se cancela la búsqueda anterior al teclear: sin esto, una respuesta lenta
+    // llegaba después de la siguiente y ofrecía contactos de un texto que ya no
+    // estaba escrito, sobre el que era fácil hacer clic sin querer.
+    const control = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await api<Page<Contact>>(`/contacts?q=${encodeURIComponent(q)}&limit=8`);
+        const res = await api<Page<Contact>>(`/contacts?q=${encodeURIComponent(q)}&limit=8`, {
+          signal: control.signal,
+        });
         setContactResults(res.items);
       } catch {
-        // búsqueda best-effort: si falla, simplemente no se muestran resultados
+        // búsqueda best-effort: si falla o se cancela, simplemente no se
+        // muestran resultados
       }
     }, 250);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      control.abort();
+    };
   }, [contactQuery, open, isEdit, selectedContact]);
 
   async function save(): Promise<void> {

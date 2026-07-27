@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, downloadFile } from '@/lib/api';
+import { api, downloadFile, esCancelacion } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import type { ConversationDetail, ConversationStatus, ConversationHandler, Page, ConversationSummary } from '@/lib/types';
 import { ContactPanel } from './ContactPanel';
@@ -30,7 +30,7 @@ export function InboxPage(): JSX.Element {
   // volvía a pedir la primera página y la añadía repetida al final de la lista.
   // Recreada en cada render siempre lee el cursor vigente — igual que en
   // ContactsPage.
-  async function load(reset: boolean): Promise<void> {
+  async function load(reset: boolean, signal?: AbortSignal): Promise<void> {
     setLoading(reset && items.length === 0);
     const qs = new URLSearchParams();
     if (status) qs.set('status', status);
@@ -38,10 +38,13 @@ export function InboxPage(): JSX.Element {
     if (query.trim()) qs.set('q', query.trim());
     if (!reset && cursor) qs.set('cursor', cursor);
     try {
-      const res = await api<Page<ConversationSummary>>(`/conversations?${qs.toString()}`);
+      const res = await api<Page<ConversationSummary>>(`/conversations?${qs.toString()}`, { signal });
       setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
       setCursor(res.nextCursor);
     } catch (e) {
+      // Cancelada porque cambió el filtro o se salió de la pantalla: no hay nada
+      // que contar, y su respuesta ya no debe tocar la lista.
+      if (esCancelacion(e)) return;
       // Sin esto la lista se quedaba como estaba, sin decir nada: parecía que
       // el negocio no tenía conversaciones nuevas cuando lo que había caído era
       // la petición.
@@ -54,12 +57,19 @@ export function InboxPage(): JSX.Element {
   // Carga inicial + recarga al cambiar filtros (con debounce en la búsqueda).
   useEffect(() => {
     clearTimeout(searchTimer.current);
+    // El rebote no basta: si una búsqueda tarda más que la siguiente, su
+    // respuesta llegaba después y pisaba la lista con resultados de un texto que
+    // el usuario ya había cambiado. Cancelarla al salir del efecto lo impide.
+    const control = new AbortController();
     const delay = loadedOnce.current ? 300 : 0;
     searchTimer.current = setTimeout(() => {
       loadedOnce.current = true;
-      void load(true);
+      void load(true, control.signal);
     }, delay);
-    return () => clearTimeout(searchTimer.current);
+    return () => {
+      clearTimeout(searchTimer.current);
+      control.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, handledBy, query]);
 

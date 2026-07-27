@@ -33,6 +33,25 @@ interface ApiOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   /** Si es true, no dispara el manejador global de 401 (usado por /auth/login). */
   skipAuthRedirect?: boolean;
+  /**
+   * Para cancelar la petición cuando su respuesta ya no le sirve a nadie: al
+   * teclear en un buscador con rebote, o al desmontar la pantalla. Se declara
+   * aquí (aunque `RequestInit` ya lo traiga) porque es la opción que hay que
+   * conocer para no dejar peticiones colgando; al cancelar, el error resultante
+   * se reconoce con `esCancelacion`.
+   */
+  signal?: AbortSignal;
+}
+
+/**
+ * true si el fallo es una petición cancelada a propósito.
+ *
+ * Cancelar no es fallar: el usuario no tiene nada que hacer al respecto y
+ * avisarle de ello sería ruido — sobre todo cuando escribir en un buscador
+ * cancela una petición por cada tecla.
+ */
+export function esCancelacion(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { name?: unknown }).name === 'AbortError';
 }
 
 let onUnauthorized: (() => void) | null = null;
@@ -50,6 +69,8 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
   };
   if (token) finalHeaders.Authorization = `Bearer ${token}`;
 
+  // `signal` viaja dentro de `rest`: es una opción de `RequestInit` y llega al
+  // fetch sin tratamiento especial.
   const res = await fetch(resolveUrl(path), {
     ...rest,
     headers: finalHeaders,
