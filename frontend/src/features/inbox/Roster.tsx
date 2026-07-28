@@ -1,6 +1,7 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
-import { Download, MessageCircle, Search } from 'lucide-react';
+import { Download, MessageCircle, Search, TriangleAlert } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
+import { Button } from '@/components/ui/Button';
 import { Pill } from '@/components/ui/Pill';
 import { RosterSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -20,6 +21,9 @@ interface RosterProps {
   status: ConversationStatus | '';
   handledBy: ConversationHandler | '';
   query: string;
+  /** Mensaje del fallo de carga, '' si fue bien. */
+  error: string;
+  onRetry: () => void;
   onStatusChange: (v: ConversationStatus | '') => void;
   onHandledByChange: (v: ConversationHandler | '') => void;
   onQueryChange: (v: string) => void;
@@ -29,13 +33,26 @@ interface RosterProps {
 }
 
 export function Roster(props: RosterProps): JSX.Element {
-  const { items, loading, selectedId, hasMore, status, handledBy, query } = props;
+  const { items, loading, selectedId, hasMore, status, handledBy, query, error } = props;
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 220, easing: 'ease-out' });
 
   return (
     <div className="roster-panel">
       <div className="p-4 pb-3.5">
-        <h3 className="mb-3 font-display text-[16px] font-bold tracking-tight">Conversaciones</h3>
+        {/* Exportar no es un filtro y no se usa a diario, pero ocupaba una fila
+            entera debajo de ellos con el mismo peso: cuatro alturas de control
+            antes de ver la primera conversación. Aquí arriba está donde
+            corresponde —lo que se le hace a la lista entera, junto al título de
+            la lista— y la columna empieza a listar antes. */}
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="font-display text-[16px] font-bold tracking-tight">Conversaciones</h3>
+          <button
+            onClick={props.onExport}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xs px-2 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors duration-fast hover:bg-[var(--hover-bg)] hover:text-brand"
+          >
+            <Download size={13} strokeWidth={2} /> CSV
+          </button>
+        </div>
         <div className="flex gap-2">
           <Select
             aria-label="Filtrar por estado"
@@ -69,17 +86,26 @@ export function Roster(props: RosterProps): JSX.Element {
             className="w-full rounded-sm border border-line-strong bg-[var(--input-bg)] py-2.5 pl-9 pr-3 text-[13.5px] transition-[border-color,box-shadow] duration-fast focus:border-brand focus:shadow-[0_0_0_3px_var(--brand-tint)] focus:outline-none"
           />
         </div>
-        <button
-          onClick={props.onExport}
-          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-sm border border-line-strong px-3 py-2 text-[12.5px] font-semibold text-ink-soft transition-colors duration-fast hover:border-brand/50 hover:text-brand"
-        >
-          <Download size={13} strokeWidth={2} /> Exportar CSV
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto border-t border-line" aria-live="polite">
         {loading ? (
           <RosterSkeleton />
+        ) : error && items.length === 0 ? (
+          // Una lista vacía porque la petición falló no es una lista vacía. Esto
+          // decía «Aún no hay conversaciones», que es afirmar algo que no se
+          // sabe —y justo a quien acaba de perder la conexión le hacía creer
+          // que se le habían borrado los chats.
+          <EmptyState
+            icon={TriangleAlert}
+            title="No se pudo cargar la lista"
+            description={error}
+            action={
+              <Button size="sm" variant="ghost" onClick={props.onRetry}>
+                Reintentar
+              </Button>
+            }
+          />
         ) : items.length === 0 ? (
           <EmptyState
             icon={MessageCircle}

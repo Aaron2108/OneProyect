@@ -38,6 +38,7 @@ export function InboxPage(): JSX.Element {
     setItems,
     cursor,
     cargando,
+    error,
     cargarMas,
     recargar,
   } = useListaPaginada<ConversationSummary>(ruta, 'No se pudieron cargar las conversaciones');
@@ -130,6 +131,8 @@ export function InboxPage(): JSX.Element {
         status={status}
         handledBy={handledBy}
         query={query}
+        error={error}
+        onRetry={() => void recargar()}
         onStatusChange={setStatus}
         onHandledByChange={setHandledBy}
         onQueryChange={setQuery}

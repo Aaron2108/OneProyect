@@ -381,6 +381,13 @@
   color: var(--on-brand);
   border-bottom-right-radius: 5px;
 }
+/* El pico solo lo lleva la última burbuja de cada tanda. Repetido en todas,
+   cada mensaje se leía como una intervención suelta; puesto solo al final, una
+   ráfaga de tres mensajes seguidos del mismo lado se lee como lo que es: una
+   sola cosa dicha en tres golpes. */
+.bubble--in.is-continua { border-bottom-left-radius: 16px; }
+.bubble--ai.is-continua,
+.bubble--human.is-continua { border-bottom-right-radius: 16px; }
 
 .composer-bar {
   background: var(--surface-glass);
