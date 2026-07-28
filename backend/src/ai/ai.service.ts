@@ -92,11 +92,26 @@ export class AiService {
    * Modelo que de verdad atendió la llamada. Importa para el histórico de
    * gasto: los tokens de dos modelos no cuestan lo mismo, así que apuntar
    * siempre el de Anthropic dejaría el registro sin poder valorarse.
+   *
+   * Público además de para el registro: el panel enseña qué modelo hay detrás
+   * del agente, y hasta ahora tenía que decir «no disponible» teniendo el dato
+   * aquí mismo.
    */
-  private activeModel(): string {
+  activeModel(): string {
     return this.provider === 'nvidia'
       ? (this.config.get<string>('ai.nvidia.model') ?? 'nvidia')
       : this.model;
+  }
+
+  /**
+   * Proveedor activo: 'anthropic' | 'nvidia' | 'mock'.
+   *
+   * El panel lo necesita junto al modelo porque no significan lo mismo: con
+   * `mock` el agente contesta de forma simulada, y saberlo evita que alguien
+   * dé por buena una respuesta de prueba creyendo que la escribió el modelo.
+   */
+  activeProvider(): string {
+    return this.provider;
   }
 
   /** La IA opera si es modo mock, o si el proveedor activo tiene credenciales. */

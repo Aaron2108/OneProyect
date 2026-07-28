@@ -26,6 +26,14 @@ export interface AiContextPreview {
   knowledgeChunksUsed: number;
   /** Documentos activos del negocio. */
   documents: AiContextDocument[];
+  /** Modelo que atiende hoy al agente (p. ej. `claude-haiku-4-5`). */
+  model: string;
+  /**
+   * Proveedor activo: `anthropic` | `nvidia` | `mock`. Va junto al modelo
+   * porque no dicen lo mismo: en `mock` las respuestas son simuladas, y el
+   * panel tiene que poder avisarlo en vez de presentarlas como del modelo.
+   */
+  provider: string;
 }
 
 /** Herramienta que el agente habría usado, en el chat de prueba. */

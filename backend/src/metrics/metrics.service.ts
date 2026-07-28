@@ -16,6 +16,35 @@ export interface ActivityPoint {
   outbound: number;
 }
 
+/**
+ * Cuánto se tarda en contestar a un cliente.
+ *
+ * Se mide por turnos, no por mensajes: cuenta el hueco entre un mensaje
+ * entrante y el saliente que va justo detrás en esa misma conversación. Si el
+ * cliente escribe tres seguidos y luego se le responde, la espera es la del
+ * último — que es la que él percibe—, no tres esperas distintas.
+ *
+ * La cifra principal es la MEDIANA y no la media. Un solo mensaje que entra a
+ * las 23:00 y se contesta a las 9:00 son diez horas que arrastran la media de
+ * todo el período: con cien respuestas de ocho segundos y una de diez horas, la
+ * media sale en seis minutos y no describe a ninguna de las ciento una. La
+ * media se devuelve igualmente, para quien quiera verla.
+ *
+ * Todo puede ser `null`: sin ninguna pareja entrante→saliente en el período no
+ * hay nada que medir, y un 0 ahí se leería como "se contesta al instante".
+ */
+export interface ResponseTime {
+  /** Parejas entrante→saliente encontradas dentro del período. */
+  samples: number;
+  medianSeconds: number | null;
+  averageSeconds: number | null;
+  /** Desglose por quién contestó: es la comparación que importa en este producto. */
+  aiSamples: number;
+  aiMedianSeconds: number | null;
+  humanSamples: number;
+  humanMedianSeconds: number | null;
+}
+
 /** Resumen de métricas de un tenant para el panel. */
 export interface MetricsOverview {
   conversations: { total: number; open: number; closed: number; handledByAi: number; handledByHuman: number };
@@ -25,8 +54,21 @@ export interface MetricsOverview {
   reminders: { total: number; pending: number; sent: number; cancelled: number };
   /** Proporción de respuestas resueltas por la IA sobre el total de respuestas salientes (0-1). */
   automationRate: number;
+  /** Cuánto se tarda en contestar, por turnos. Ver `ResponseTime`. */
+  responseTime: ResponseTime;
   /** Actividad de mensajes de los últimos 7 días. */
   activity: ActivityPoint[];
+}
+
+/** Fila cruda del SQL de tiempos de respuesta (nombres tal cual los devuelve). */
+interface ResponseTimeRow {
+  samples: number;
+  median_seconds: number | null;
+  average_seconds: number | null;
+  ai_samples: number;
+  ai_median_seconds: number | null;
+  human_samples: number;
+  human_median_seconds: number | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -65,6 +107,7 @@ export class MetricsService {
       apptByStatus,
       remByStatus,
       activityRows,
+      responseRows,
     ] = await Promise.all([
       this.prisma.conversation.groupBy({ by: ['status'], where, _count: { _all: true } }),
       this.prisma.conversation.groupBy({ by: ['handledBy'], where, _count: { _all: true } }),
@@ -74,6 +117,7 @@ export class MetricsService {
       this.prisma.appointment.groupBy({ by: ['status'], where, _count: { _all: true } }),
       this.prisma.reminder.groupBy({ by: ['status'], where, _count: { _all: true } }),
       this.dailyActivity(tenantId, since, until),
+      this.responseTimes(tenantId, since, until),
     ]);
 
     const convStatus = this.tally(convByStatus, 'status');
@@ -118,6 +162,7 @@ export class MetricsService {
         cancelled: rem[ReminderStatus.CANCELLED] ?? 0,
       },
       automationRate: outboundReplies === 0 ? 0 : fromAi / outboundReplies,
+      responseTime: this.toResponseTime(responseRows[0]),
       activity: this.fillDays(activityRows, since, dayCount),
     };
   }
@@ -136,6 +181,72 @@ export class MetricsService {
       WHERE tenant_id = ${tenantId} AND created_at >= ${since} AND created_at <= ${until}
       GROUP BY 1
       ORDER BY 1`;
+  }
+
+  /**
+   * Esperas entre cada mensaje entrante y el saliente que lo sigue.
+   *
+   * Con `LEAD` y no con un join de `messages` contra sí misma: el join
+   * emparejaría cada entrante con TODOS los salientes posteriores de su
+   * conversación para luego quedarse con el mínimo, que en un hilo largo es
+   * cuadrático. La ventana recorre cada conversación una vez y usa el índice
+   * `(conversation_id, created_at)` que ya existe.
+   *
+   * El desempate por `id` es necesario: dos mensajes con el mismo `created_at`
+   * —ocurre cuando la IA contesta en el mismo milisegundo en que se guarda el
+   * entrante— dejarían el orden a merced del planificador, y la misma consulta
+   * daría cifras distintas entre ejecuciones.
+   *
+   * Una salvedad honesta: un entrante al final del período cuya respuesta cae
+   * ya fuera queda sin pareja y no cuenta. Ampliar la ventana para recogerlo
+   * mezclaría en el período respuestas que pertenecen al siguiente.
+   */
+  private async responseTimes(
+    tenantId: string,
+    since: Date,
+    until: Date,
+  ): Promise<ResponseTimeRow[]> {
+    return this.prisma.$queryRaw<ResponseTimeRow[]>`
+      WITH turnos AS (
+        SELECT direction,
+               created_at,
+               LEAD(created_at) OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS siguiente_at,
+               LEAD(direction)  OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS siguiente_dir,
+               LEAD(sender)     OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS siguiente_sender
+        FROM messages
+        WHERE tenant_id = ${tenantId} AND created_at >= ${since} AND created_at <= ${until}
+      ),
+      esperas AS (
+        SELECT EXTRACT(EPOCH FROM (siguiente_at - created_at)) AS segundos,
+               siguiente_sender
+        FROM turnos
+        WHERE direction = 'INBOUND' AND siguiente_dir = 'OUTBOUND'
+      )
+      SELECT count(*)::int AS samples,
+             percentile_cont(0.5) WITHIN GROUP (ORDER BY segundos)::float8 AS median_seconds,
+             avg(segundos)::float8 AS average_seconds,
+             count(*) FILTER (WHERE siguiente_sender = 'AI')::int AS ai_samples,
+             (percentile_cont(0.5) WITHIN GROUP (ORDER BY segundos)
+               FILTER (WHERE siguiente_sender = 'AI'))::float8 AS ai_median_seconds,
+             count(*) FILTER (WHERE siguiente_sender = 'HUMAN')::int AS human_samples,
+             (percentile_cont(0.5) WITHIN GROUP (ORDER BY segundos)
+               FILTER (WHERE siguiente_sender = 'HUMAN'))::float8 AS human_median_seconds
+      FROM esperas`;
+  }
+
+  /** Normaliza la fila del SQL: sin muestras, Postgres devuelve NULL y aquí null. */
+  private toResponseTime(row?: ResponseTimeRow): ResponseTime {
+    const num = (v: unknown): number | null =>
+      v === null || v === undefined ? null : Math.round(Number(v));
+    return {
+      samples: Number(row?.samples ?? 0),
+      medianSeconds: num(row?.median_seconds),
+      averageSeconds: num(row?.average_seconds),
+      aiSamples: Number(row?.ai_samples ?? 0),
+      aiMedianSeconds: num(row?.ai_median_seconds),
+      humanSamples: Number(row?.human_samples ?? 0),
+      humanMedianSeconds: num(row?.human_median_seconds),
+    };
   }
 
   /** Rellena los días sin actividad con ceros para una serie continua de `dayCount` días. */

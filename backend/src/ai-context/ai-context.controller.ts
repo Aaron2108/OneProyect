@@ -75,6 +75,8 @@ export class AiContextController {
       tokensEstimated: estimated,
       knowledgeChunksUsed: knowledgeUsed,
       documents,
+      model: this.ai.activeModel(),
+      provider: this.ai.activeProvider(),
     };
   }
 
