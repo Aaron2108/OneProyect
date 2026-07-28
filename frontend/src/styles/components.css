@@ -306,6 +306,44 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* En móvil la barra lateral pasa abajo, como en cualquier app de teléfono.
+   Medía 244px fijos sin ninguna media query, así que en una pantalla de 390px
+   se quedaba con el 62% del ancho y dejaba 146px para el panel: el contenido
+   se salía por la derecha y no había forma de leerlo. Esto no era un problema
+   de una sección concreta, era de todas. */
+@media (max-width: 860px) {
+  .app-shell { flex-direction: column; }
+  .app-sidebar {
+    /* `order` y no reordenar el JSX: en el DOM la navegación sigue yendo antes
+       que el contenido, que es lo que espera quien navega con teclado o con
+       lector de pantalla. */
+    order: 2;
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    /* Padding lateral mínimo: con 8px a cada lado las siete secciones sumaban
+       23px más de los que había y «Equipo» se quedaba medio fuera. Ajustado,
+       entran las siete sin desplazar. `overflow-x` se queda como red por si
+       una traducción alarga alguna etiqueta. */
+    padding: 6px 4px;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+    /* Respeta la franja del gesto de inicio en iOS. */
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .app-sidebar__brand { display: none; }
+  .app-sidebar__nav { flex-direction: row; gap: 2px; flex: 1; justify-content: space-between; }
+  .app-sidebar__item {
+    flex-direction: column;
+    gap: 3px;
+    padding: 7px 3px;
+    font-size: 10px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -426,10 +464,15 @@
 /* Principal + lateral (gráfico | resumen, estado | acciones). `minmax(0,…)`
    en las dos: sin él, un hijo con contenido ancho —una tabla, un `pre`— se
    niega a encogerse y desborda la rejilla en vez de recortarse. */
-.grid-2-1 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: clamp(16px, 1.6vw, 24px); align-items: start; }
+/* `stretch` y no `start`: las dos tarjetas de una fila terminan a la misma
+   altura. Con `start`, la más corta dejaba un hueco abierto debajo hasta la
+   siguiente fila, y ese vacío entre tarjetas se lee como algo roto —no como
+   aire—, porque no pertenece a ninguna de las dos. Estirándolas, el espacio
+   sobrante queda dentro de una tarjeta, que es donde parece intencionado. */
+.grid-2-1 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: clamp(16px, 1.6vw, 24px); align-items: stretch; }
 
 /* Dos columnas iguales (las dos configuraciones del agente). */
-.grid-1-1 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(16px, 1.6vw, 24px); align-items: start; }
+.grid-1-1 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(16px, 1.6vw, 24px); align-items: stretch; }
 
 /* Tarjetas de documento: tantas como quepan a partir de 260px. */
 .grid-docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }

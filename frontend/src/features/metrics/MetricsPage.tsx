@@ -239,14 +239,17 @@ export function MetricsPage(): JSX.Element {
   return (
     <div className="page-wide">
       {/* ---- Fila 1: qué es esto, qué período y qué se puede hacer ---- */}
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div>
           <h2 className="mb-1 font-display text-2xl font-bold tracking-tight">Métricas</h2>
           <p className="m-0 text-sm text-ink-soft">Cómo está trabajando tu empleado digital, en el período elegido.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* `flex-nowrap`: los tres controles son una sola pieza y en una fila
+            de 1600px caben de sobra. Envolviéndolos, el selector se llevaba una
+            línea para él solo y el botón otra. */}
+        <div className="flex flex-shrink-0 items-center gap-2.5">
           {actualizado && (
-            <span className="text-[11.5px] text-ink-faint">
+            <span className="hidden text-[11.5px] text-ink-faint sm:inline">
               Actualizado a las {actualizado.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
@@ -254,7 +257,7 @@ export function MetricsPage(): JSX.Element {
             value={range}
             onChange={(e) => setRange(Number(e.target.value))}
             aria-label="Período"
-            className="w-auto flex-shrink-0 !py-2.5"
+            className="flex-shrink-0 !py-2.5"
           >
             <option value={7}>Últimos 7 días</option>
             <option value={30}>Últimos 30 días</option>
@@ -317,9 +320,15 @@ export function MetricsPage(): JSX.Element {
             />
           </div>
 
-          {/* ---- Fila 3: el gráfico y, al lado, la lectura ejecutiva ---- */}
+          {/* ---- Fila 3: el gráfico y, al lado, quién hizo el trabajo ----
+               El consumo de la IA estaba también en esta columna, y entre el
+               medidor, los dos desgloses y las seis líneas de consumo la
+               derecha medía casi el doble que el gráfico: quedaba un hueco
+               abierto debajo de él, sin dueño, hasta la fila siguiente. Ahora
+               el consumo baja a la fila de la tabla, donde equilibra, y aquí
+               quedan solo el medidor y los dos repartos. */}
           <div className="grid-2-1">
-            <section className="reveal kpi-card">
+            <section className="reveal kpi-card flex flex-col">
               <div className="sec-head flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <span className="sec-head__eyebrow">Actividad</span>
@@ -337,31 +346,44 @@ export function MetricsPage(): JSX.Element {
                   </span>
                 </div>
               </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData} barGap={3}>
-                  <CartesianGrid vertical={false} stroke="var(--line)" />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10, fill: 'var(--ink-faint)' }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval={Math.max(0, Math.ceil(chartData.length / 10) - 1)}
-                  />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--ink-faint)' }} axisLine={false} tickLine={false} allowDecimals={false} width={30} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--hover-bg)' }} />
-                  <Bar dataKey="inbound" name="Recibidos" fill={CHART_COLORS.in} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="outbound" name="Enviados" fill={CHART_COLORS.out} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                </BarChart>
-              </ResponsiveContainer>
+              {/* `flex-1` con `min-h-0`: el gráfico crece hasta llenar el alto
+                  que le marque la tarjeta más alta de la fila, en vez de
+                  quedarse en 300px fijos y dejar el resto en blanco. El mínimo
+                  evita que se aplaste si algún día la otra columna es corta. */}
+              <div className="min-h-[280px] flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} barGap={3}>
+                    <CartesianGrid vertical={false} stroke="var(--line)" />
+                    {/* `minTickGap` en vez de un `interval` calculado a mano.
+                        El interval se sacaba del número de días, que no dice
+                        nada de cuántos píxeles hay: en tableta las fechas se
+                        montaban unas encima de otras. Con esto es Recharts
+                        quien mide el ancho real y descarta las que no caben,
+                        conservando siempre la primera y la última. */}
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 10, fill: 'var(--ink-faint)' }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                      minTickGap={26}
+                    />
+                    <YAxis tick={{ fontSize: 10, fill: 'var(--ink-faint)' }} axisLine={false} tickLine={false} allowDecimals={false} width={30} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--hover-bg)' }} />
+                    <Bar dataKey="inbound" name="Recibidos" fill={CHART_COLORS.in} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                    <Bar dataKey="outbound" name="Enviados" fill={CHART_COLORS.out} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </section>
 
-            <section className="reveal kpi-card">
+            <section className="reveal kpi-card flex flex-col">
               <div className="sec-head">
                 <span className="sec-head__eyebrow">Resumen</span>
-                <h3 className="sec-head__title font-display">Cómo se repartió el trabajo</h3>
+                <h3 className="sec-head__title font-display">Quién hizo el trabajo</h3>
               </div>
 
-              <div className="mb-5 flex flex-col items-center gap-4 sm:flex-row">
+              <div className="flex items-center gap-4">
                 <RadialGauge aiPct={autoPct} />
                 <div className="min-w-0">
                   <h4 className="mb-1 flex items-center gap-2 text-[14px] font-bold">
@@ -373,7 +395,9 @@ export function MetricsPage(): JSX.Element {
                 </div>
               </div>
 
-              <div className="mb-5">
+              {/* `mt-auto` reparte el sobrante entre el medidor y los desgloses
+                  en vez de dejarlo todo al final. */}
+              <div className="mt-auto pt-5">
                 <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-disabled">
                   Conversaciones atendidas
                 </div>
@@ -385,7 +409,7 @@ export function MetricsPage(): JSX.Element {
                 />
               </div>
 
-              <div className="mb-5">
+              <div className="pt-5">
                 <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-disabled">
                   Respuestas enviadas
                 </div>
@@ -396,82 +420,94 @@ export function MetricsPage(): JSX.Element {
                   color="var(--brand)"
                 />
               </div>
-
-              {usage && usage.calls > 0 && (
-                <div>
-                  <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-disabled">
-                    <Coins size={13} strokeWidth={2.25} className="text-ai" /> Consumo de la IA
-                  </div>
-                  <Linea label="Llamadas a la API" value={usage.calls.toLocaleString('es')} />
-                  <Linea label="Tokens de entrada" value={usage.inputTokens.toLocaleString('es')} />
-                  <Linea label="Tokens de salida" value={usage.outputTokens.toLocaleString('es')} />
-                  {/* Las llamadas no son una por respuesta: agendar una cita o
-                      mirar el catálogo encadena varias, y aquí se ve. */}
-                  {usage.byPurpose.map((p) => (
-                    <Linea
-                      key={p.purpose}
-                      label={PURPOSE_LABELS[p.purpose] ?? p.purpose}
-                      value={p.calls.toLocaleString('es')}
-                    />
-                  ))}
-                  <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-faint">
-                    En tokens y no en dinero: el importe depende del modelo y de la tarifa vigente.
-                  </p>
-                </div>
-              )}
             </section>
           </div>
 
-          {/* ---- Fila 4: el detalle diario, cifra a cifra ---- */}
-          <section className="reveal kpi-card">
-            <div className="sec-head flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <span className="sec-head__eyebrow">Detalle</span>
-                <h3 className="sec-head__title font-display">Actividad día a día</h3>
+          {/* ---- Fila 4: el detalle diario y, al lado, lo que costó ---- */}
+          <div className="grid-2-1">
+            <section className="reveal kpi-card flex flex-col">
+              <div className="sec-head flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <span className="sec-head__eyebrow">Detalle</span>
+                  <h3 className="sec-head__title font-display">Actividad día a día</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="sec" onClick={exportarCsv}>
+                    <Download size={14} strokeWidth={2.25} /> Descargar CSV
+                  </Button>
+                  <button
+                    onClick={() => setShowTable((s) => !s)}
+                    className="rounded-xs px-2.5 py-1.5 text-[13px] font-semibold text-ink-soft transition-colors duration-fast hover:bg-[var(--hover-bg)] hover:text-brand"
+                    aria-expanded={showTable}
+                  >
+                    {showTable ? 'Ocultar tabla' : 'Ver tabla'}
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="sec" onClick={exportarCsv}>
-                  <Download size={14} strokeWidth={2.25} /> Descargar CSV
-                </Button>
-                <button
-                  onClick={() => setShowTable((s) => !s)}
-                  className="rounded-xs px-2.5 py-1.5 text-[13px] font-semibold text-ink-soft transition-colors duration-fast hover:bg-[var(--hover-bg)] hover:text-brand"
-                  aria-expanded={showTable}
-                >
-                  {showTable ? 'Ocultar tabla' : 'Ver tabla'}
-                </button>
-              </div>
-            </div>
 
-            {showTable && (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[420px] border-collapse text-[13px]">
-                  <thead>
-                    {/* `scope="col"` para que el lector de pantalla relacione cada
-                        número con su columna al recorrer la tabla. */}
-                    <tr>
-                      <th scope="col" className="border-b border-line py-2 text-left font-semibold text-ink-soft">Día</th>
-                      <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Recibidos</th>
-                      <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Enviados</th>
-                      <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.activity.map((d) => (
-                      <tr key={d.date} className="transition-colors duration-fast hover:bg-[var(--row-hover)]">
-                        <td className="border-b border-line py-2">{d.date}</td>
-                        <td className="tabular-nums border-b border-line py-2 text-right">{d.inbound}</td>
-                        <td className="tabular-nums border-b border-line py-2 text-right">{d.outbound}</td>
-                        <td className="tabular-nums border-b border-line py-2 text-right font-semibold">
-                          {d.inbound + d.outbound}
-                        </td>
+              {showTable && (
+                // Se desplaza por dentro: con 90 días son noventa filas, y sin
+                // tope la página se alargaba tanto que la tabla dejaba de ser
+                // una sección para convertirse en el final del panel.
+                <div className="max-h-[420px] flex-1 overflow-auto">
+                  <table className="w-full min-w-[420px] border-collapse text-[13px]">
+                    <thead className="sticky top-0 bg-surface">
+                      {/* `scope="col"` para que el lector de pantalla relacione cada
+                          número con su columna al recorrer la tabla. */}
+                      <tr>
+                        <th scope="col" className="border-b border-line py-2 text-left font-semibold text-ink-soft">Día</th>
+                        <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Recibidos</th>
+                        <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Enviados</th>
+                        <th scope="col" className="border-b border-line py-2 text-right font-semibold text-ink-soft">Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {data.activity.map((d) => (
+                        <tr key={d.date} className="transition-colors duration-fast hover:bg-[var(--row-hover)]">
+                          <td className="border-b border-line py-2">{d.date}</td>
+                          <td className="tabular-nums border-b border-line py-2 text-right">{d.inbound}</td>
+                          <td className="tabular-nums border-b border-line py-2 text-right">{d.outbound}</td>
+                          <td className="tabular-nums border-b border-line py-2 text-right font-semibold">
+                            {d.inbound + d.outbound}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {usage && usage.calls > 0 && (
+              <section className="reveal kpi-card flex flex-col">
+                <div className="sec-head">
+                  <span className="sec-head__eyebrow">Coste</span>
+                  <h3 className="sec-head__title flex items-center gap-2 font-display">
+                    <Coins size={17} strokeWidth={2} className="text-ai" /> Consumo de la IA
+                  </h3>
+                </div>
+                <Linea label="Llamadas a la API" value={usage.calls.toLocaleString('es')} />
+                <Linea label="Tokens de entrada" value={usage.inputTokens.toLocaleString('es')} />
+                <Linea label="Tokens de salida" value={usage.outputTokens.toLocaleString('es')} />
+                {/* Las llamadas no son una por respuesta: agendar una cita o
+                    mirar el catálogo encadena varias, y aquí se ve. */}
+                {usage.byPurpose.map((p) => (
+                  <Linea
+                    key={p.purpose}
+                    label={PURPOSE_LABELS[p.purpose] ?? p.purpose}
+                    value={p.calls.toLocaleString('es')}
+                  />
+                ))}
+                {/* Pegada a las cifras que explica, no al fondo de la tarjeta:
+                    anclada abajo con `mt-auto` dejaba un hueco entre la última
+                    cifra y la nota, y un vacío en medio del contenido se lee
+                    peor que el mismo vacío al final. */}
+                <p className="pt-4 text-[11.5px] leading-relaxed text-ink-faint">
+                  En tokens y no en dinero: el importe depende del modelo y de la tarifa vigente.
+                </p>
+              </section>
             )}
-          </section>
+          </div>
         </div>
       )}
     </div>
