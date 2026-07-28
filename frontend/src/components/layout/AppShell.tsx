@@ -1,10 +1,10 @@
-import { Bot, Calendar, Contact, LayoutGrid, MessageSquare, Package, Users, type LucideIcon } from 'lucide-react';
-import { lazy, Suspense, useState, type ReactNode } from 'react';
-import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { useAuth } from '@/lib/auth-context';
-import { DropdownMenu } from '@/components/ui/DropdownMenu';
+import { Menu } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { PageSkeleton } from '@/components/ui/Skeleton';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { SECCIONES } from '@/components/layout/secciones';
 import { ProfileDialog } from '@/features/account/ProfileDialog';
 // La bandeja es la pantalla de trabajo y la primera que se ve: va en el bundle
 // inicial. El resto se carga al entrar en su ruta — quien abre el panel para
@@ -19,24 +19,6 @@ const TeamPage = lazy(() => import('@/features/team/TeamPage').then((m) => ({ de
 const CalendarPage = lazy(() => import('@/features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })));
 const AiAgentPage = lazy(() => import('@/features/ai-agent/AiAgentPage').then((m) => ({ default: m.AiAgentPage })));
 const ProductsPage = lazy(() => import('@/features/products/ProductsPage').then((m) => ({ default: m.ProductsPage })));
-
-/**
- * Las secciones del panel, cada una con su URL.
- *
- * Antes eran pestañas guardadas en un `useState`: no se podía enlazar una
- * sección, el botón "atrás" del navegador no hacía nada y al recargar siempre
- * se volvía a Bandeja. Las rutas van en español porque son visibles para el
- * usuario, igual que el resto de la interfaz.
- */
-const SECCIONES: Array<{ path: string; label: string; icon: LucideIcon }> = [
-  { path: '/bandeja', label: 'Bandeja', icon: MessageSquare },
-  { path: '/metricas', label: 'Métricas', icon: LayoutGrid },
-  { path: '/contactos', label: 'Contactos', icon: Contact },
-  { path: '/calendario', label: 'Calendario', icon: Calendar },
-  { path: '/productos', label: 'Productos', icon: Package },
-  { path: '/agente', label: 'Agente IA', icon: Bot },
-  { path: '/equipo', label: 'Equipo', icon: Users },
-];
 
 /**
  * Contenedor con scroll de cada sección.
@@ -57,68 +39,38 @@ function useTituloDeSeccion(): string {
 }
 
 export function AppShell(): JSX.Element {
-  const { user, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [navAbierta, setNavAbierta] = useState(false);
   const pageTitle = useTituloDeSeccion();
   const { pathname } = useLocation();
 
+  // Red de seguridad para el cajón de móvil: aunque se navegue sin tocar un
+  // enlace suyo (el botón "atrás", una redirección), no se queda abierto sobre
+  // la pantalla nueva.
+  useEffect(() => setNavAbierta(false), [pathname]);
+
   return (
     <div className="app-shell">
-      <aside className="app-sidebar">
-        <div className="app-sidebar__brand">
-          <span className="app-sidebar__glyph">W</span>
-          WhatsFlow&nbsp;AI
-        </div>
+      <Sidebar
+        cajonAbierto={navAbierta}
+        onCajon={setNavAbierta}
+        onAbrirPerfil={() => setProfileOpen(true)}
+      />
 
-        <nav className="app-sidebar__nav" aria-label="Secciones">
-          {SECCIONES.map(({ path, label, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              // NavLink marca la sección activa por la URL, no por un estado
-              // paralelo que se pueda desincronizar de ella.
-              className={({ isActive }) => 'app-sidebar__item'.concat(isActive ? ' is-active' : '')}
-            >
-              <Icon size={17} strokeWidth={2} />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-
-      {/* `min-h-0` además de `min-w-0`: en móvil el armazón se apila en
-          columna, y un elemento flex no baja de la altura de su contenido
-          mientras su `min-height` valga `auto`. Sin esto, el panel medía lo que
-          midiera la página y empujaba la barra de navegación 2.000 píxeles por
-          debajo del borde de la pantalla. */}
+      {/* `min-h-0` además de `min-w-0`: un elemento flex no baja de la altura
+          de su contenido mientras su `min-height` valga `auto`, y entonces el
+          panel mide lo que mida la página en vez de lo que mide la ventana. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="app-topbar">
+          <button
+            type="button"
+            className="app-topbar__menu"
+            onClick={() => setNavAbierta(true)}
+            aria-label="Abrir la navegación"
+          >
+            <Menu size={19} strokeWidth={2} />
+          </button>
           <h1 className="font-display text-[15.5px] font-bold tracking-tight">{pageTitle}</h1>
-          <div className="flex-1" />
-          <div className="status-pill">
-            <span className="status-pill__dot" />
-            Todo operativo
-          </div>
-
-          <div className="ml-3 flex-shrink-0">
-            <DropdownMenu
-              trigger={
-                <button className="ml-1 flex items-center gap-2.5 rounded-sm border border-transparent px-1.5 py-1 leading-tight transition-colors duration-fast hover:border-line-strong hover:bg-[var(--hover-bg)] sm:px-2">
-                  <span className="hidden flex-col items-end sm:flex">
-                    <b className="text-[13.5px] font-semibold">{user?.name}</b>
-                    <span className="text-[11.5px] text-ink-faint">{user?.email}</span>
-                  </span>
-                  <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-brand-tint text-[12.5px] font-bold text-brand">
-                    {(user?.name || '?').charAt(0).toUpperCase()}
-                  </span>
-                </button>
-              }
-              items={[
-                { label: 'Mi cuenta', onSelect: () => setProfileOpen(true) },
-                { label: 'Salir', onSelect: logout, danger: true },
-              ]}
-            />
-          </div>
         </header>
 
         <main className="flex-1 overflow-hidden">

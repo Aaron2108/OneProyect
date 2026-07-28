@@ -245,52 +245,242 @@
 /* ===== Layout de la app: sidebar + topbar ===== */
 .app-shell { display: flex; height: 100%; }
 
-.app-sidebar {
-  width: 244px;
+/* ---- Carril de navegación ----
+   Dos anchos y un solo marcado. Plegado deja 76px de iconos y devuelve 192px
+   al contenido, que es de lo que iba el cambio; desplegado enseña las
+   etiquetas. Todas las medidas que participan en la animación viven aquí
+   arriba para que los dos estados no se puedan desajustar por separado. */
+.rail {
+  --rail-ancho: 268px;
+  --fila-h: 42px;
+  --fila-gap: 4px;
+  /* Sangría del icono. La misma en los dos estados: al plegar, los iconos no
+     se mueven ni un píxel y solo desaparece el texto. Mover también los iconos
+     hace que el panel entero parezca saltar. */
+  --rail-sangria: 13px;
+
+  width: var(--rail-ancho);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--line);
-  padding: 20px 14px;
+  padding: 18px 16px;
+  /* Sin `overflow: hidden`: los tooltips del estado plegado tienen que poder
+     salirse de los 76px. Lo que recorta es cada fila por su cuenta. */
+  transition: width 250ms var(--ease);
 }
-.app-sidebar__brand {
+.rail.is-plegado { --rail-ancho: 76px; }
+
+.rail__cabecera {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 8px 22px;
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: -0.01em;
+  height: 32px;
+  margin-bottom: 22px;
+  overflow: hidden;
+  transition: height 250ms var(--ease);
 }
-.app-sidebar__glyph {
-  width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+/* Plegada, el botón no cabe al lado del glifo y baja debajo. Como está
+   posicionado, el cambio de sitio se puede animar; con dos disposiciones
+   distintas de flex saltaría de golpe. */
+.rail.is-plegado .rail__cabecera { height: 78px; }
+.rail__glifo {
+  width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
   background: linear-gradient(150deg, var(--brand), var(--ai));
   display: grid; place-items: center; color: var(--on-brand);
   font-weight: 800; font-size: 15px;
   box-shadow: 0 2px 14px var(--brand-glow);
+  transition: transform 250ms var(--ease);
 }
-.app-sidebar__nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
-.app-sidebar__item {
+/* 44px de contenido menos 32 de glifo: 6px a cada lado para centrarlo. */
+.rail.is-plegado .rail__glifo { transform: translateX(6px); }
+.rail__nombre {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: opacity 140ms var(--ease);
+}
+.rail.is-plegado .rail__nombre { opacity: 0; }
+.rail__alternar {
+  position: absolute;
+  top: 3px; right: 0;
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  border-radius: var(--radius-xs);
+  color: var(--ink-faint);
+  transition: top 250ms var(--ease), right 250ms var(--ease),
+    background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.rail.is-plegado .rail__alternar { top: 48px; right: 7px; }
+.rail__alternar:hover { background: var(--hover-bg); color: var(--ink); }
+
+.rail__nav {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fila-gap);
+  flex: 1;
+}
+/* El indicador de sección activa: uno solo, que se desplaza. Ver Navegacion(). */
+.rail__marca {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: var(--fila-h);
+  border-radius: var(--radius-sm);
+  background: var(--brand-tint);
+  transform: translateY(calc(var(--activa) * (var(--fila-h) + var(--fila-gap))));
+  transition: transform 250ms var(--ease);
+  pointer-events: none;
+}
+.rail__marca::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  width: 3px; height: 18px;
+  border-radius: 0 3px 3px 0;
+  background: var(--brand);
+  box-shadow: 0 0 12px var(--brand-glow);
+  transform: translateY(-50%);
+}
+.rail__hueco { position: relative; display: block; }
+.rail__item {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 9px 12px;
+  height: var(--fila-h);
+  padding-inline: var(--rail-sangria);
   border-radius: var(--radius-sm);
   font-size: 13.5px;
   font-weight: 600;
   color: var(--ink-soft);
-  outline: none;
+  /* Sin `outline: none`. Lo traía la clase anterior y anulaba el anillo de
+     `:focus-visible` (misma especificidad, y este archivo va después), así que
+     al recorrer la navegación con el tabulador no se veía dónde estaba el
+     foco en ninguna de las siete secciones. */
+  overflow: hidden;
   transition: background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
-  position: relative;
 }
-.app-sidebar__item:hover { background: var(--hover-bg); color: var(--ink); }
-.app-sidebar__item.is-active {
+.rail__item:hover { background: var(--hover-bg); color: var(--ink); }
+.rail__item.is-active { color: var(--brand); }
+.rail__item.is-active .rail__icono { color: var(--brand); }
+.rail__icono { flex-shrink: 0; }
+.rail__texto {
+  white-space: nowrap;
+  transition: opacity 140ms var(--ease);
+}
+.rail.is-plegado .rail__texto { opacity: 0; }
+
+/* Tooltip del estado plegado. Solo ahí: desplegada, repetir la etiqueta que ya
+   se está leyendo es ruido. */
+.rail__tip {
+  position: absolute;
+  left: calc(100% + 14px); top: 50%;
+  z-index: 40;
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-2);
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-5px);
+  transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+}
+.rail.is-plegado .rail__hueco:hover .rail__tip,
+.rail.is-plegado .rail__hueco:focus-within .rail__tip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+  transition-delay: 60ms;
+}
+
+.rail__pie {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.rail__estado {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 32px;
+  padding-inline: var(--rail-sangria);
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success);
+}
+/* Caja del ancho de un icono, para que el punto quede en la misma vertical. */
+.rail__punto { display: grid; place-items: center; width: 17px; flex-shrink: 0; }
+.rail__usuario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 46px;
+  padding-inline: 7px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease);
+}
+.rail__usuario:hover { background: var(--hover-bg); }
+.rail__avatar {
+  display: grid; place-items: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 50%;
   background: var(--brand-tint);
   color: var(--brand);
+  font-size: 12.5px; font-weight: 700;
 }
-.app-sidebar__item.is-active svg { color: var(--brand); }
-.app-sidebar__item svg { flex-shrink: 0; }
+.rail__usuario-datos { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.rail__usuario-datos b { font-size: 13px; font-weight: 600; }
+.rail__usuario-datos span {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Cajón (móvil) ----
+   Debajo de 860px no cabe ni plegada: 76px fijos sobre 390px de pantalla son
+   el 19% del ancho gastado permanentemente en algo que se usa a ratos. */
+.rail--cajon {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 56;
+  width: min(282px, 84vw);
+  border-right: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg);
+  animation: cajonEntra 0.26s var(--ease-out);
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
+@keyframes cajonEntra {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+.app-topbar__menu {
+  display: none;
+  place-items: center;
+  width: 34px; height: 34px;
+  margin-right: 12px;
+  margin-left: -4px;
+  border-radius: var(--radius-xs);
+  color: var(--ink-soft);
+  transition: background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.app-topbar__menu:hover { background: var(--hover-bg); color: var(--ink); }
+@media (max-width: 860px) {
+  .app-topbar__menu { display: grid; }
+}
+
 .app-topbar {
   position: sticky;
   top: 0;
@@ -306,55 +496,6 @@
   border-bottom: 1px solid var(--line);
 }
 
-/* En móvil la barra lateral pasa abajo, como en cualquier app de teléfono.
-   Medía 244px fijos sin ninguna media query, así que en una pantalla de 390px
-   se quedaba con el 62% del ancho y dejaba 146px para el panel: el contenido
-   se salía por la derecha y no había forma de leerlo. Esto no era un problema
-   de una sección concreta, era de todas. */
-@media (max-width: 860px) {
-  .app-shell { flex-direction: column; }
-  .app-sidebar {
-    /* `order` y no reordenar el JSX: en el DOM la navegación sigue yendo antes
-       que el contenido, que es lo que espera quien navega con teclado o con
-       lector de pantalla. */
-    order: 2;
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    /* Padding lateral mínimo: con 8px a cada lado las siete secciones sumaban
-       23px más de los que había y «Equipo» se quedaba medio fuera. Ajustado,
-       entran las siete sin desplazar. `overflow-x` se queda como red por si
-       una traducción alarga alguna etiqueta. */
-    padding: 6px 4px;
-    border-right: 0;
-    border-top: 1px solid var(--line);
-    overflow-x: auto;
-    /* Respeta la franja del gesto de inicio en iOS. */
-    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-  }
-  .app-sidebar__brand { display: none; }
-  .app-sidebar__nav { flex-direction: row; gap: 2px; flex: 1; justify-content: space-between; }
-  .app-sidebar__item {
-    flex-direction: column;
-    gap: 3px;
-    padding: 7px 3px;
-    font-size: 10px;
-    line-height: 1.1;
-    white-space: nowrap;
-  }
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--success-tint);
-  color: var(--success);
-  font-size: 12px;
-  font-weight: 600;
-}
 .status-pill__dot {
   width: 6px; height: 6px; border-radius: 50%; background: var(--success);
   --pulse-color: var(--success-tint);
