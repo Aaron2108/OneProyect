@@ -59,27 +59,41 @@
   --ink-disabled: #5c6570;
   --muted-ink: #a0a8b5;
 
-  /* ---- Marca ---- */
-  --brand: #35f0a3;
+  /* ---- Marca ----
+     Los tres colores que además se usan con transparencia (marca, IA y peligro)
+     se declaran como triplete RGB y el color se deriva de él.
+     El motivo es concreto: Tailwind no puede aplicar un modificador de opacidad
+     —`border-brand/50`, `bg-danger/50`— a un color que le llega como cadena
+     opaca. No avisa: descarta la utilidad entera y no genera ni una regla. Diez
+     sitios del panel pedían bordes translúcidos al pasar el puntero (entre
+     ellos el `hover` del botón `ghost`, que se usa en todas las pantallas) y
+     ninguno existía en el CSS compilado. Con el triplete,
+     `rgb(var(--brand-rgb) / <alpha-value>)` sí se puede componer.
+     El valor sigue estando en un solo sitio: el hex se deriva del triplete, no
+     se repite, y los tintes también salen de él. */
+  --brand-rgb: 53 240 163;
+  --brand: rgb(var(--brand-rgb));
   --brand-700: #22c78e; /* usado sobre fondos claros/hover donde #35F0A3 solo no alcanza contraste */
   --brand-hover: #52f7b5;
-  --brand-tint: rgba(53, 240, 163, 0.14);
-  --brand-glow: rgba(53, 240, 163, 0.32);
+  --brand-tint: rgb(var(--brand-rgb) / 0.14);
+  --brand-glow: rgb(var(--brand-rgb) / 0.32);
   --on-brand: #052a1d; /* texto sobre fondo --brand: oscuro, no negro puro */
 
-  --ai: #6c7bff;
+  --ai-rgb: 108 123 255;
+  --ai: rgb(var(--ai-rgb));
   --ai-700: #5867f0;
   --ai-hover: #8793ff;
-  --ai-tint: rgba(108, 123, 255, 0.16);
-  --ai-glow: rgba(108, 123, 255, 0.34);
+  --ai-tint: rgb(var(--ai-rgb) / 0.16);
+  --ai-glow: rgb(var(--ai-rgb) / 0.34);
   --on-ai: #ffffff; /* texto/glifos sobre fondo --ai, igual que --on-brand para la marca */
 
   --success: #3de67b;
   --success-tint: rgba(61, 230, 123, 0.16);
   --warn: #f6c453;
   --warn-tint: rgba(246, 196, 83, 0.16);
-  --danger: #ff6b6b;
-  --danger-tint: rgba(255, 107, 107, 0.16);
+  --danger-rgb: 255 107 107;
+  --danger: rgb(var(--danger-rgb));
+  --danger-tint: rgb(var(--danger-rgb) / 0.16);
   --on-danger: #ffffff;
 
   /* Gráfico de actividad. Tiene tokens propios en vez de tomar prestados los

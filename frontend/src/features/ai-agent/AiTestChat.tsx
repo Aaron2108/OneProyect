@@ -2,7 +2,7 @@ import { Bot, Loader2, RotateCcw, Send, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
-import { Button } from '@/components/ui/Button';
+import { Button, Spinner } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { SimulatedTool, TestChatReply } from '@/lib/types';
 import { guardarConversacion, leerConversacionGuardada, type ChatTurn } from './test-chat.util';
@@ -106,72 +106,89 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
 
   return (
     <div className="kpi-card">
-      <div className="mb-1 flex flex-wrap items-start justify-between gap-3">
-        <h3 className="flex items-center gap-2 font-display text-[15.5px] font-bold tracking-tight">
-          <Bot size={17} strokeWidth={2} className="text-ai" /> Probar el agente
-        </h3>
+      <div className="sec-head flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <span className="sec-head__eyebrow">Pruebas</span>
+          <h3 className="sec-head__title flex items-center gap-2 font-display">
+            <Bot size={18} strokeWidth={2} className="text-ai" /> Probar el agente
+          </h3>
+        </div>
         {turns.length > 0 && (
           <Button size="sm" variant="sec" disabled={sending} onClick={() => actualizarTurnos([])}>
-            <RotateCcw size={15} strokeWidth={2.25} /> Empezar de nuevo
+            <RotateCcw size={15} strokeWidth={2.25} /> Limpiar conversación
           </Button>
         )}
       </div>
-      <p className="mb-4 text-[13px] text-ink-soft">
+      <p className="mb-4 max-w-[80ch] text-[13px] text-ink-soft">
         Conversa con tu agente como si fueras un cliente. Usa el mismo contexto y las mismas
         herramientas que por WhatsApp, pero <b>no agenda nada de verdad</b>: si decide crear una
         cita, te muestra cuál habría creado.
         {!isOwner && ' Solo el propietario puede usarlo.'}
       </p>
 
-      <div className="mb-3 max-h-[420px] overflow-y-auto rounded-sm bg-canvas p-3">
-        {turns.length === 0 && !sending && (
-          <p className="py-8 text-center text-[13px] text-ink-faint">
-            {/* «turno» es cita en el resto del panel: el ejemplo enseñaba una
-                palabra que la interfaz no usa en ningún otro sitio. */}
-            Escribe un mensaje para empezar. Ej: “¿tienen cita el viernes por la mañana?”
-          </p>
-        )}
-        {/* Misma disposición que la bandeja: el cliente a la izquierda, la IA a
-            la derecha, para que el dueño reconozca lo que está viendo. */}
-        {turns.map((turn, i) => (
-          <div
-            key={i}
-            className={`mb-3 flex flex-col ${turn.role === 'user' ? 'items-start' : 'items-end'}`}
-          >
-            <span className="mx-1 mb-1 text-[10.5px] text-ink-disabled">
-              {turn.role === 'user' ? 'Cliente (tú)' : 'Agente IA'}
-            </span>
+      {/* La sección ocupa todo el ancho, pero la conversación no.
+          A 1440px una burbuja al 85% da líneas de más de mil píxeles, que no
+          hay quien lea; el ojo pierde el renglón al volver. La columna se
+          centra y se corta a 860px —igual que hace cualquier chat— y lo que
+          gana de ancho la sección es aire a los lados, no texto más largo. */}
+      <div className="mx-auto max-w-[860px]">
+        <div className="mb-3 flex min-h-[280px] max-h-[52vh] flex-col overflow-y-auto rounded-sm border border-line bg-canvas p-4">
+          {turns.length === 0 && !sending && (
+            <p className="m-auto max-w-[42ch] text-center text-[13px] text-ink-faint">
+              {/* «turno» es cita en el resto del panel: el ejemplo enseñaba una
+                  palabra que la interfaz no usa en ningún otro sitio. */}
+              Escribe un mensaje para empezar. Ej: “¿tienen cita el viernes por la mañana?”
+            </p>
+          )}
+          {/* Misma disposición que la bandeja: el cliente a la izquierda, la IA a
+              la derecha, para que el dueño reconozca lo que está viendo. */}
+          {turns.map((turn, i) => (
             <div
-              className={`bubble max-w-[85%] ${turn.role === 'user' ? 'bubble--in' : 'bubble--ai'}`}
+              key={i}
+              className={`mb-3 flex flex-col ${turn.role === 'user' ? 'items-start' : 'items-end'}`}
             >
-              {turn.text}
+              <span className="mx-1 mb-1 text-[10.5px] text-ink-disabled">
+                {turn.role === 'user' ? 'Cliente (tú)' : 'Agente IA'}
+              </span>
+              <div
+                className={`bubble max-w-[85%] ${turn.role === 'user' ? 'bubble--in' : 'bubble--ai'}`}
+              >
+                {turn.text}
+              </div>
+              {turn.simulatedTools?.map((tool, j) => <SimulatedToolCard key={j} tool={tool} />)}
             </div>
-            {turn.simulatedTools?.map((tool, j) => <SimulatedToolCard key={j} tool={tool} />)}
-          </div>
-        ))}
-        {sending && (
-          <p className="flex items-center gap-2 py-2 text-[12.5px] text-ink-faint">
-            <Loader2 size={14} strokeWidth={2.25} className="animate-spin" /> El agente está
-            pensando…
-          </p>
-        )}
-        <div ref={endRef} />
-      </div>
-
-      <form className="flex flex-wrap gap-2" onSubmit={send}>
-        <div className="min-w-[220px] flex-1">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Escribe como si fueras un cliente"
-            maxLength={2000}
-            disabled={!isOwner || sending}
-          />
+          ))}
+          {sending && (
+            <p className="flex items-center gap-2 py-2 text-[12.5px] text-ink-faint">
+              <Loader2 size={14} strokeWidth={2.25} className="animate-spin" /> El agente está
+              pensando…
+            </p>
+          )}
+          <div ref={endRef} />
         </div>
-        <Button size="sm" type="submit" disabled={!isOwner || sending || !draft.trim()}>
-          <Send size={15} strokeWidth={2.25} /> Enviar
-        </Button>
-      </form>
+
+        <form className="flex items-center gap-2" onSubmit={send}>
+          <div className="min-w-0 flex-1">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Escribe como si fueras un cliente"
+              aria-label="Mensaje de prueba"
+              maxLength={2000}
+              disabled={!isOwner || sending}
+              className="!rounded-full"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={!isOwner || sending || !draft.trim()}
+            className="!rounded-full !px-5"
+          >
+            {sending ? <Spinner /> : <Send size={15} strokeWidth={2.25} />}
+            <span className="hidden sm:inline">Enviar</span>
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

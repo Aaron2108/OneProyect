@@ -1,10 +1,19 @@
-import { Braces, Coins, Loader2, RefreshCw, Search } from 'lucide-react';
+import { Braces, Check, Coins, Copy, Loader2, Maximize2, Minimize2, RefreshCw, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { AiContextPreview } from '@/lib/types';
+
+/** Lo que la página necesita del contexto para su tarjeta de estado. */
+export interface ResumenContexto {
+  tokens: number;
+  /** El conteo es una estimación local (no hay API key de Anthropic). */
+  aproximado: boolean;
+  fragmentos: number;
+  documentos: number;
+}
 
 /**
  * Muestra el contexto completo que va a recibir la IA antes de responder: el
@@ -15,11 +24,20 @@ import type { AiContextPreview } from '@/lib/types';
  * recupera por similitud, se puede escribir una consulta de prueba para ver qué
  * fragmentos entrarían ante esa pregunta concreta.
  */
-export function AiContextPanel({ reloadKey }: { reloadKey: number }): JSX.Element {
+export function AiContextPanel({
+  reloadKey,
+  onResumen,
+}: {
+  reloadKey: number;
+  /** Reporta el resumen a la página, para su tarjeta de estado del agente. */
+  onResumen?: (resumen: ResumenContexto) => void;
+}): JSX.Element {
   const toast = useToast();
   const [context, setContext] = useState<AiContextPreview | null>(null);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [expandido, setExpandido] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   const load = useCallback(
     async (sampleQuery?: string): Promise<void> => {
@@ -44,6 +62,31 @@ export function AiContextPanel({ reloadKey }: { reloadKey: number }): JSX.Elemen
     void load(query.trim() || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey]);
+
+  // `onResumen` llega como el `setState` de la página, cuya identidad es
+  // estable, así que esto solo se dispara cuando llega un contexto nuevo.
+  useEffect(() => {
+    if (!context) return;
+    onResumen?.({
+      tokens: context.tokens,
+      aproximado: context.tokensEstimated,
+      fragmentos: context.knowledgeChunksUsed,
+      documentos: context.documents.length,
+    });
+  }, [context, onResumen]);
+
+  async function copiar(): Promise<void> {
+    if (!context) return;
+    try {
+      await navigator.clipboard.writeText(context.prompt);
+      setCopiado(true);
+      // Se vuelve al icono normal solo: un botón que se queda diciendo
+      // «copiado» para siempre deja de significar nada la segunda vez.
+      setTimeout(() => setCopiado(false), 1600);
+    } catch {
+      toast.show('El navegador no dejó copiar al portapapeles', 'error');
+    }
+  }
 
   return (
     <div className="kpi-card">
@@ -116,12 +159,55 @@ export function AiContextPanel({ reloadKey }: { reloadKey: number }): JSX.Elemen
             </p>
           )}
 
-          <p className="mb-2 text-[12px] text-ink-faint">
-            Contexto recuperado para: <i>“{context.sampleQuery}”</i>
-          </p>
-          <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-sm bg-canvas p-3.5 font-mono text-[11.5px] leading-relaxed text-ink-soft">
-            {context.prompt}
-          </pre>
+          {/* El prompt, en un panel con su propia barra: era un `pre` suelto,
+              sin forma de copiarlo y sin más remedio que desplazarse dentro de
+              una caja de 420px para leer algo que puede tener miles de
+              caracteres. */}
+          <div className="overflow-hidden rounded-sm border border-line-strong bg-canvas">
+            <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-[12px] text-ink-faint">
+                Contexto recuperado para: <i>“{context.sampleQuery}”</i>
+              </span>
+              <button
+                onClick={() => void copiar()}
+                aria-label="Copiar el contexto al portapapeles"
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-xs px-2 py-1 text-[12px] font-semibold text-ink-soft transition-colors duration-fast hover:bg-[var(--hover-bg)] hover:text-brand"
+              >
+                {copiado ? (
+                  <>
+                    <Check size={13} strokeWidth={2.5} className="text-brand" /> Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy size={13} strokeWidth={2} /> Copiar
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setExpandido((e) => !e)}
+                aria-expanded={expandido}
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-xs px-2 py-1 text-[12px] font-semibold text-ink-soft transition-colors duration-fast hover:bg-[var(--hover-bg)] hover:text-brand"
+              >
+                {expandido ? (
+                  <>
+                    <Minimize2 size={13} strokeWidth={2} /> Contraer
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 size={13} strokeWidth={2} /> Expandir
+                  </>
+                )}
+              </button>
+            </div>
+            <pre
+              className={`m-0 overflow-auto whitespace-pre-wrap p-3.5 font-mono text-[11.5px] leading-relaxed text-ink-soft ${
+                expandido ? 'max-h-[75vh]' : 'max-h-[320px]'
+              }`}
+              tabIndex={0}
+            >
+              {context.prompt}
+            </pre>
+          </div>
         </>
       )}
 

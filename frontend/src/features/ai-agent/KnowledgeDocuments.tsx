@@ -9,12 +9,11 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, uploadFile } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import { useRecurso } from '@/lib/use-recurso';
 import { Button } from '@/components/ui/Button';
-import { Pill } from '@/components/ui/Pill';
 import type { KnowledgeDocument, KnowledgeUploadResult } from '@/lib/types';
 
 const ACCEPT = '.pdf,.docx,.txt,.md';
@@ -27,10 +26,63 @@ const STATUS_LABEL: Record<KnowledgeDocument['status'], string> = {
   FAILED: 'No se pudo leer',
 };
 
+/** Recuento por estado que la página usa en su tarjeta de estado del agente. */
+export interface ResumenDocumentos {
+  total: number;
+  activos: number;
+  pendientes: number;
+  fallidos: number;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Las tres etapas por las que pasa un documento, dibujadas como tres tramos.
+ *
+ * No es un porcentaje: el servidor no informa de ninguno, y pintar una barra
+ * llenándose sería inventarse un avance que nadie está midiendo. Lo que sí hay
+ * es un estado discreto, y estas son sus etapas reales — se extrae el texto, lo
+ * revisa el dueño, la IA lo usa—, así que el tramo está lleno, en curso o
+ * vacío, sin fingir precisión que no existe.
+ */
+function Etapas({ status }: { status: KnowledgeDocument['status'] }): JSX.Element {
+  const alcanzadas =
+    status === 'FAILED' ? 0 : status === 'EXTRACTING' ? 0 : status === 'PENDING_REVIEW' ? 1 : 3;
+  const enCurso = status === 'EXTRACTING' ? 0 : status === 'PENDING_REVIEW' ? 1 : -1;
+  const etiqueta =
+    status === 'FAILED'
+      ? 'No se pudo leer el documento'
+      : status === 'EXTRACTING'
+        ? 'Extrayendo el texto'
+        : status === 'PENDING_REVIEW'
+          ? 'Esperando tu revisión'
+          : 'En uso por la IA';
+
+  return (
+    <div className="mt-3">
+      <div className="flex gap-1" role="img" aria-label={etiqueta}>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className={`h-1 flex-1 rounded-full ${
+              status === 'FAILED'
+                ? 'bg-danger/50'
+                : i < alcanzadas
+                  ? 'bg-brand'
+                  : i === enCurso
+                    ? 'bg-warn'
+                    : 'bg-[var(--muted-bg)]'
+            }`}
+          />
+        ))}
+      </div>
+      <div className="mt-1.5 text-[11.5px] text-ink-faint">{etiqueta}</div>
+    </div>
+  );
 }
 
 /**
@@ -45,9 +97,16 @@ function formatBytes(bytes: number): string {
 export function KnowledgeDocuments({
   isOwner,
   onChanged,
+  onResumen,
 }: {
   isOwner: boolean;
   onChanged: () => void;
+  /**
+   * Reporta el recuento por estado hacia la página, para su tarjeta de estado.
+   * El componente sigue cargando sus propios documentos: esto es solo el
+   * resumen, así que la cabecera no repite la petición.
+   */
+  onResumen?: (resumen: ResumenDocumentos) => void;
 }): JSX.Element {
   const toast = useToast();
   const [uploading, setUploading] = useState(false);
@@ -62,6 +121,18 @@ export function KnowledgeDocuments({
     'No se pudo cargar la documentación',
   );
   const items = datos ?? [];
+
+  // `onResumen` llega como el `setState` de la página, cuya identidad es
+  // estable, así que este efecto solo se dispara cuando cambian los documentos.
+  useEffect(() => {
+    if (!datos) return;
+    onResumen?.({
+      total: datos.length,
+      activos: datos.filter((d) => d.status === 'ACTIVE').length,
+      pendientes: datos.filter((d) => d.status === 'PENDING_REVIEW').length,
+      fallidos: datos.filter((d) => d.status === 'FAILED').length,
+    });
+  }, [datos, onResumen]);
 
   async function handleFile(file: File): Promise<void> {
     setUploading(true);
@@ -138,7 +209,7 @@ export function KnowledgeDocuments({
             <FileText size={17} strokeWidth={2} className="text-ai" /> Documentación del negocio
           </h3>
           <p className="mt-1 text-[13px] text-ink-soft">
-            Subí tus políticas, servicios o preguntas frecuentes y la IA responderá con esa
+            Sube tus políticas, servicios o preguntas frecuentes y la IA responderá con esa
             información en vez de generalidades. PDF, Word, texto o Markdown.
           </p>
         </div>
@@ -181,7 +252,7 @@ export function KnowledgeDocuments({
             )}
           </div>
           <p className="mb-2.5 text-[12.5px] text-ink-soft">
-            La IA todavía no usa este documento. Confirmá que el texto es correcto: es lo que va
+            La IA todavía no usa este documento. Confirma que el texto es correcto: es lo que va
             a leer para responderles a tus clientes.
           </p>
           <pre className="mb-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-xs bg-canvas p-3 font-mono text-[11.5px] leading-relaxed text-ink-soft">
@@ -207,20 +278,33 @@ export function KnowledgeDocuments({
         </div>
       )}
 
-      <div ref={listRef} className="flex flex-col gap-2">
+      {/* Tarjetas en rejilla y no una lista vertical: cada documento es una
+          ficha con su estado, su etapa y sus acciones, y a partir de 260px de
+          ancho caben tantas como quepan. En columna, diez documentos eran diez
+          filas idénticas y medio metro de scroll. */}
+      <div ref={listRef} className="grid-docs">
         {items.map((doc) => (
-          <div key={doc.id} className="rounded-sm border border-line px-3.5 py-3">
-            <div className="flex flex-wrap items-center gap-2.5">
+          <div
+            key={doc.id}
+            className="flex flex-col rounded-sm border border-line bg-[var(--row-hover)] p-3.5 transition-colors duration-fast hover:border-line-strong"
+          >
+            <div className="mb-2 flex items-start gap-2.5">
               {doc.extractionMethod === 'VISION' ? (
-                <ScanLine size={16} strokeWidth={2} className="flex-shrink-0 text-warn" />
+                <ScanLine size={16} strokeWidth={2} className="mt-0.5 flex-shrink-0 text-warn" />
               ) : (
-                <FileText size={16} strokeWidth={2} className="flex-shrink-0 text-ink-faint" />
+                <FileText size={16} strokeWidth={2} className="mt-0.5 flex-shrink-0 text-ink-faint" />
               )}
-              <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+              <span className="min-w-0 flex-1 break-words text-[13.5px] font-semibold" title={doc.filename}>
                 {doc.filename}
               </span>
+            </div>
 
-              {doc.status === 'ACTIVE' && <Pill kind="ai" label={STATUS_LABEL.ACTIVE} />}
+            <div className="mb-1 flex flex-wrap gap-1.5">
+              {doc.status === 'ACTIVE' && (
+                <span className="inline-flex items-center gap-1 rounded-xs bg-ai-tint px-2 py-0.5 text-[11.5px] font-semibold text-ai">
+                  <Check size={12} strokeWidth={2.5} /> {STATUS_LABEL.ACTIVE}
+                </span>
+              )}
               {/* Estaba en STATUS_LABEL pero no se pintaba en ninguna parte: un
                   documento recién subido aparecía sin estado, como si no le
                   pasara nada, mientras el servidor seguía extrayendo su texto. */}
@@ -230,62 +314,82 @@ export function KnowledgeDocuments({
                 </span>
               )}
               {doc.status === 'PENDING_REVIEW' && (
-                <span className="inline-flex items-center gap-1 rounded-xs bg-warn-tint px-2 py-0.5 text-[11.5px] text-warn">
+                <span className="inline-flex items-center gap-1 rounded-xs bg-warn-tint px-2 py-0.5 text-[11.5px] font-semibold text-warn">
                   {STATUS_LABEL.PENDING_REVIEW}
                 </span>
               )}
               {doc.status === 'FAILED' && (
-                <span className="inline-flex items-center gap-1 rounded-xs bg-danger-tint px-2 py-0.5 text-[11.5px] text-danger">
+                <span className="inline-flex items-center gap-1 rounded-xs bg-danger-tint px-2 py-0.5 text-[11.5px] font-semibold text-danger">
                   <AlertTriangle size={12} strokeWidth={2.25} /> {STATUS_LABEL.FAILED}
                 </span>
               )}
-
-              <div className="flex flex-shrink-0 items-center gap-1">
-                {doc.status !== 'FAILED' && (
-                  <button
-                    onClick={() => void showPreview(doc.id)}
-                    disabled={busyId === doc.id}
-                    title="Ver el texto extraído"
-                    className="grid h-7 w-7 place-items-center rounded-xs text-ink-faint transition-colors duration-fast hover:bg-[var(--hover-bg)] hover:text-ink"
-                  >
-                    <Eye size={15} strokeWidth={2} />
-                  </button>
-                )}
-                {isOwner && doc.status === 'PENDING_REVIEW' && (
-                  <Button size="sm" disabled={busyId === doc.id} onClick={() => void activate(doc.id)}>
-                    Activar
-                  </Button>
-                )}
-                {isOwner && (
-                  <button
-                    onClick={() => void remove(doc.id)}
-                    disabled={busyId === doc.id}
-                    title="Eliminar"
-                    className="grid h-7 w-7 place-items-center rounded-xs text-ink-faint transition-colors duration-fast hover:bg-danger-tint hover:text-danger"
-                  >
-                    <Trash2 size={15} strokeWidth={2} />
-                  </button>
-                )}
-              </div>
             </div>
 
-            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 pl-[26px] text-[11.5px] text-ink-faint">
-              <span>{formatBytes(doc.sizeBytes)}</span>
-              {doc.pageCount != null && <span>{doc.pageCount} pág.</span>}
+            <Etapas status={doc.status} />
+
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11.5px]">
+              <div>
+                <dt className="text-ink-disabled">Tamaño</dt>
+                <dd className="m-0 text-ink-soft">{formatBytes(doc.sizeBytes)}</dd>
+              </div>
+              <div>
+                <dt className="text-ink-disabled">Subido</dt>
+                <dd className="m-0 text-ink-soft">{new Date(doc.createdAt).toLocaleDateString('es')}</dd>
+              </div>
+              {doc.pageCount != null && (
+                <div>
+                  <dt className="text-ink-disabled">Páginas</dt>
+                  <dd className="m-0 text-ink-soft">{doc.pageCount}</dd>
+                </div>
+              )}
               {doc.charCount != null && (
-                <span>{doc.charCount.toLocaleString('es')} caracteres</span>
+                <div>
+                  <dt className="text-ink-disabled">Caracteres</dt>
+                  <dd className="m-0 text-ink-soft">{doc.charCount.toLocaleString('es')}</dd>
+                </div>
               )}
               {doc.visionTokensUsed > 0 && (
-                <span title="Costo de una sola vez al transcribir el escaneo, no por mensaje">
-                  {doc.visionTokensUsed.toLocaleString('es')} tokens de transcripción
-                </span>
+                <div className="col-span-2">
+                  <dt className="text-ink-disabled" title="Costo de una sola vez al transcribir el escaneo, no por mensaje">
+                    Tokens de transcripción
+                  </dt>
+                  <dd className="m-0 text-ink-soft">{doc.visionTokensUsed.toLocaleString('es')}</dd>
+                </div>
               )}
-              <span>{new Date(doc.createdAt).toLocaleDateString('es')}</span>
-            </div>
+            </dl>
 
-            {doc.extractionError && (
-              <p className="mt-1.5 pl-[26px] text-[12px] text-danger">{doc.extractionError}</p>
-            )}
+            {doc.extractionError && <p className="mt-2 text-[12px] text-danger">{doc.extractionError}</p>}
+
+            {/* `mt-auto`: las acciones se pegan abajo, así quedan alineadas
+                entre tarjetas aunque una tenga más metadatos que otra. */}
+            <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3">
+              {doc.status !== 'FAILED' && (
+                <Button
+                  size="sm"
+                  variant="sec"
+                  disabled={busyId === doc.id}
+                  onClick={() => void showPreview(doc.id)}
+                >
+                  <Eye size={14} strokeWidth={2} />
+                  {previewOf?.id === doc.id ? 'Ocultar texto' : 'Ver texto'}
+                </Button>
+              )}
+              {isOwner && doc.status === 'PENDING_REVIEW' && (
+                <Button size="sm" disabled={busyId === doc.id} onClick={() => void activate(doc.id)}>
+                  Activar
+                </Button>
+              )}
+              {isOwner && (
+                <button
+                  onClick={() => void remove(doc.id)}
+                  disabled={busyId === doc.id}
+                  aria-label={`Eliminar ${doc.filename}`}
+                  className="ml-auto grid h-7 w-7 flex-shrink-0 place-items-center rounded-xs text-ink-faint transition-colors duration-fast hover:bg-danger-tint hover:text-danger"
+                >
+                  <Trash2 size={15} strokeWidth={2} />
+                </button>
+              )}
+            </div>
 
             {previewOf?.id === doc.id && (
               <pre className="mt-2.5 max-h-56 overflow-auto whitespace-pre-wrap rounded-xs bg-canvas p-3 font-mono text-[11.5px] leading-relaxed text-ink-soft">
@@ -294,16 +398,16 @@ export function KnowledgeDocuments({
             )}
           </div>
         ))}
-
-        {items.length === 0 && (
-          <div className="flex flex-col items-center gap-2 py-8 text-center text-ink-disabled">
-            <FileText size={24} strokeWidth={1.75} />
-            <p className="m-0 text-[13px]">
-              Todavía no subiste documentación. La IA responde solo con lo que escribiste arriba.
-            </p>
-          </div>
-        )}
       </div>
+
+      {items.length === 0 && (
+        <div className="flex flex-col items-center gap-2 py-8 text-center text-ink-disabled">
+          <FileText size={24} strokeWidth={1.75} />
+          <p className="m-0 text-[13px]">
+            Todavía no has subido documentación. La IA responde solo con lo que escribiste arriba.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

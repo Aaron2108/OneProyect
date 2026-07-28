@@ -19,15 +19,20 @@ export default {
         sidebar: 'var(--sidebar-bg)',
         line: 'var(--line)',
         'line-strong': 'var(--line-strong)',
+        // Marca, IA y peligro pasan por `<alpha-value>`: es lo que permite
+        // `border-brand/50` o `bg-danger/50`. Con `var(--brand)` a secas
+        // Tailwind no sabe dónde inyectar la opacidad y descarta la utilidad
+        // sin decir nada — así que esos bordes no existían en el CSS final.
+        // Los tokens `*-rgb` viven en tokens.css, que sigue siendo la fuente.
         brand: {
-          DEFAULT: 'var(--brand)',
+          DEFAULT: 'rgb(var(--brand-rgb) / <alpha-value>)',
           700: 'var(--brand-700)',
           hover: 'var(--brand-hover)',
           tint: 'var(--brand-tint)',
           on: 'var(--on-brand)',
         },
         ai: {
-          DEFAULT: 'var(--ai)',
+          DEFAULT: 'rgb(var(--ai-rgb) / <alpha-value>)',
           700: 'var(--ai-700)',
           hover: 'var(--ai-hover)',
           tint: 'var(--ai-tint)',
@@ -35,7 +40,7 @@ export default {
         },
         success: { DEFAULT: 'var(--success)', tint: 'var(--success-tint)' },
         warn: { DEFAULT: 'var(--warn)', tint: 'var(--warn-tint)' },
-        danger: { DEFAULT: 'var(--danger)', tint: 'var(--danger-tint)' },
+        danger: { DEFAULT: 'rgb(var(--danger-rgb) / <alpha-value>)', tint: 'var(--danger-tint)' },
       },
       fontFamily: {
         display: ['Inter', 'system-ui', 'sans-serif'],
