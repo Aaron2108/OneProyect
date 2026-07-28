@@ -82,6 +82,18 @@
   --danger-tint: rgba(255, 107, 107, 0.16);
   --on-danger: #ffffff;
 
+  /* Gráfico de actividad. Tiene tokens propios en vez de tomar prestados los
+     de estado porque en el panel el color ya significa algo: índigo es la IA,
+     verde es una persona del equipo, ámbar es un aviso. La serie de recibidos
+     iba en `--warn`, así que el mismo ámbar quería decir «recordatorio
+     pendiente» en una tarjeta y «mensaje de un cliente» en la de al lado; y
+     `--danger` no aparece por ningún lado del gráfico, con lo que el ámbar
+     parecía la peor de dos noticias. Ahora: lo que entra es del cliente —tono
+     frío, el mismo papel neutro que tiene su burbuja en el hilo— y lo que sale
+     lo manda el negocio. */
+  --chart-in: #7f97a8;
+  --chart-out: var(--brand);
+
   /* Paleta de avatares: se elige una por contacto a partir de su id, así el
      mismo contacto conserva siempre su color. Vive aquí y no en el componente
      porque es parte del sistema de color, no de la lógica del avatar. */

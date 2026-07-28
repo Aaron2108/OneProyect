@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from 'recharts';
-import { CalendarClock, Coins, MessageSquare, Send, Sparkles, Users } from 'lucide-react';
+import { CalendarClock, Coins, MessageSquare, Send, Sparkles, TriangleAlert, Users } from 'lucide-react';
 import { api } from '@/lib/api';
 import { esMetricsOverview } from '@/lib/guards';
 import { useToast } from '@/lib/toast-context';
+import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Input';
 import { CountUp } from '@/components/ui/CountUp';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { RadialGauge } from '@/components/ui/RadialGauge';
 import { KpiSkeleton } from '@/components/ui/Skeleton';
 import type { AiUsageTotals, MetricsOverview } from '@/lib/types';
 
-const CHART_COLORS = { in: 'var(--warn)', human: 'var(--brand)', ai: 'var(--ai)' };
+const CHART_COLORS = { in: 'var(--chart-in)', out: 'var(--chart-out)' };
 
 /** Nombres legibles de las finalidades que devuelve la API. */
 const PURPOSE_LABELS: Record<string, string> = {
@@ -19,29 +21,36 @@ const PURPOSE_LABELS: Record<string, string> = {
   'follow-up': 'Seguimientos',
 };
 
+/**
+ * Una de las cuatro cifras de apoyo.
+ *
+ * Llevaban un punto de color al lado de la etiqueta que no codificaba nada:
+ * verde, verde claro, ámbar y gris repartidos sin criterio. Dos de ellos eran
+ * casi el mismo verde, y el ámbar de «Citas» se leía como una advertencia
+ * porque en el resto del panel el ámbar es justo eso. El icono ya identifica la
+ * tarjeta; el punto solo añadía color.
+ */
 function Kpi({
   label,
   icon: Icon,
-  dot,
   value,
   sub,
 }: {
   label: string;
   icon: typeof MessageSquare;
-  dot: string;
   value: number;
   sub: string;
 }): JSX.Element {
   return (
     <div className="reveal kpi-card">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[12.5px] font-semibold text-ink-soft">
-          <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: dot }} />
-          {label}
-        </div>
-        <Icon size={16} strokeWidth={2} className="text-ink-disabled" />
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-[12.5px] font-semibold text-ink-soft">{label}</div>
+        <Icon size={16} strokeWidth={2} className="flex-shrink-0 text-ink-disabled" />
       </div>
-      <div className="font-display text-[32px] font-bold leading-none tracking-tight">
+      {/* 26px y no 32: estas cuatro cifras acompañan al porcentaje de
+          automatización, que es la respuesta que se viene a buscar. Al mismo
+          tamaño competían con él y la pantalla no decía por dónde empezar. */}
+      <div className="font-display text-[26px] font-bold leading-none tracking-tight">
         <CountUp value={value} />
       </div>
       <div className="mt-2 text-xs text-ink-faint">{sub}</div>
@@ -71,6 +80,7 @@ export function MetricsPage(): JSX.Element {
   const [usage, setUsage] = useState<AiUsageTotals | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     void load();
@@ -95,10 +105,15 @@ export function MetricsPage(): JSX.Element {
       setData(overview);
       setUsage(consumo);
       setLoadedOnce(true);
+      setError('');
     } catch (e) {
       // Sin aviso, al cambiar de período se quedaban las cifras anteriores en
       // pantalla (o el esqueleto girando) y nadie sabía que no eran las pedidas.
-      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las métricas', 'error');
+      const mensaje = e instanceof Error ? e.message : 'No se pudieron cargar las métricas';
+      // El toast se va solo. Si no ha cargado nunca, el esqueleto se quedaba
+      // girando para siempre y la pantalla no llegaba a decir qué había pasado.
+      setError(mensaje);
+      toast.show(mensaje, 'error');
     }
   }
 
@@ -122,7 +137,18 @@ export function MetricsPage(): JSX.Element {
         </Select>
       </div>
 
-      {!loadedOnce || !data ? (
+      {error && !data ? (
+        <EmptyState
+          icon={TriangleAlert}
+          title="No se pudieron cargar las métricas"
+          description={error}
+          action={
+            <Button size="sm" variant="ghost" onClick={() => void load()}>
+              Reintentar
+            </Button>
+          }
+        />
+      ) : !loadedOnce || !data ? (
         <div className="bento-grid">
           {Array.from({ length: 4 }).map((_, i) => (
             <KpiSkeleton key={i} />
@@ -130,34 +156,16 @@ export function MetricsPage(): JSX.Element {
         </div>
       ) : (
         <div className="bento-grid">
-          <Kpi
-            label="Conversaciones"
-            icon={MessageSquare}
-            dot="var(--brand)"
-            value={data.conversations.total}
-            sub={`${data.conversations.open} abiertas · ${data.conversations.closed} cerradas`}
-          />
-          <Kpi
-            label="Mensajes"
-            icon={Send}
-            dot="var(--brand-hover)"
-            value={data.messages.total}
-            sub={`${data.messages.inbound} recibidos · ${data.messages.outbound} enviados`}
-          />
-          <Kpi
-            label="Citas"
-            icon={CalendarClock}
-            dot="var(--warn)"
-            value={data.appointments.total}
-            sub={`${data.appointments.confirmed} confirmadas · ${data.reminders.pending} recordatorios pendientes`}
-          />
-          <Kpi label="Contactos" icon={Users} dot="var(--ink-soft)" value={data.contacts.total} sub="personas en tu WhatsApp" />
-
+          {/* La automatización va primera y a todo el ancho.
+              Estaba debajo de las cuatro cifras y con la mitad de su tamaño de
+              letra, cuando es la única que responde a la pregunta que trae aquí
+              a un dueño de negocio: si esto le está quitando trabajo o no. Las
+              otras cuatro son la prueba, no la conclusión. */}
           <div className="span-4 reveal flex flex-col items-center gap-7 kpi-card sm:flex-row">
             <RadialGauge aiPct={autoPct} />
             <div className="flex-1">
-              <h3 className="mb-1.5 flex items-center gap-2 font-display text-base font-bold">
-                <Sparkles size={16} strokeWidth={2} className="text-ai" /> Automatización
+              <h3 className="mb-1.5 flex items-center gap-2 font-display text-xl font-bold tracking-tight">
+                <Sparkles size={18} strokeWidth={2} className="text-ai" /> Automatización
               </h3>
               <p className="mb-4 text-[13px] text-ink-soft">De las respuestas enviadas, cuántas resolvió la IA sin intervención humana.</p>
               <div className="flex gap-6 text-[13px]">
@@ -173,15 +181,38 @@ export function MetricsPage(): JSX.Element {
             </div>
           </div>
 
+          <Kpi
+            label="Conversaciones"
+            icon={MessageSquare}
+            value={data.conversations.total}
+            sub={`${data.conversations.open} abiertas · ${data.conversations.closed} cerradas`}
+          />
+          <Kpi
+            label="Mensajes"
+            icon={Send}
+            value={data.messages.total}
+            sub={`${data.messages.inbound} recibidos · ${data.messages.outbound} enviados`}
+          />
+          <Kpi
+            label="Citas"
+            icon={CalendarClock}
+            value={data.appointments.total}
+            sub={`${data.appointments.confirmed} confirmadas · ${data.reminders.pending} recordatorios pendientes`}
+          />
+          <Kpi label="Contactos" icon={Users} value={data.contacts.total} sub="personas en tu WhatsApp" />
+
           {usage && usage.calls > 0 && (
             <div className="span-4 reveal kpi-card">
               <h3 className="mb-1.5 flex items-center gap-2 font-display text-base font-bold">
                 <Coins size={16} strokeWidth={2} className="text-ai" /> Consumo de la IA
               </h3>
+              {/* Tres frases para justificar por qué no hay un importe: la
+                  tarjeta se explicaba a sí misma antes de enseñar un solo dato.
+                  El motivo cabe en una línea y va donde toca, junto a las
+                  cifras que lo necesitan. */}
               <p className="mb-4 text-[13px] text-ink-soft">
-                Lo que tu agente gastó de verdad en el período. Se muestran tokens y no un
-                importe: el precio depende del modelo y de la tarifa vigente, y calcularlo aquí
-                daría una cifra que envejece mal.
+                Lo que tu agente gastó en el período, en tokens: el importe depende del modelo y
+                de la tarifa vigente.
               </p>
               <div className="flex flex-wrap gap-x-10 gap-y-4">
                 <div>
@@ -210,7 +241,10 @@ export function MetricsPage(): JSX.Element {
           )}
 
           <div className="span-4 reveal kpi-card">
-            <h3 className="mb-4 font-display text-base font-bold">Actividad · últimos {chartData.length} días</h3>
+            {/* El período lo fija el selector de arriba; contar las filas
+                devueltas hacía que un período sin actividad se anunciara como
+                «últimos 0 días». */}
+            <h3 className="mb-4 font-display text-base font-bold">Actividad · últimos {range} días</h3>
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={chartData} barGap={3}>
                 <CartesianGrid vertical={false} stroke="var(--line)" />
@@ -224,7 +258,7 @@ export function MetricsPage(): JSX.Element {
                 <YAxis tick={{ fontSize: 10, fill: 'var(--ink-faint)' }} axisLine={false} tickLine={false} allowDecimals={false} width={26} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--hover-bg)' }} />
                 <Bar dataKey="inbound" name="Recibidos" fill={CHART_COLORS.in} radius={[4, 4, 0, 0]} maxBarSize={18} />
-                <Bar dataKey="outbound" name="Enviados" fill={CHART_COLORS.human} radius={[4, 4, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="outbound" name="Enviados" fill={CHART_COLORS.out} radius={[4, 4, 0, 0]} maxBarSize={18} />
               </BarChart>
             </ResponsiveContainer>
             <div className="mt-3 flex gap-5 text-[12.5px] text-ink-soft">
@@ -232,7 +266,7 @@ export function MetricsPage(): JSX.Element {
                 <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_COLORS.in }} /> Recibidos
               </span>
               <span className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_COLORS.human }} /> Enviados
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART_COLORS.out }} /> Enviados
               </span>
             </div>
             <button onClick={() => setShowTable((s) => !s)} className="mt-4 text-[13px] font-semibold text-brand" aria-expanded={showTable}>
