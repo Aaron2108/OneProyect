@@ -7,6 +7,7 @@ import { useToast } from '@/lib/toast-context';
 import { useRecurso } from '@/lib/use-recurso';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Input, Select } from '@/components/ui/Input';
 import { Pill } from '@/components/ui/Pill';
 import type { TeamMember, UserRole } from '@/lib/types';
@@ -57,8 +58,16 @@ export function TeamPage(): JSX.Element {
           <p className="m-0 text-sm text-ink-soft">Las personas de tu empresa que atienden conversaciones.</p>
         </div>
         {user?.role === 'OWNER' && (
-          <Button size="sm" onClick={() => setInviting((s) => !s)}>
-            <Plus size={15} strokeWidth={2.25} /> Invitar miembro
+          // La etiqueta sigue al estado, igual que en Contactos: el botón abría
+          // y cerraba el formulario diciendo siempre lo mismo.
+          <Button size="sm" variant={inviting ? 'sec' : 'brand'} onClick={() => setInviting((s) => !s)}>
+            {inviting ? (
+              'Cancelar'
+            ) : (
+              <>
+                <Plus size={15} strokeWidth={2.25} /> Invitar miembro
+              </>
+            )}
           </Button>
         )}
       </div>
@@ -70,13 +79,24 @@ export function TeamPage(): JSX.Element {
               escribir y un lector de pantalla solo anunciaba "cuadro de edición".
               Poner un <Label> encima cambiaría el diseño del formulario. */}
           <div className="min-w-[140px] flex-1">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" aria-label="Nombre" />
+            {/* Igual que en Contactos: el formulario aparecía y el foco se
+                quedaba en el botón que lo abrió. */}
+            <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" aria-label="Nombre" />
           </div>
           <div className="min-w-[160px] flex-1">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" aria-label="Email" />
           </div>
           <div className="min-w-[170px] flex-1">
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña (mín. 8)" aria-label="Contraseña" autoComplete="new-password" />
+            {/* «Contraseña» a secas no dice de quién ni para qué: es la que
+                usará esa persona para entrar la primera vez, no la tuya. */}
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Contraseña inicial (mín. 8)"
+              aria-label="Contraseña inicial"
+              autoComplete="new-password"
+            />
           </div>
           <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)} aria-label="Rol" className="w-auto flex-shrink-0">
             <option value="AGENT">Agente</option>
@@ -97,21 +117,39 @@ export function TeamPage(): JSX.Element {
             <Pill kind={u.role === 'OWNER' ? 'owner' : 'agent'} />
           </div>
         ))}
-        {items.length === 0 &&
-          (errorCarga ? (
-            <div className="col-span-full flex flex-col items-center gap-2 py-10 text-center text-ink-disabled">
-              <TriangleAlert size={26} strokeWidth={1.75} className="text-danger" />
-              <p className="m-0 text-sm">No se pudo cargar el equipo. {errorCarga}</p>
-              <Button size="sm" variant="sec" onClick={() => void recargar()}>
-                Reintentar
-              </Button>
-            </div>
-          ) : (
-            <div className="col-span-full flex flex-col items-center gap-2 py-10 text-center text-ink-disabled">
-              <UserPlus size={26} strokeWidth={1.75} />
-              <p className="m-0 text-sm">Aún no hay más miembros en el equipo.</p>
-            </div>
-          ))}
+        {/* Los dos estados estaban escritos a mano aquí, así que eran los
+            únicos del panel sin el tratamiento de `EmptyState` —el icono con
+            su halo, el título y el texto—: la misma situación se veía de una
+            forma en Equipo y de otra en las otras seis pantallas. */}
+        {items.length === 0 && (
+          <div className="col-span-full">
+            {errorCarga ? (
+              <EmptyState
+                icon={TriangleAlert}
+                title="No se pudo cargar el equipo"
+                description={errorCarga}
+                action={
+                  <Button size="sm" variant="ghost" onClick={() => void recargar()}>
+                    Reintentar
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={UserPlus}
+                title="Solo estás tú"
+                description="Invita a quien vaya a atender conversaciones contigo."
+                action={
+                  user?.role === 'OWNER' ? (
+                    <Button size="sm" onClick={() => setInviting(true)}>
+                      <Plus size={15} strokeWidth={2.25} /> Invitar al primero
+                    </Button>
+                  ) : undefined
+                }
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
