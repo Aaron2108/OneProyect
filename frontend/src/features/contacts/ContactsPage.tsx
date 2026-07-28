@@ -65,8 +65,17 @@ export function ContactsPage(): JSX.Element {
           >
             <Download size={14} strokeWidth={2} /> Exportar
           </button>
-          <Button size="sm" onClick={() => setAdding((s) => !s)}>
-            <Plus size={15} strokeWidth={2.25} /> Nuevo contacto
+          {/* La etiqueta sigue al estado. El botón abría y cerraba el
+              formulario pero decía «Nuevo contacto» en los dos casos, así que
+              con el formulario ya abierto seguía invitando a abrirlo. */}
+          <Button size="sm" variant={adding ? 'sec' : 'brand'} onClick={() => setAdding((s) => !s)}>
+            {adding ? (
+              'Cancelar'
+            ) : (
+              <>
+                <Plus size={15} strokeWidth={2.25} /> Nuevo contacto
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -78,7 +87,17 @@ export function ContactsPage(): JSX.Element {
               escribir y un lector de pantalla solo anunciaba "cuadro de edición".
               Poner un <Label> encima cambiaría el diseño del formulario. */}
           <div className="min-w-[180px] flex-1">
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Teléfono (5215500000000)" aria-label="Teléfono" inputMode="tel" />
+            {/* El formulario aparecía y el foco se quedaba en el botón que lo
+                abrió: había que ir a buscar el primer campo con el ratón o con
+                el tabulador. */}
+            <Input
+              autoFocus
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Teléfono (5215500000000)"
+              aria-label="Teléfono"
+              inputMode="tel"
+            />
           </div>
           <div className="min-w-[180px] flex-1">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre (opcional)" aria-label="Nombre (opcional)" />
@@ -115,13 +134,30 @@ export function ContactsPage(): JSX.Element {
           <EmptyState
             icon={UserRound}
             title={query ? 'Sin resultados' : 'Aún no tienes contactos'}
-            description={query ? `No encontramos nada para “${query}”.` : 'Se crean solos al recibir un mensaje, o añade el primero arriba.'}
+            description={
+              query ? `No encontramos nada para “${query}”.` : 'Se crean solos al recibir un mensaje.'
+            }
+            // Una pantalla vacía es una invitación a hacer algo. Decía «añade el
+            // primero arriba» y dejaba al lector buscando cuál de los botones de
+            // arriba era; ahora el botón está donde se lee la frase.
+            action={
+              query ? undefined : (
+                <Button size="sm" onClick={() => setAdding(true)}>
+                  <Plus size={15} strokeWidth={2.25} /> Añadir el primero
+                </Button>
+              )
+            }
           />
         ) : (
           <>
             <div className="hidden grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-line px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-ink-disabled sm:grid">
               <span>Contacto</span>
-              <span className="text-right">Notas</span>
+              {/* Las notas son prosa y van alineadas a la izquierda. Iban a la
+                  derecha, como la fecha, y una frase recortada por el final y
+                  alineada por ese mismo lado no se puede leer en diagonal: cada
+                  fila empezaba en un sitio distinto. A la derecha solo lo que
+                  se compara verticalmente, que aquí es la fecha. */}
+              <span className="w-[220px]">Notas</span>
               <span className="w-[110px] text-right">Cliente desde</span>
             </div>
             <div ref={listRef}>
@@ -147,7 +183,9 @@ export function ContactsPage(): JSX.Element {
                       <div className="truncate font-mono text-[12.5px] text-ink-soft">{c.phone}</div>
                     </div>
                   </div>
-                  <div className="hidden max-w-[220px] truncate text-right text-[13px] text-ink-soft sm:block">{c.notes || '—'}</div>
+                  <div className="hidden w-[220px] truncate text-[13px] text-ink-soft sm:block">
+                    {c.notes || <span className="text-ink-disabled">Sin notas</span>}
+                  </div>
                   <div className="hidden w-[110px] text-right text-[12.5px] text-ink-disabled sm:block">{fmtDate(c.createdAt)}</div>
                 </div>
               ))}
