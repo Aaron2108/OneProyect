@@ -152,6 +152,61 @@ function Linea({
   );
 }
 
+/**
+ * Tiempo de respuesta del resumen ejecutivo.
+ *
+ * Es la mediana y se dice que lo es: la media la arrastra una sola respuesta
+ * nocturna y dejaría de describir a ninguna de las respuestas reales. Si no
+ * hubo ninguna pareja entrante→saliente en el período no se enseña ninguna
+ * cifra, en vez de un cero que se leería como «se contesta al instante».
+ *
+ * Va aparte porque el bloque puede no venir (backend anterior al cambio) y
+ * entonces no se pinta nada: un encabezado solo, sin cifras debajo, se lee
+ * como un fallo de carga.
+ */
+function TiempoDeRespuesta({
+  espera,
+}: {
+  espera: NonNullable<MetricsOverview['responseTime']>;
+}): JSX.Element {
+  return (
+    <div className="pt-5">
+      <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-disabled">
+        <Timer size={13} strokeWidth={2.25} /> Tiempo de respuesta (mediana)
+      </div>
+      {espera.samples === 0 ? (
+        <p className="py-2 text-[12.5px] text-ink-faint">
+          Todavía no hay ningún mensaje contestado en este período.
+        </p>
+      ) : (
+        <>
+          <Linea label="En general" value={formatearEspera(espera.medianSeconds) ?? '—'} />
+          {espera.aiSamples > 0 && (
+            <Linea
+              label="Cuando contesta la IA"
+              value={formatearEspera(espera.aiMedianSeconds) ?? '—'}
+              color="var(--ai)"
+            />
+          )}
+          {espera.humanSamples > 0 && (
+            <Linea
+              label="Cuando contesta una persona"
+              value={formatearEspera(espera.humanMedianSeconds) ?? '—'}
+              color="var(--brand)"
+            />
+          )}
+          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+            Sobre {espera.samples.toLocaleString('es')} respuesta
+            {espera.samples === 1 ? '' : 's'}. La media es{' '}
+            {formatearEspera(espera.averageSeconds) ?? '—'}, más alta porque una sola respuesta
+            tardía la arrastra entera.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ChartTooltip({ active, payload, label }: TooltipProps<number, string>): JSX.Element | null {
   if (!active || !payload?.length) return null;
   return (
@@ -440,46 +495,7 @@ export function MetricsPage(): JSX.Element {
                 />
               </div>
 
-              {/* Tiempo de respuesta.
-                  Es la mediana y se dice que lo es: la media la arrastra una
-                  sola respuesta nocturna y dejaría de describir a ninguna de
-                  las respuestas reales. Si no hubo ninguna pareja
-                  entrante→saliente en el período no se enseña nada, en vez de
-                  un cero que se leería como «se contesta al instante». */}
-              <div className="pt-5">
-                <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-disabled">
-                  <Timer size={13} strokeWidth={2.25} /> Tiempo de respuesta (mediana)
-                </div>
-                {data.responseTime.samples === 0 ? (
-                  <p className="py-2 text-[12.5px] text-ink-faint">
-                    Todavía no hay ningún mensaje contestado en este período.
-                  </p>
-                ) : (
-                  <>
-                    <Linea label="En general" value={formatearEspera(data.responseTime.medianSeconds) ?? '—'} />
-                    {data.responseTime.aiSamples > 0 && (
-                      <Linea
-                        label="Cuando contesta la IA"
-                        value={formatearEspera(data.responseTime.aiMedianSeconds) ?? '—'}
-                        color="var(--ai)"
-                      />
-                    )}
-                    {data.responseTime.humanSamples > 0 && (
-                      <Linea
-                        label="Cuando contesta una persona"
-                        value={formatearEspera(data.responseTime.humanMedianSeconds) ?? '—'}
-                        color="var(--brand)"
-                      />
-                    )}
-                    <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
-                      Sobre {data.responseTime.samples.toLocaleString('es')} respuesta
-                      {data.responseTime.samples === 1 ? '' : 's'}. La media es{' '}
-                      {formatearEspera(data.responseTime.averageSeconds) ?? '—'}, más alta porque una
-                      sola respuesta tardía la arrastra entera.
-                    </p>
-                  </>
-                )}
-              </div>
+              {data.responseTime && <TiempoDeRespuesta espera={data.responseTime} />}
             </section>
           </div>
 

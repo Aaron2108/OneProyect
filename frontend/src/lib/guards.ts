@@ -46,7 +46,10 @@ export function esMetricsOverview(x: unknown): x is MetricsOverview {
     if (!esObjeto(x[bloque])) return false;
   }
   if (typeof x.automationRate !== 'number') return false;
-  if (!esObjeto(x.responseTime)) return false;
+  // `responseTime` no se exige: llegó después que el resto y un backend sin
+  // actualizar no lo manda. Exigirlo dejaba la pantalla en "No se pudieron
+  // cargar las métricas" con todas las cifras correctas al otro lado — justo
+  // lo que advierte la cabecera de este archivo.
   if (!Array.isArray(x.activity)) return false;
   return true;
 }

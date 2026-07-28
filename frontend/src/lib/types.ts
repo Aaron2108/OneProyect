@@ -163,8 +163,13 @@ export interface MetricsOverview {
    * describir a ninguna de las respuestas reales. Todo puede ser `null` —sin
    * pareja entrante→saliente en el período no hay nada que medir, y un 0 se
    * leería como "se contesta al instante".
+   *
+   * Opcional a propósito: es un bloque que se añadió después, y un backend
+   * anterior al cambio no lo manda. El panel se despliega por su cuenta, así
+   * que ese desfase existe de verdad; si el tipo lo diera por seguro, la
+   * pantalla entera se caería por una sección de apoyo.
    */
-  responseTime: {
+  responseTime?: {
     samples: number;
     medianSeconds: number | null;
     averageSeconds: number | null;
