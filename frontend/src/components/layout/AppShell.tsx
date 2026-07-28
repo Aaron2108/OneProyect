@@ -86,7 +86,12 @@ export function AppShell(): JSX.Element {
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* `min-h-0` además de `min-w-0`: en móvil el armazón se apila en
+          columna, y un elemento flex no baja de la altura de su contenido
+          mientras su `min-height` valga `auto`. Sin esto, el panel medía lo que
+          midiera la página y empujaba la barra de navegación 2.000 píxeles por
+          debajo del borde de la pantalla. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="app-topbar">
           <h1 className="font-display text-[15.5px] font-bold tracking-tight">{pageTitle}</h1>
           <div className="flex-1" />

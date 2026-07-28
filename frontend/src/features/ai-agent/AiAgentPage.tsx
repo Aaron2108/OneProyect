@@ -213,8 +213,17 @@ export function AiAgentPage(): JSX.Element {
     (form.timeZone ?? '') !== (guardado.timeZone ?? '');
   const completados = TODOS_LOS_CAMPOS.filter((f) => (guardado[f.key] ?? '').trim()).length;
 
-  /** Un textarea del perfil, con su etiqueta, su pista y su contador. */
-  function campo(f: CampoPerfil): JSX.Element {
+  /**
+   * Un textarea del perfil, con su etiqueta, su pista y su contador.
+   *
+   * `filas` existe para equilibrar las dos columnas: la del negocio tiene un
+   * desplegable y tres campos, la del agente solo dos. Con la misma altura en
+   * los cinco, la derecha terminaba a media columna y dejaba un hueco muerto de
+   * unos trescientos píxeles. Dándole más alto a los dos campos que sí se
+   * escriben largo —el tono y las instrucciones— las columnas cierran juntas y
+   * además se escribe más cómodo, que es donde más falta hace.
+   */
+  function campo(f: CampoPerfil, filas: number): JSX.Element {
     const largo = (form[f.key] ?? '').length;
     return (
       <Field key={f.key}>
@@ -225,7 +234,7 @@ export function AiAgentPage(): JSX.Element {
           onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
           placeholder={f.placeholder}
           maxLength={MAX_LENGTH}
-          rows={4}
+          rows={filas}
           disabled={!isOwner}
         />
         {/* El contador solo cuando empieza a importar: «0/1000» debajo de un
@@ -355,9 +364,13 @@ export function AiAgentPage(): JSX.Element {
                   <RefreshCw size={15} strokeWidth={2.25} /> Actualizar contexto
                 </Button>
                 {isOwner && (
+                  // Verde solo cuando hay algo que guardar: en reposo decía
+                  // «Todo guardado» con el color de la acción principal, así
+                  // que el ojo iba al único botón que no había que pulsar.
                   <Button
                     type="submit"
                     form="perfil-agente"
+                    variant={hayCambios ? 'brand' : 'sec'}
                     fullWidth
                     className="!justify-start"
                     disabled={saving || !hayCambios}
@@ -401,7 +414,7 @@ export function AiAgentPage(): JSX.Element {
                     citas quedan corridas.
                   </div>
                 </Field>
-                {CAMPOS_NEGOCIO.map(campo)}
+                {CAMPOS_NEGOCIO.map((f) => campo(f, 4))}
               </section>
 
               <section className="reveal kpi-card">
@@ -409,7 +422,7 @@ export function AiAgentPage(): JSX.Element {
                   <span className="sec-head__eyebrow">Configuración</span>
                   <h3 className="sec-head__title font-display">Cómo habla el agente</h3>
                 </div>
-                {CAMPOS_AGENTE.map(campo)}
+                {CAMPOS_AGENTE.map((f) => campo(f, 8))}
               </section>
             </div>
 
@@ -417,7 +430,11 @@ export function AiAgentPage(): JSX.Element {
               // El pie se queda pegado al fondo mientras se edita: las dos
               // columnas son largas y, sin esto, el botón de guardar quedaba
               // fuera de pantalla en cuanto tocabas el primer campo.
-              <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-[var(--surface-glass)] px-5 py-3.5 backdrop-blur">
+              // Opaca y con sombra, no de cristal: flotando por encima de las
+              // dos columnas mientras se desplaza, el vidrio dejaba ver los
+              // campos por debajo y la barra parecía cortar las tarjetas en vez
+              // de estar delante de ellas.
+              <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line-strong bg-[var(--surface-raised)] px-5 py-3.5 shadow-2">
                 <span className="text-[12px] text-ink-faint">
                   {hayCambios
                     ? 'Hay cambios sin guardar'
@@ -425,7 +442,7 @@ export function AiAgentPage(): JSX.Element {
                       ? `Guardado el ${new Date(updatedAt).toLocaleString('es')}`
                       : 'Todavía sin configurar'}
                 </span>
-                <Button type="submit" disabled={saving || !hayCambios}>
+                <Button type="submit" variant={hayCambios ? 'brand' : 'sec'} disabled={saving || !hayCambios}>
                   {saving ? 'Guardando…' : 'Guardar'}
                 </Button>
               </div>
