@@ -17,13 +17,53 @@ function clearUrlHash(): void {
 
 type Mode = 'login' | 'register';
 
+/**
+ * El titular, línea a línea, porque cada una entra por separado.
+ *
+ * El acento cubría las tres últimas líneas: más de la mitad del bloque en
+ * verde: y a esa escala el color de marca dejaba de señalar nada, era el fondo
+ * del titular. Ahora cae solo en la palabra donde aterriza la frase, que es lo
+ * que el producto promete.
+ */
 const HEADLINE = [
   { text: 'Tu empleado', accent: false },
   { text: 'digital que', accent: false },
-  { text: 'nunca deja un', accent: true },
-  { text: 'mensaje sin', accent: true },
+  { text: 'nunca deja un', accent: false },
+  { text: 'mensaje sin', accent: false },
   { text: 'responder.', accent: true },
 ];
+
+/**
+ * La G de Google, con sus cuatro colores.
+ *
+ * Es la única marca ajena del panel y por eso no sale de Lucide (que no tiene
+ * logotipos) ni puede recolorearse: las condiciones de "Iniciar sesión con
+ * Google" exigen el símbolo tal cual. Antes había una «G» en negrita con la
+ * tipografía de la interfaz, que no es el logotipo de nadie y se leía como un
+ * hueco sin terminar justo debajo del botón principal.
+ */
+function GoogleMark(): JSX.Element {
+  return (
+    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <path
+        fill="#4285F4"
+        d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34A21.99 21.99 0 0 0 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"
+      />
+      <path
+        fill="#EA4335"
+        d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"
+      />
+    </svg>
+  );
+}
 
 export function AuthPage(): JSX.Element {
   const { login, register, loginWithResult } = useAuth();
@@ -130,30 +170,32 @@ export function AuthPage(): JSX.Element {
           <span className="auth-glyph">W</span> WhatsFlow&nbsp;AI
         </div>
 
-        <div className="max-w-[30ch]">
-          <h1 className="mb-4 font-display text-[clamp(30px,4.4vw,46px)] font-bold leading-[1.04] tracking-tight">
-            {HEADLINE.map((line, i) => (
-              <span
-                key={i}
-                className={line.accent ? 'accent' : undefined}
-                style={{ animationDelay: `${0.1 + i * 0.1}s` }}
-              >
-                {line.text}
-              </span>
-            ))}
-          </h1>
-          <motion.p
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="m-0 max-w-[34ch] text-base text-ink-soft"
-          >
-            La IA atiende tu WhatsApp con el contexto de tu negocio, agenda citas y le pasa el turno a tu equipo
-            cuando hace falta.
-          </motion.p>
-        </div>
+        <div className="auth-hero__body">
+          <div className="max-w-[30ch]">
+            <h1 className="mb-4 font-display text-[clamp(30px,4.4vw,46px)] font-bold leading-[1.04] tracking-tight">
+              {HEADLINE.map((line, i) => (
+                <span
+                  key={i}
+                  className={line.accent ? 'accent' : undefined}
+                  style={{ animationDelay: `${0.1 + i * 0.1}s` }}
+                >
+                  {line.text}
+                </span>
+              ))}
+            </h1>
+            <motion.p
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              className="m-0 max-w-[34ch] text-base text-ink-soft"
+            >
+              La IA atiende tu WhatsApp con el contexto de tu negocio, agenda citas y le pasa el turno a tu equipo
+              cuando hace falta.
+            </motion.p>
+          </div>
 
-        <HeroDemo />
+          <HeroDemo />
+        </div>
       </aside>
 
       <section className="auth-panel">
@@ -243,7 +285,7 @@ export function AuthPage(): JSX.Element {
           </div>
 
           <Button type="button" variant="ghost" fullWidth loading={googleLoading} disabled={googleLoading} onClick={continueWithGoogle}>
-            <span aria-hidden="true" className="font-bold">G</span> Continuar con Google
+            <GoogleMark /> Continuar con Google
           </Button>
 
           <p className="mt-5 text-center text-sm text-ink-soft">

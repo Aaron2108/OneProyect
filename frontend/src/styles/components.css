@@ -98,7 +98,13 @@
   min-height: 100%;
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
-  background: var(--canvas);
+  /* El degradado es de la pantalla entera, no de la columna izquierda.
+     Estando solo en `.auth-hero` no llegaba a `--canvas` dentro de su propio
+     ancho —se quedaba a un 73% de su recorrido—, así que en el borde con el
+     formulario había un salto de color: una línea vertical nítida de arriba
+     abajo. Extendido a las dos columnas no hay borde que delatar, y la
+     derecha recibe la cola oscura del mismo degradado. */
+  background: var(--auth-hero-bg);
   color: var(--ink);
   position: relative;
 }
@@ -106,11 +112,21 @@
   position: relative;
   overflow: hidden;
   padding: clamp(28px, 5vw, 64px);
+  /* La marca arriba y el resto —titular, promesa y demo— como un solo grupo
+     centrado en lo que sobra. Antes era `space-between`, que en una pantalla
+     alta separaba los tres bloques hasta las esquinas y deshacía la
+     composición: el titular se leía sin relación con la conversación que lo
+     demuestra, que es justo la relación que esta pantalla tiene que contar. */
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: clamp(28px, 4vh, 44px);
+}
+.auth-hero__body {
+  align-self: center;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 40px;
-  background: var(--auth-hero-bg);
+  gap: clamp(26px, 5vh, 44px);
+  min-width: 0;
 }
 .auth-hero::before {
   content: '';
@@ -158,6 +174,11 @@
   animation: livePulse 2.4s ease-out infinite;
 }
 .auth-demo__bubble { max-width: 82%; padding: 9px 13px; border-radius: 14px; font-size: 13.5px; line-height: 1.45; }
+/* Los dos colores de la demo estaban como `style` en línea en el componente.
+   Aquí se pueden alcanzar desde una media query, y la burbuja vuelve a ser una
+   sola cosa con dos variantes en vez de un div con la pintura encima. */
+.auth-demo__bubble--in { background: var(--demo-in-bg); color: var(--demo-in-ink); border-bottom-left-radius: 4px; }
+.auth-demo__bubble--ai { background: var(--ai); color: var(--on-ai); border-bottom-right-radius: 4px; }
 .auth-demo__typing { display: inline-flex; gap: 4px; padding: 11px 14px; background: var(--ai); border-radius: 14px; border-bottom-right-radius: 4px; }
 .auth-demo__typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--on-ai); animation: dotPulse 1.2s infinite; display: block; }
 .auth-demo__typing i:nth-child(2) { animation-delay: 0.15s; }
@@ -169,6 +190,24 @@
   justify-content: center;
   padding: clamp(24px, 4vw, 56px);
   position: relative;
+  isolation: isolate;
+}
+/* La tarjeta lleva `backdrop-filter`, que desenfoca lo que tiene detrás — y
+   detrás no había más que un color plano. El filtro se pagaba entero y no se
+   veía nada. Este halo es la continuación del de la presentación: cruza la
+   costura entre las dos columnas y le da al cristal algo real que desenfocar. */
+.auth-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  /* El centro cae fuera del panel, a la izquierda: si se pone en el borde
+     mismo, la parte más brillante del halo aterriza justo sobre la costura
+     entre las dos columnas y la dibuja en vez de disolverla. Así solo entra
+     la caída. */
+  background: radial-gradient(80% 62% at -14% 44%, var(--auth-glow), transparent 70%);
+  opacity: 0.7;
+  pointer-events: none;
 }
 .auth-card {
   width: 100%;
@@ -181,6 +220,26 @@
   padding: 36px;
   box-shadow: var(--shadow-lg);
   animation: riseIn 0.6s var(--ease-out) 0.2s both;
+}
+
+/* Esta pantalla no tenía ninguna media query: las dos columnas se repartían el
+   ancho también en un móvil, así que el formulario —lo único que hay que hacer
+   aquí— acababa en unos 170px con los campos partidos. Por debajo de 940px se
+   apilan: primero una banda corta de presentación, después el formulario a
+   ancho completo. */
+@media (max-width: 940px) {
+  .auth-shell { grid-template-columns: 1fr; }
+  .auth-hero {
+    grid-template-rows: auto auto;
+    padding: clamp(24px, 6vw, 40px);
+    gap: 22px;
+  }
+  .auth-hero__body { align-self: start; }
+  /* La demo es decorativa (`aria-hidden`) y es el bloque más alto de la
+     pantalla: en vertical empujaría el formulario fuera de la primera vista. */
+  .auth-demo { display: none; }
+  .auth-panel { padding: clamp(20px, 6vw, 40px) clamp(20px, 6vw, 40px) clamp(36px, 10vw, 56px); }
+  .auth-card { max-width: 440px; padding: clamp(24px, 6vw, 32px); }
 }
 
 /* ===== Layout de la app: sidebar + topbar ===== */
