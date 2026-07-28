@@ -1,9 +1,10 @@
-import { Bot } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '@/lib/api';
+import { Bot, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { api, esCancelacion } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Field, Label, Select, Textarea } from '@/components/ui/Input';
 import { AiContextPanel } from './AiContextPanel';
 import { AiTestChat } from './AiTestChat';
@@ -35,7 +36,7 @@ const FIELDS: Array<{ key: keyof FormState; label: string; placeholder: string; 
     key: 'tone',
     label: 'Tono del agente',
     placeholder: 'Ej: Cercano y cálido, tuteando siempre al cliente.',
-    hint: 'Cómo querés que suene la IA al responder.',
+    hint: 'Cómo quieres que suene la IA al responder.',
   },
   {
     key: 'customInstructions',
@@ -77,8 +78,12 @@ export function AiAgentPage(): JSX.Element {
   const toast = useToast();
   const isOwner = user?.role === 'OWNER';
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  // Copia de lo último que confirmó el servidor, para saber si hay cambios sin
+  // guardar. Es un objeto de seis cadenas: compararlo entero sale gratis.
+  const [guardado, setGuardado] = useState<FormState>(EMPTY_FORM);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   // Se incrementa al guardar el perfil o cambiar la documentación, para que el
   // panel de contexto no siga mostrando un estado viejo.
@@ -86,33 +91,43 @@ export function AiAgentPage(): JSX.Element {
   // La lista es larga y no cambia: se calcula una vez, no en cada render.
   const [zonas] = useState(timeZoneOptions);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const profile = await api<BusinessProfile>('/business-profile');
-        if (cancelled) return;
-        setForm({
-          businessHours: profile.businessHours ?? '',
-          services: profile.services ?? '',
-          policies: profile.policies ?? '',
-          tone: profile.tone ?? '',
-          customInstructions: profile.customInstructions ?? '',
-          timeZone: profile.timeZone ?? '',
-        });
-        setUpdatedAt(profile.updatedAt);
-      } catch (e) {
-        toast.show(e instanceof Error ? e.message : 'No se pudo cargar la configuración del agente', 'error');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const cargar = useCallback(async (signal?: AbortSignal): Promise<void> => {
+    setLoading(true);
+    try {
+      const profile = await api<BusinessProfile>('/business-profile', { signal });
+      const cargado: FormState = {
+        businessHours: profile.businessHours ?? '',
+        services: profile.services ?? '',
+        policies: profile.policies ?? '',
+        tone: profile.tone ?? '',
+        customInstructions: profile.customInstructions ?? '',
+        timeZone: profile.timeZone ?? '',
+      };
+      setForm(cargado);
+      setGuardado(cargado);
+      setUpdatedAt(profile.updatedAt);
+      setError('');
+    } catch (e) {
+      if (esCancelacion(e)) return;
+      const mensaje = e instanceof Error ? e.message : 'No se pudo cargar la configuración del agente';
+      // Esto no es solo cuestión de avisar. Si la carga fallaba, el formulario
+      // se quedaba con los seis campos vacíos y el botón de guardar activo:
+      // bastaba con pulsarlo para mandar un PUT con todo en blanco y borrar la
+      // configuración real del negocio. Mientras no se sepa qué hay guardado,
+      // no se enseña el formulario.
+      setError(mensaje);
+      toast.show(mensaje, 'error');
+    } finally {
+      setLoading(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const control = new AbortController();
+    void cargar(control.signal);
+    return () => control.abort();
+  }, [cargar]);
 
   async function save(ev: FormEvent): Promise<void> {
     ev.preventDefault();
@@ -120,6 +135,7 @@ export function AiAgentPage(): JSX.Element {
     try {
       const profile = await api<BusinessProfile>('/business-profile', { method: 'PUT', body: form });
       setUpdatedAt(profile.updatedAt);
+      setGuardado(form);
       setContextKey((k) => k + 1);
       toast.show('Configuración del agente guardada');
     } catch (e) {
@@ -128,6 +144,9 @@ export function AiAgentPage(): JSX.Element {
       setSaving(false);
     }
   }
+
+  const hayCambios = FIELDS.some((f) => (form[f.key] ?? '') !== (guardado[f.key] ?? '')) ||
+    (form.timeZone ?? '') !== (guardado.timeZone ?? '');
 
   return (
     <div className="mx-auto max-w-[720px] p-6 sm:p-10">
@@ -142,6 +161,19 @@ export function AiAgentPage(): JSX.Element {
 
       {loading ? (
         <div className="kpi-card text-center text-sm text-ink-soft">Cargando…</div>
+      ) : error ? (
+        <div className="kpi-card">
+          <EmptyState
+            icon={TriangleAlert}
+            title="No se pudo cargar la configuración"
+            description={error}
+            action={
+              <Button size="sm" variant="ghost" onClick={() => void cargar()}>
+                Reintentar
+              </Button>
+            }
+          />
+        </div>
       ) : (
         <form onSubmit={save} className="kpi-card">
           <Field>
@@ -177,19 +209,38 @@ export function AiAgentPage(): JSX.Element {
                 rows={3}
                 disabled={!isOwner}
               />
-              <div className="mt-1.5 flex items-center justify-between text-[11.5px] text-ink-faint">
+              {/* El contador solo cuando empieza a importar. Estaba siempre, y
+                  «0/1000» debajo de un campo vacío no informa de nada: son seis
+                  cifras repetidas compitiendo con las seis pistas, que sí
+                  dicen algo. */}
+              <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px] text-ink-faint">
                 <span>{f.hint}</span>
-                <span>{(form[f.key] ?? '').length}/{MAX_LENGTH}</span>
+                {(form[f.key] ?? '').length > MAX_LENGTH * 0.8 && (
+                  <span className="tabular-nums flex-shrink-0 text-warn">
+                    {(form[f.key] ?? '').length}/{MAX_LENGTH}
+                  </span>
+                )}
               </div>
             </Field>
           ))}
 
           {isOwner && (
-            <div className="flex items-center justify-between gap-3 pt-1">
+            // El pie se queda pegado al fondo mientras se edita.
+            //
+            // El formulario mide unos ochocientos píxeles y debajo hay tres
+            // bloques más, así que en cuanto tocabas el primer campo el botón
+            // de guardar quedaba fuera de la pantalla y nada avisaba de que
+            // hubiera cambios pendientes: se podía cambiar el tono del agente,
+            // irse a otra sección y perderlo sin un solo aviso.
+            <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 rounded-b-lg border-t border-line bg-[var(--surface-glass)] px-5 py-3.5 backdrop-blur">
               <span className="text-[12px] text-ink-faint">
-                {updatedAt ? `Última actualización: ${new Date(updatedAt).toLocaleString('es')}` : 'Todavía sin configurar'}
+                {hayCambios
+                  ? 'Hay cambios sin guardar'
+                  : updatedAt
+                    ? `Guardado el ${new Date(updatedAt).toLocaleString('es')}`
+                    : 'Todavía sin configurar'}
               </span>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" disabled={saving || !hayCambios}>
                 {saving ? 'Guardando…' : 'Guardar'}
               </Button>
             </div>

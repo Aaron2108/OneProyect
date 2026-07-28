@@ -67,7 +67,7 @@ export function AiContextPanel({ reloadKey }: { reloadKey: number }): JSX.Elemen
       </div>
       <p className="mb-4 text-[13px] text-ink-soft">
         Esto es exactamente lo que el agente sabe antes de contestar. La documentación se busca
-        por similitud, así que podés probar con un mensaje de ejemplo para ver qué recupera.
+        por similitud, así que puedes probar con un mensaje de ejemplo para ver qué recupera.
       </p>
 
       <form

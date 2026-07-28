@@ -173,7 +173,7 @@ export function KnowledgeDocuments({
       {review && (
         <div className="mb-4 rounded-sm border border-line-strong bg-[var(--hover-bg)] p-4">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <b className="text-[13.5px]">Revisá lo que se extrajo de “{review.filename}”</b>
+            <b className="text-[13.5px]">Revisa lo que se extrajo de “{review.filename}”</b>
             {review.extractionMethod === 'VISION' && (
               <span className="inline-flex items-center gap-1 rounded-xs bg-warn-tint px-2 py-0.5 text-[11.5px] text-warn">
                 <ScanLine size={12} strokeWidth={2.25} /> Transcrito de un escaneo

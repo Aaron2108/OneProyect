@@ -117,7 +117,7 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
         )}
       </div>
       <p className="mb-4 text-[13px] text-ink-soft">
-        Conversá con tu agente como si fueras un cliente. Usa el mismo contexto y las mismas
+        Conversa con tu agente como si fueras un cliente. Usa el mismo contexto y las mismas
         herramientas que por WhatsApp, pero <b>no agenda nada de verdad</b>: si decide crear una
         cita, te muestra cuál habría creado.
         {!isOwner && ' Solo el propietario puede usarlo.'}
@@ -126,7 +126,9 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
       <div className="mb-3 max-h-[420px] overflow-y-auto rounded-sm bg-canvas p-3">
         {turns.length === 0 && !sending && (
           <p className="py-8 text-center text-[13px] text-ink-faint">
-            Escribí un mensaje para empezar. Ej: “¿tienen turno el viernes a la mañana?”
+            {/* «turno» es cita en el resto del panel: el ejemplo enseñaba una
+                palabra que la interfaz no usa en ningún otro sitio. */}
+            Escribe un mensaje para empezar. Ej: “¿tienen cita el viernes por la mañana?”
           </p>
         )}
         {/* Misma disposición que la bandeja: el cliente a la izquierda, la IA a
@@ -137,7 +139,7 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
             className={`mb-3 flex flex-col ${turn.role === 'user' ? 'items-start' : 'items-end'}`}
           >
             <span className="mx-1 mb-1 text-[10.5px] text-ink-disabled">
-              {turn.role === 'user' ? 'Cliente (vos)' : 'Agente IA'}
+              {turn.role === 'user' ? 'Cliente (tú)' : 'Agente IA'}
             </span>
             <div
               className={`bubble max-w-[85%] ${turn.role === 'user' ? 'bubble--in' : 'bubble--ai'}`}
@@ -161,7 +163,7 @@ export function AiTestChat({ isOwner }: { isOwner: boolean }): JSX.Element {
           <Input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Escribí como si fueras un cliente…"
+            placeholder="Escribe como si fueras un cliente"
             maxLength={2000}
             disabled={!isOwner || sending}
           />
