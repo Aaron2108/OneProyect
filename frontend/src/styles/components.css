@@ -403,18 +403,63 @@
   animation: shimmer 1.3s infinite;
 }
 
-/* ===== Bento (métricas) ===== */
-.bento-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+/* ===== Rejilla de las pantallas anchas (Métricas y Agente IA) =====
+   Las dos vivían en una columna de 720–1040px centrada, así que en un monitor
+   de 1920 se leían como un documento estrecho con dos franjas vacías a los
+   lados y un scroll largísimo. Estas clases son el armazón: un ancho de
+   trabajo grande y unas cuantas particiones que se deshacen en orden al
+   estrechar. Van en CSS y no en utilidades sueltas porque son decisiones de
+   composición que se repiten en las dos pantallas. */
+.page-wide {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: clamp(20px, 2.6vw, 40px);
 }
-.bento-grid > .span-2 { grid-column: span 2; }
-.bento-grid > .span-4 { grid-column: span 4; }
-@media (max-width: 860px) {
-  .bento-grid { grid-template-columns: repeat(2, 1fr); }
-  .bento-grid > .span-2, .bento-grid > .span-4 { grid-column: span 2; }
+
+/* Aire entre secciones: la separación es del contenedor, no de cada tarjeta,
+   así ninguna sección puede olvidarse de su propio margen. */
+.stack-lg { display: flex; flex-direction: column; gap: clamp(16px, 1.6vw, 24px); }
+
+/* Cuatro cifras en fila. A 1180 pasan a dos, y a 620 a una. */
+.grid-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(12px, 1.2vw, 16px); }
+
+/* Principal + lateral (gráfico | resumen, estado | acciones). `minmax(0,…)`
+   en las dos: sin él, un hijo con contenido ancho —una tabla, un `pre`— se
+   niega a encogerse y desborda la rejilla en vez de recortarse. */
+.grid-2-1 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: clamp(16px, 1.6vw, 24px); align-items: start; }
+
+/* Dos columnas iguales (las dos configuraciones del agente). */
+.grid-1-1 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(16px, 1.6vw, 24px); align-items: start; }
+
+/* Tarjetas de documento: tantas como quepan a partir de 260px. */
+.grid-docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+
+@media (max-width: 1180px) {
+  .grid-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-2-1 { grid-template-columns: minmax(0, 1fr); }
 }
+@media (max-width: 900px) {
+  .grid-1-1 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 620px) {
+  .grid-kpis { grid-template-columns: minmax(0, 1fr); }
+  .grid-docs { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Cabecera de sección: un rótulo pequeño en versalitas y su título. Repetido
+   en las dos pantallas, es lo que hace que se lean como secciones y no como
+   una pila de tarjetas sueltas. */
+.sec-head { margin-bottom: 14px; }
+.sec-head__eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-disabled);
+}
+.sec-head__title { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
 
 .kpi-card {
   border-radius: var(--radius-lg);
