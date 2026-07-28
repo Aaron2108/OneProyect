@@ -1,5 +1,5 @@
 import { useAutoAnimate } from '@formkit/auto-animate/react';
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -27,6 +27,7 @@ export function CalendarPage(): JSX.Element {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Appointment | null>(null);
+  const [error, setError] = useState('');
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
 
   async function load(): Promise<void> {
@@ -37,8 +38,15 @@ export function CalendarPage(): JSX.Element {
     try {
       const res = await api<Appointment[]>(`/appointments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
       setAppointments(res);
+      setError('');
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : 'No se pudieron cargar las citas', 'error');
+      const mensaje = e instanceof Error ? e.message : 'No se pudieron cargar las citas';
+      // Un mes que no se pudo cargar se veía exactamente igual que un mes sin
+      // ninguna cita: la rejilla en blanco y nada más. El único aviso era un
+      // toast, que se va solo, y cambiar de mes lo repetía sin dejar rastro.
+      setError(mensaje);
+      setAppointments([]);
+      toast.show(mensaje, 'error');
     }
   }
 
@@ -116,6 +124,23 @@ export function CalendarPage(): JSX.Element {
             </button>
           </div>
 
+          {error && (
+            <div
+              role="alert"
+              className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-sm bg-danger-tint px-4 py-3 text-[13.5px] text-danger"
+            >
+              <TriangleAlert size={15} strokeWidth={2} className="flex-shrink-0" />
+              <span className="min-w-0 flex-1">{error}</span>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="flex-shrink-0 font-semibold underline underline-offset-2"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
           <MonthGrid month={month} appointments={appointments} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
         </div>
 
@@ -129,7 +154,15 @@ export function CalendarPage(): JSX.Element {
             </div>
 
             {dayAppointments.length === 0 ? (
-              <p className="py-4 text-center text-[13px] text-ink-disabled">Sin citas este día.</p>
+              // Era una frase y un punto final. El botón de agregar existía,
+              // pero como un «+» de dieciséis píxeles en la esquina de arriba,
+              // lejos de donde se lee que no hay nada.
+              <div className="py-4 text-center">
+                <p className="mb-3 text-[13px] text-ink-disabled">Sin citas este día.</p>
+                <Button size="sm" variant="ghost" onClick={openCreate}>
+                  <Plus size={14} strokeWidth={2.25} /> Agendar una
+                </Button>
+              </div>
             ) : (
               <div ref={listRef} className="flex flex-col gap-2">
                 {dayAppointments.map((a) => (

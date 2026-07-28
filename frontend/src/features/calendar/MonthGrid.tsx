@@ -11,6 +11,9 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
   COMPLETED: 'bg-[var(--muted-ink)]',
 };
 
+/** Orden fijo de los puntos, para que un día no cambie de aspecto al recargar. */
+const ORDEN_ESTADO: AppointmentStatus[] = ['SCHEDULED', 'CONFIRMED', 'CANCELLED', 'COMPLETED'];
+
 export function MonthGrid({
   month,
   appointments,
@@ -52,6 +55,16 @@ export function MonthGrid({
           const key = toDateKey(day.date);
           const dayAppointments = byDay.get(key) ?? [];
           const isSelected = isSameDay(day.date, selectedDate);
+          // Un punto por estado presente ese día, no uno por cita.
+          //
+          // Antes se pintaba un punto por cita con un tope de cinco, mientras
+          // el rótulo de debajo decía el total: un día con siete citas
+          // enseñaba cinco puntos y «7 citas». Los puntos contaban mal y el
+          // rótulo contaba bien, dos veces lo mismo y una de ellas falsa. Lo
+          // que un punto puede decir de un vistazo es de qué tipo son —si hay
+          // algo cancelado, si queda algo por confirmar—; el cuántas ya lo
+          // dice el rótulo.
+          const estados = ORDEN_ESTADO.filter((e) => dayAppointments.some((a) => a.status === e));
           return (
             <button
               key={key}
@@ -59,6 +72,12 @@ export function MonthGrid({
               onClick={() => onSelectDate(day.date)}
               aria-current={day.isToday ? 'date' : undefined}
               aria-pressed={isSelected}
+              // El contenido visible se lee como «27 3 citas», sin decir de qué
+              // mes ni qué día de la semana. Con el mes a la vista sobra para
+              // quien ve; para quien escucha, no.
+              aria-label={`${day.date.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}${
+                dayAppointments.length ? `, ${dayAppointments.length} cita${dayAppointments.length > 1 ? 's' : ''}` : ', sin citas'
+              }`}
               className={clsx(
                 'flex min-h-[78px] flex-col items-start gap-1 border-b border-r border-line p-1.5 text-left transition-colors last:border-r-0 hover:bg-[var(--row-hover)] sm:min-h-[92px] sm:p-2',
                 !day.inCurrentMonth && 'opacity-40',
@@ -68,7 +87,11 @@ export function MonthGrid({
               <span
                 className={clsx(
                   'grid h-6 w-6 place-items-center rounded-full text-[12.5px] font-semibold',
-                  day.isToday && 'bg-brand text-white',
+                  // `text-white` sobre el verde de marca da un contraste de
+                  // 1,6:1 — el número de hoy era prácticamente invisible. Para
+                  // esto existe `--on-brand`, que es el token de «texto encima
+                  // del verde» y sube a 11:1.
+                  day.isToday && 'bg-brand text-brand-on',
                 )}
               >
                 {day.date.getDate()}
@@ -76,8 +99,8 @@ export function MonthGrid({
               {dayAppointments.length > 0 && (
                 <>
                   <div className="flex flex-wrap gap-0.5" aria-hidden="true">
-                    {dayAppointments.slice(0, 5).map((a) => (
-                      <span key={a.id} className={clsx('h-1.5 w-1.5 rounded-full', STATUS_DOT[a.status])} />
+                    {estados.map((estado) => (
+                      <span key={estado} className={clsx('h-1.5 w-1.5 rounded-full', STATUS_DOT[estado])} />
                     ))}
                   </div>
                   <span className="text-[10.5px] font-semibold text-ink-soft">
