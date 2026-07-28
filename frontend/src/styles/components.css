@@ -259,6 +259,7 @@
      hace que el panel entero parezca saltar. */
   --rail-sangria: 13px;
 
+  position: relative;
   width: var(--rail-ancho);
   flex-shrink: 0;
   display: flex;
@@ -266,26 +267,22 @@
   background: var(--sidebar-bg);
   border-right: 1px solid var(--line);
   padding: 18px 16px;
-  /* Sin `overflow: hidden`: los tooltips del estado plegado tienen que poder
-     salirse de los 76px. Lo que recorta es cada fila por su cuenta. */
+  /* Sin `overflow: hidden`: los tooltips y el tirador del estado plegado tienen
+     que poder salirse de los 76px. Lo que recorta es cada fila por su cuenta. */
   transition: width 250ms var(--ease);
 }
 .rail.is-plegado { --rail-ancho: 76px; }
 
 .rail__cabecera {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   height: 32px;
-  margin-bottom: 22px;
+  /* Aire entre la marca y la primera sección: son dos cosas distintas y sin
+     separación se leían como una lista de ocho elementos. */
+  margin-bottom: 28px;
   overflow: hidden;
-  transition: height 250ms var(--ease);
 }
-/* Plegada, el botón no cabe al lado del glifo y baja debajo. Como está
-   posicionado, el cambio de sitio se puede animar; con dos disposiciones
-   distintas de flex saltaría de golpe. */
-.rail.is-plegado .rail__cabecera { height: 78px; }
 .rail__glifo {
   width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
   background: linear-gradient(150deg, var(--brand), var(--ai));
@@ -304,18 +301,57 @@
   transition: opacity 140ms var(--ease);
 }
 .rail.is-plegado .rail__nombre { opacity: 0; }
+/* Desplegado: un control más de la cabecera, a la derecha del nombre y a su
+   misma altura (18px de padding + 32 de alto, centro en 34). */
 .rail__alternar {
   position: absolute;
-  top: 3px; right: 0;
+  top: 20px; right: 16px;
+  z-index: 30;
+  display: grid; place-items: center;
+  width: 28px; height: 28px;
+  border-radius: var(--radius-xs);
+  color: var(--ink-faint);
+  transition: right 220ms var(--ease), opacity 220ms var(--ease), transform 220ms var(--ease),
+    background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.rail__alternar:hover { background: var(--hover-bg); color: var(--ink); }
+
+/* Plegado: un tirador a horcajadas sobre el borde derecho, que solo aparece al
+   acercarse al carril. Ahí ya no hay cabecera donde meterlo -solo caben 44px
+   de iconos- y un botón permanente en esa columna competiría con las siete
+   secciones, que es lo único que debería mirarse.
+   `:hover` sube por el DOM, no por la geometría: el tirador cuenta como parte
+   del carril aunque la mitad quede fuera, así que no se desvanece al ir a
+   pulsarlo. */
+.rail.is-plegado .rail__alternar {
+  right: -14px;
+  opacity: 0;
+  transform: translateX(-6px) scale(0.9);
+  pointer-events: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-1);
+  color: var(--ink-soft);
+}
+.rail.is-plegado:hover .rail__alternar,
+.rail.is-plegado .rail__alternar:focus-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.rail.is-plegado .rail__alternar:hover { background: var(--surface-raised); color: var(--brand); }
+
+/* Cerrar el cajón de móvil. No es el mismo control: aquel pliega, este cierra. */
+.rail__cerrar {
+  position: absolute;
+  top: 19px; right: 16px;
   display: grid; place-items: center;
   width: 30px; height: 30px;
   border-radius: var(--radius-xs);
-  color: var(--ink-faint);
-  transition: top 250ms var(--ease), right 250ms var(--ease),
-    background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+  color: var(--ink-soft);
+  transition: background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
 }
-.rail.is-plegado .rail__alternar { top: 48px; right: 7px; }
-.rail__alternar:hover { background: var(--hover-bg); color: var(--ink); }
+.rail__cerrar:hover { background: var(--hover-bg); color: var(--ink); }
 
 .rail__nav {
   position: relative;

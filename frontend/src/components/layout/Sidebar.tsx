@@ -1,5 +1,5 @@
 import * as RadixDialog from '@radix-ui/react-dialog';
-import { PanelLeft, PanelLeftClose, X } from 'lucide-react';
+import { ChevronRight, PanelLeftClose, X } from 'lucide-react';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
@@ -147,8 +147,14 @@ function Pie({ onAbrirPerfil }: { onAbrirPerfil: () => void }): JSX.Element {
   );
 }
 
-/** Cabecera con la marca y el botón de plegar. */
-function Cabecera({
+/**
+ * El control de plegado.
+ *
+ * Cuelga del carril y no de la cabecera, por dos motivos: plegado tiene que
+ * poder asomar por fuera de los 76px, y la cabecera recorta lo que le sobra
+ * para que el nombre desaparezca al encogerse.
+ */
+function Alternar({
   plegado,
   onAlternar,
 }: {
@@ -156,19 +162,28 @@ function Cabecera({
   onAlternar: () => void;
 }): JSX.Element {
   return (
+    <button
+      type="button"
+      className="rail__alternar"
+      onClick={onAlternar}
+      aria-expanded={!plegado}
+      aria-label={plegado ? 'Desplegar la navegación' : 'Plegar la navegación'}
+      title={`${plegado ? 'Desplegar' : 'Plegar'} la navegación (Ctrl + B)`}
+    >
+      {/* Dos formas para dos papeles. Desplegada es un control más de la
+          cabecera y lleva el icono del propio panel; plegada es un tirador
+          sobre el borde, y un tirador enseña hacia dónde empuja. */}
+      {plegado ? <ChevronRight size={15} strokeWidth={2.5} /> : <PanelLeftClose size={16} strokeWidth={2} />}
+    </button>
+  );
+}
+
+/** Marca del carril: glifo y nombre. El nombre se recorta al plegar. */
+function Cabecera(): JSX.Element {
+  return (
     <div className="rail__cabecera">
       <span className="rail__glifo">W</span>
       <span className="rail__nombre">WhatsFlow&nbsp;AI</span>
-      <button
-        type="button"
-        className="rail__alternar"
-        onClick={onAlternar}
-        aria-expanded={!plegado}
-        aria-label={plegado ? 'Desplegar la navegación' : 'Plegar la navegación'}
-        title={`${plegado ? 'Desplegar' : 'Plegar'} la navegación (Ctrl + B)`}
-      >
-        {plegado ? <PanelLeft size={16} strokeWidth={2} /> : <PanelLeftClose size={16} strokeWidth={2} />}
-      </button>
     </div>
   );
 }
@@ -216,18 +231,14 @@ export function Sidebar({
           {/* Radix se encarga del foco atrapado, Esc y el clic fuera. */}
           <RadixDialog.Content className="rail rail--cajon">
             <RadixDialog.Title className="sr-only">Navegación</RadixDialog.Title>
-            <div className="rail__cabecera">
-              <span className="rail__glifo">W</span>
-              <span className="rail__nombre">WhatsFlow&nbsp;AI</span>
-              {/* Esc y el clic fuera ya cierran, pero ninguno de los dos se ve
-                  en un teléfono: sin botón, la única salida visible es
-                  adivinarla. */}
-              <RadixDialog.Close asChild>
-                <button type="button" className="rail__alternar" aria-label="Cerrar la navegación">
-                  <X size={17} strokeWidth={2} />
-                </button>
-              </RadixDialog.Close>
-            </div>
+            <Cabecera />
+            {/* Esc y el clic fuera ya cierran, pero ninguno de los dos se ve en
+                un teléfono: sin botón, la única salida visible es adivinarla. */}
+            <RadixDialog.Close asChild>
+              <button type="button" className="rail__cerrar" aria-label="Cerrar la navegación">
+                <X size={17} strokeWidth={2} />
+              </button>
+            </RadixDialog.Close>
             {/* El cajón se cierra al elegir sección: dejarlo abierto tapando la
                 pantalla a la que se acaba de llegar obliga a un gesto de más. */}
             <Navegacion onNavegar={() => onCajon(false)} />
@@ -240,7 +251,10 @@ export function Sidebar({
 
   return (
     <aside className={'rail'.concat(plegado ? ' is-plegado' : '')}>
-      <Cabecera plegado={plegado} onAlternar={() => setPlegado(!plegado)} />
+      <Cabecera />
+      {/* Antes de la navegación en el DOM: al tabular desde el principio de la
+          página, el control del carril viene antes que las secciones. */}
+      <Alternar plegado={plegado} onAlternar={() => setPlegado(!plegado)} />
       <Navegacion />
       <Pie onAbrirPerfil={onAbrirPerfil} />
     </aside>
