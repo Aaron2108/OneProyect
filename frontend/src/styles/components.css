@@ -551,6 +551,40 @@
 .wf-select__viewport::-webkit-scrollbar-thumb { background: var(--select-scroll-thumb); }
 .wf-select__viewport::-webkit-scrollbar-thumb:hover { background: var(--select-scroll-thumb-hover); }
 
+/* ===== Celda editable del catálogo ===== */
+/* Editar el precio y el stock sobre la tabla es lo característico de esa
+   pantalla, y era justo lo que no se veía: la celda era un rectángulo un poco
+   más oscuro que la tarjeta, sin borde, sin cambio al pasar por encima y sin
+   aro al enfocar. Nada decía que se pudiera escribir ahí. Ahora está en reposo
+   (para que la tabla se siga leyendo como una tabla y no como un formulario),
+   se levanta al acercar el puntero y al enfocar toma el mismo aro verde que
+   cualquier otro campo del panel. */
+.wf-celda {
+  width: 100%;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  transition: background-color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+.wf-celda:hover { background: var(--input-bg); border-color: var(--line-strong); }
+.wf-celda:focus {
+  outline: none;
+  color: var(--ink);
+  background: var(--input-bg);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-tint);
+}
+/* Existencias agotadas: es la celda que hace que la IA deje de prometer algo
+   que no hay, así que se ve en rojo incluso en reposo. */
+.wf-celda--agotado { color: var(--danger); }
+
 /* ===== Scrollbar discreto ===== */
 * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }

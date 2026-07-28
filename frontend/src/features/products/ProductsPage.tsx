@@ -1,4 +1,4 @@
-import { Package, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Package, Plus, Search, Trash2, TriangleAlert, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, uploadFile } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -80,9 +80,11 @@ export function ProductsPage(): JSX.Element {
   const [items, setItems] = useState<Product[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [nuevo, setNuevo] = useState({ name: '', sku: '', price: '', stock: '' });
   const fileRef = useRef<HTMLInputElement>(null);
+  const yaCargoUnaVez = useRef(false);
 
   const load = useCallback(async (q?: string): Promise<void> => {
     setLoading(true);
@@ -90,18 +92,37 @@ export function ProductsPage(): JSX.Element {
       const search = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
       const res = await api<{ items: Product[] }>(`/products${search}`);
       setItems(res.items);
+      setError('');
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : 'No se pudo cargar el catálogo', 'error');
+      const mensaje = e instanceof Error ? e.message : 'No se pudo cargar el catálogo';
+      // Sin esto, un catálogo que no se pudo cargar decía «Sin productos
+      // todavía» — y en esta pantalla eso significa además que la IA se ha
+      // quedado sin catálogo, que es una conclusión bastante peor que la real.
+      setError(mensaje);
+      toast.show(mensaje, 'error');
     } finally {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Busca al teclear, como el resto de listas del panel.
+  //
+  // Era la única que exigía pulsar un botón, y esa diferencia arrastraba un
+  // fallo: `load(query)` se llama también al crear, al importar y al fallar el
+  // guardado de una celda, y usa siempre lo que hay escrito en ese momento. Si
+  // habías tecleado algo sin buscar, cualquiera de esas acciones aplicaba el
+  // filtro de golpe y la tabla se recortaba sin que nadie lo hubiera pedido.
+  // Buscando al teclear, lo escrito y lo aplicado no se pueden separar.
   useEffect(() => {
-    void load(query);
+    const espera = yaCargoUnaVez.current ? 300 : 0;
+    const id = setTimeout(() => {
+      yaCargoUnaVez.current = true;
+      void load(query);
+    }, espera);
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [query]);
 
   async function crear(ev: FormEvent): Promise<void> {
     ev.preventDefault();
@@ -189,57 +210,56 @@ export function ProductsPage(): JSX.Element {
 
   return (
     <div className="mx-auto max-w-[980px] p-6 sm:p-10">
-      <h2 className="mb-1 flex items-center gap-2 font-display text-2xl font-bold tracking-tight">
-        <Package size={22} strokeWidth={2} className="text-brand" /> Productos
-      </h2>
-      <p className="mb-6 text-sm text-ink-soft">
-        Lo que la IA consulta cuando un cliente pregunta por disponibilidad o precio. Lo lee en
-        vivo de aquí, así que lo que cambies se aplica al instante.
-        {!isOwner && ' Solo el propietario puede editarlo.'}
-      </p>
+      {/* Importar no es un filtro y estaba en la misma fila que el buscador.
+          Junto al título, que es donde vive lo que se le hace al catálogo
+          entero, igual que en Contactos. */}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="mb-1 flex items-center gap-2 font-display text-2xl font-bold tracking-tight">
+            <Package size={22} strokeWidth={2} className="text-brand" /> Productos
+          </h2>
+          <p className="m-0 max-w-[62ch] text-sm text-ink-soft">
+            Lo que la IA consulta cuando un cliente pregunta por disponibilidad o precio. Lo lee en
+            vivo de aquí, así que lo que cambies se aplica al instante.
+            {!isOwner && ' Solo el propietario puede editarlo.'}
+          </p>
+        </div>
+        {isOwner && (
+          <div className="flex-shrink-0">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void importar(file);
+                e.target.value = '';
+              }}
+            />
+            <Button size="sm" variant="sec" type="button" onClick={() => fileRef.current?.click()}>
+              <Upload size={15} strokeWidth={2.25} /> Importar CSV
+            </Button>
+          </div>
+        )}
+      </div>
 
       <div className="kpi-card mb-6">
-        <form
-          className="mb-4 flex flex-wrap gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void load(query);
-          }}
-        >
-          <div className="min-w-[220px] flex-1">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por nombre, código o descripción…"
-            />
-          </div>
-          <Button size="sm" variant="sec" type="submit" disabled={loading}>
-            <Search size={15} strokeWidth={2.25} /> Buscar
-          </Button>
-          {isOwner && (
-            <>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void importar(file);
-                  e.target.value = '';
-                }}
-              />
-              <Button
-                size="sm"
-                variant="sec"
-                type="button"
-                onClick={() => fileRef.current?.click()}
-              >
-                <Upload size={15} strokeWidth={2.25} /> Importar CSV
-              </Button>
-            </>
-          )}
-        </form>
+        <div className="relative mb-4">
+          <Search
+            size={16}
+            strokeWidth={2}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-disabled"
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por nombre, código o descripción"
+            aria-label="Buscar productos"
+            className="pl-10"
+          />
+        </div>
 
         {isOwner && (
           <form className="flex flex-wrap items-end gap-2 border-t border-[var(--line)] pt-4" onSubmit={crear}>
@@ -291,26 +311,45 @@ export function ProductsPage(): JSX.Element {
 
       {loading && items.length === 0 ? (
         <div className="kpi-card text-center text-sm text-ink-soft">Cargando…</div>
+      ) : error && items.length === 0 ? (
+        <EmptyState
+          icon={TriangleAlert}
+          title="No se pudo cargar el catálogo"
+          description={error}
+          action={
+            <Button size="sm" variant="ghost" onClick={() => void load(query)}>
+              Reintentar
+            </Button>
+          }
+        />
       ) : items.length === 0 ? (
         <EmptyState
           icon={Package}
-          title="Sin productos todavía"
+          title={query ? 'Sin resultados' : 'Sin productos todavía'}
           description={
-            isOwner
-              ? 'Añadí uno a mano o importá tu catálogo desde un CSV con las columnas nombre, sku, precio y stock.'
-              : 'El propietario todavía no cargó el catálogo.'
+            // El resto del panel habla de tú («añade», «escribe», «gestiona»);
+            // aquí se colaba un voseo, «añadí… importá…», y era la única
+            // pantalla donde el producto cambiaba de acento.
+            query
+              ? `No encontramos nada para “${query}”.`
+              : isOwner
+                ? 'Añade uno a mano o importa tu catálogo desde un CSV con las columnas nombre, sku, precio y stock.'
+                : 'El propietario todavía no ha cargado el catálogo.'
           }
         />
       ) : (
         <div className="kpi-card overflow-x-auto">
           <table className="w-full min-w-[620px] text-[13px]">
             <thead>
+              {/* `scope="col"`, como la tabla de Métricas: sin él el lector de
+                  pantalla lee las celdas sueltas, sin decir de qué columna es
+                  cada número. */}
               <tr className="border-b border-[var(--line)] text-left text-[11.5px] uppercase tracking-wide text-ink-faint">
-                <th className="pb-2 font-semibold">Producto</th>
-                <th className="pb-2 font-semibold">Código</th>
-                <th className="pb-2 font-semibold">Precio</th>
-                <th className="pb-2 font-semibold">Stock</th>
-                {isOwner && <th className="pb-2" />}
+                <th scope="col" className="pb-2 font-semibold">Producto</th>
+                <th scope="col" className="pb-2 font-semibold">Código</th>
+                <th scope="col" className="pb-2 font-semibold">Precio</th>
+                <th scope="col" className="pb-2 font-semibold">Stock</th>
+                {isOwner && <th scope="col" className="pb-2"><span className="sr-only">Acciones</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -326,7 +365,7 @@ export function ProductsPage(): JSX.Element {
                   <td className="py-2.5 pr-3">
                     {isOwner ? (
                       <CeldaEditable
-                        className="w-[92px] rounded-sm bg-canvas px-2 py-1 text-[13px] text-ink-soft"
+                        className="wf-celda max-w-[96px]"
                         valorServidor={centsToInput(p.priceCents)}
                         inputMode="decimal"
                         etiqueta={`Precio de ${p.name}`}
@@ -347,9 +386,7 @@ export function ProductsPage(): JSX.Element {
                   <td className="py-2.5 pr-3">
                     {isOwner ? (
                       <CeldaEditable
-                        className={`w-[70px] rounded-sm bg-canvas px-2 py-1 text-[13px] ${
-                          p.stock === 0 ? 'text-danger' : 'text-ink-soft'
-                        }`}
+                        className={`wf-celda max-w-[74px] ${p.stock === 0 ? 'wf-celda--agotado' : ''}`}
                         valorServidor={String(p.stock)}
                         inputMode="numeric"
                         etiqueta={`Stock de ${p.name}`}
@@ -371,7 +408,15 @@ export function ProductsPage(): JSX.Element {
                   </td>
                   {isOwner && (
                     <td className="py-2.5 text-right">
-                      <Button size="sm" variant="sec" onClick={() => void borrar(p)}>
+                      {/* Sin `aria-label` era un botón sin nombre: un lector de
+                          pantalla anunciaba «botón» a secas, cuatro veces
+                          seguidas, y ninguna decía qué se iba a borrar. */}
+                      <Button
+                        size="sm"
+                        variant="sec"
+                        aria-label={`Eliminar ${p.name}`}
+                        onClick={() => void borrar(p)}
+                      >
                         <Trash2 size={14} strokeWidth={2.25} />
                       </Button>
                     </td>
