@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Send,
   Sparkles,
+  Timer,
   TriangleAlert,
   Users,
 } from 'lucide-react';
@@ -34,6 +35,24 @@ const PURPOSE_LABELS: Record<string, string> = {
 };
 
 const DIA_MS = 86400000;
+
+/**
+ * Segundos en algo legible: «8 s», «3 min», «2 h 10 min».
+ *
+ * `null` no se convierte en «0 s»: significa que no hubo ninguna pareja
+ * entrante→saliente en el período, que es una cosa muy distinta de contestar al
+ * instante. Y por debajo del segundo se dice así en vez de redondear a cero,
+ * que es lo que pasa cuando la IA responde en milisegundos.
+ */
+function formatearEspera(segundos: number | null): string | null {
+  if (segundos === null) return null;
+  if (segundos < 1) return 'menos de 1 s';
+  if (segundos < 60) return `${Math.round(segundos)} s`;
+  if (segundos < 3600) return `${Math.round(segundos / 60)} min`;
+  const horas = Math.floor(segundos / 3600);
+  const minutos = Math.round((segundos % 3600) / 60);
+  return minutos === 0 ? `${horas} h` : `${horas} h ${minutos} min`;
+}
 
 /**
  * Variación frente al mismo número en el período anterior.
@@ -419,6 +438,47 @@ export function MetricsPage(): JSX.Element {
                   value={data.messages.fromHuman.toLocaleString('es')}
                   color="var(--brand)"
                 />
+              </div>
+
+              {/* Tiempo de respuesta.
+                  Es la mediana y se dice que lo es: la media la arrastra una
+                  sola respuesta nocturna y dejaría de describir a ninguna de
+                  las respuestas reales. Si no hubo ninguna pareja
+                  entrante→saliente en el período no se enseña nada, en vez de
+                  un cero que se leería como «se contesta al instante». */}
+              <div className="pt-5">
+                <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-disabled">
+                  <Timer size={13} strokeWidth={2.25} /> Tiempo de respuesta (mediana)
+                </div>
+                {data.responseTime.samples === 0 ? (
+                  <p className="py-2 text-[12.5px] text-ink-faint">
+                    Todavía no hay ningún mensaje contestado en este período.
+                  </p>
+                ) : (
+                  <>
+                    <Linea label="En general" value={formatearEspera(data.responseTime.medianSeconds) ?? '—'} />
+                    {data.responseTime.aiSamples > 0 && (
+                      <Linea
+                        label="Cuando contesta la IA"
+                        value={formatearEspera(data.responseTime.aiMedianSeconds) ?? '—'}
+                        color="var(--ai)"
+                      />
+                    )}
+                    {data.responseTime.humanSamples > 0 && (
+                      <Linea
+                        label="Cuando contesta una persona"
+                        value={formatearEspera(data.responseTime.humanMedianSeconds) ?? '—'}
+                        color="var(--brand)"
+                      />
+                    )}
+                    <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+                      Sobre {data.responseTime.samples.toLocaleString('es')} respuesta
+                      {data.responseTime.samples === 1 ? '' : 's'}. La media es{' '}
+                      {formatearEspera(data.responseTime.averageSeconds) ?? '—'}, más alta porque una
+                      sola respuesta tardía la arrastra entera.
+                    </p>
+                  </>
+                )}
               </div>
             </section>
           </div>

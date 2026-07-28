@@ -154,6 +154,25 @@ export interface MetricsOverview {
   appointments: { total: number; scheduled: number; confirmed: number; cancelled: number; completed: number };
   reminders: { total: number; pending: number; sent: number; cancelled: number };
   automationRate: number;
+  /**
+   * Cuánto se tarda en contestar a un cliente, medido por turnos (el hueco
+   * entre un mensaje entrante y el saliente que va justo detrás).
+   *
+   * La cifra que se enseña es la MEDIANA, no la media: una sola respuesta
+   * nocturna de diez horas arrastra la media de todo el período y deja de
+   * describir a ninguna de las respuestas reales. Todo puede ser `null` —sin
+   * pareja entrante→saliente en el período no hay nada que medir, y un 0 se
+   * leería como "se contesta al instante".
+   */
+  responseTime: {
+    samples: number;
+    medianSeconds: number | null;
+    averageSeconds: number | null;
+    aiSamples: number;
+    aiMedianSeconds: number | null;
+    humanSamples: number;
+    humanMedianSeconds: number | null;
+  };
   activity: ActivityPoint[];
 }
 
@@ -192,6 +211,10 @@ export interface AiContextPreview {
   tokensEstimated: boolean;
   knowledgeChunksUsed: number;
   documents: Array<{ filename: string; charCount: number }>;
+  /** Modelo que atiende al agente, p. ej. `claude-haiku-4-5`. */
+  model: string;
+  /** `anthropic` | `nvidia` | `mock`. En `mock` las respuestas son simuladas. */
+  provider: string;
 }
 
 /** Producto del catálogo. El precio va en céntimos: en dinero, el float redondea mal. */

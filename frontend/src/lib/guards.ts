@@ -46,6 +46,7 @@ export function esMetricsOverview(x: unknown): x is MetricsOverview {
     if (!esObjeto(x[bloque])) return false;
   }
   if (typeof x.automationRate !== 'number') return false;
+  if (!esObjeto(x.responseTime)) return false;
   if (!Array.isArray(x.activity)) return false;
   return true;
 }

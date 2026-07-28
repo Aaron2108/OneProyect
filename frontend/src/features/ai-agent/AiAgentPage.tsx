@@ -4,6 +4,7 @@ import {
   CircleCheck,
   CircleDashed,
   Clock,
+  Cpu,
   FileText,
   Globe,
   Play,
@@ -323,6 +324,23 @@ export function AiAgentPage(): JSX.Element {
                       ? 'ok'
                       : 'neutro'
                 }
+              />
+              {/* El modelo, que hasta ahora la pantalla no podía decir porque
+                  la API no lo exponía. Va con aviso cuando el proveedor activo
+                  es `mock`: ahí las respuestas del chat de prueba son
+                  simuladas, y darlas por buenas creyendo que las escribió el
+                  modelo es el malentendido caro de esta pantalla. */}
+              <FilaEstado
+                icon={Cpu}
+                label="Modelo"
+                value={
+                  resumenContexto
+                    ? resumenContexto.proveedor === 'mock'
+                      ? 'Simulado (modo de prueba)'
+                      : resumenContexto.modelo
+                    : '—'
+                }
+                tono={resumenContexto?.proveedor === 'mock' ? 'aviso' : 'neutro'}
               />
               <FilaEstado
                 icon={Braces}

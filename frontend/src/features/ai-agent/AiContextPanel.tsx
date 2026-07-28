@@ -13,6 +13,10 @@ export interface ResumenContexto {
   aproximado: boolean;
   fragmentos: number;
   documentos: number;
+  /** Modelo que atiende al agente. */
+  modelo: string;
+  /** `anthropic` | `nvidia` | `mock`. En `mock` las respuestas son simuladas. */
+  proveedor: string;
 }
 
 /**
@@ -72,6 +76,8 @@ export function AiContextPanel({
       aproximado: context.tokensEstimated,
       fragmentos: context.knowledgeChunksUsed,
       documentos: context.documents.length,
+      modelo: context.model,
+      proveedor: context.provider,
     });
   }, [context, onResumen]);
 
