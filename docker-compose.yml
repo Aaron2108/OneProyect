@@ -34,6 +34,57 @@ services:
       timeout: 5s
       retries: 5
 
+  # Puente de WhatsApp del MVP (ver docs/DECISIONS.md, 2026-08-07). Levanta una
+  # sesión por negocio contra un WhatsApp normal, vinculada escaneando un QR.
+  # Es infraestructura compartida y temporal: cuando Meta apruebe el número, se
+  # cambia WHATSAPP_PROVIDER=meta en el backend y este servicio se retira.
+  evolution:
+    image: evoapicloud/evolution-api:latest
+    container_name: whatsflow-evolution
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SERVER_URL: http://localhost:8080
+      # Clave global del servidor. Debe coincidir con EVOLUTION_API_KEY del
+      # backend. Para desarrollo local sirve así; en despliegue real va por
+      # secreto, nunca en este archivo.
+      AUTHENTICATION_API_KEY: whatsflow_evolution_dev
+      # Base propia dentro del mismo Postgres, no del esquema de WhatsFlow: son
+      # datos operativos del proveedor y desaparecen con él en la migración.
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://whatsflow:whatsflow_dev@postgres:5432/evolution
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      # El histórico de la conversación es de WhatsFlow, cifrado y con su
+      # aislamiento por tenant. Que el proveedor guarde su propia copia en claro
+      # duplicaría datos personales fuera de nuestro control (SECURITY.md §11).
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      CACHE_REDIS_ENABLED: "true"
+      # db 6: el mismo Redis que BullMQ pero en otra base, para que un FLUSHDB
+      # de un lado no se lleve las colas del otro.
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_LOCAL_ENABLED: "false"
+    volumes:
+      - evolution_instances:/evolution/instances
+    # Para que el contenedor pueda entregar los webhooks al backend, que corre
+    # en la máquina anfitriona: BACKEND_PUBLIC_URL=http://host.docker.internal:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   postgres_data:
   redis_data:
+  evolution_instances:

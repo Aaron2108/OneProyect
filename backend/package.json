@@ -35,8 +35,10 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-socket.io": "^11.1.28",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/throttler": "^6.5.0",
+    "@nestjs/websockets": "^11.1.28",
     "@prisma/client": "^6.2.0",
     "bullmq": "^5.34.0",
     "class-transformer": "^0.5.1",
@@ -44,7 +46,8 @@
     "mammoth": "^1.12.0",
     "pdf-parse": "^2.4.5",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",

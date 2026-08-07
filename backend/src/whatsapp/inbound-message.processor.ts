@@ -2,29 +2,36 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import {
   ConsentStatus,
+  Contact,
+  Conversation,
   ConversationHandler,
   ConversationStatus,
   MessageDirection,
   MessageSender,
+  Tenant,
 } from '@prisma/client';
 import { Job } from 'bullmq';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { AiService } from '../ai/ai.service';
 import { HistoryTurn } from '../ai/ai.types';
 import { WHATSAPP_INBOUND_QUEUE } from './whatsapp.constants';
 import { requestsHumanAgent } from './whatsapp-handoff.util';
-import { WhatsappSenderService } from './whatsapp-sender.service';
-import { isWithinServiceWindow } from './whatsapp-window.util';
+import { WhatsappOutboundService } from './whatsapp-outbound.service';
 import { InboundMessageJob } from './whatsapp.types';
 
 /** Cuántos mensajes recientes de contexto se le pasan a la IA. */
 const HISTORY_LIMIT = 20;
 
 /**
- * Worker que procesa cada mensaje entrante de WhatsApp fuera del ciclo del
- * webhook. Persiste contacto/conversación/mensaje con aislamiento por tenant y,
- * si la conversación la maneja la IA, genera una respuesta contextual.
+ * Worker que procesa cada mensaje de WhatsApp fuera del ciclo del webhook.
+ * Persiste contacto/conversación/mensaje con aislamiento por tenant y, si la
+ * conversación la maneja la IA, genera una respuesta contextual.
+ *
+ * No sabe qué proveedor trajo el mensaje: recibe un job ya normalizado y envía
+ * a través de `WhatsappOutboundService`. Esa es la razón de que la migración a
+ * Meta no toque este archivo, que es el que concentra las reglas de negocio.
  */
 @Processor(WHATSAPP_INBOUND_QUEUE)
 export class InboundMessageProcessor extends WorkerHost {
@@ -33,54 +40,69 @@ export class InboundMessageProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
-    private readonly sender: WhatsappSenderService,
+    private readonly outbound: WhatsappOutboundService,
     private readonly pii: PiiCryptoService,
+    private readonly realtime: RealtimeService,
   ) {
     super();
   }
 
   async process(job: Job<InboundMessageJob>): Promise<void> {
     const data = job.data;
+    const tenantId = data.tenantId;
 
-    // 1. Resolver el tenant dueño de este número de WhatsApp.
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { whatsappPhoneNumberId: data.phoneNumberId },
-    });
+    // 1. El tenant ya lo resolvió el webhook (a partir de la instancia); aquí
+    //    solo se carga. Si desapareció entre medias, no hay nada que hacer.
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
-      this.logger.warn(
-        `Sin tenant para phone_number_id=${data.phoneNumberId}; mensaje ${data.waMessageId} ignorado`,
-      );
+      this.logger.warn(`Tenant ${tenantId} inexistente; mensaje ${data.externalMessageId} ignorado`);
       return;
     }
-    const tenantId = tenant.id;
 
-    // 2. Dedup: si el mensaje ya existe (reenvío de Meta), no reprocesar.
-    const existing = await this.prisma.message.findUnique({
+    // 2. Dedup: reenvío del proveedor, o eco de un mensaje que ya guardamos al
+    //    enviarlo desde la bandeja.
+    const existente = await this.prisma.message.findUnique({
       where: {
-        tenantId_whatsappMessageId: {
-          tenantId,
-          whatsappMessageId: data.waMessageId,
-        },
+        tenantId_whatsappMessageId: { tenantId, whatsappMessageId: data.externalMessageId },
       },
     });
-    if (existing) {
-      this.logger.debug(`Mensaje ${data.waMessageId} ya procesado; se omite`);
+    if (existente) {
+      this.logger.debug(`Mensaje ${data.externalMessageId} ya procesado; se omite`);
       return;
     }
 
-    // 3. Upsert del contacto por (tenant, teléfono).
-    const contact = await this.prisma.contact.upsert({
-      where: { tenantId_phone: { tenantId, phone: data.from } },
-      create: { tenantId, phone: data.from, name: data.contactName ?? null },
-      update: data.contactName ? { name: data.contactName } : {},
-    });
+    const contacto = await this.upsertContacto(tenantId, data);
+    const { conversacion, esNueva } = await this.conversacionAbierta(tenantId, contacto.id);
+    const enviadoEn = new Date(data.enviadoEn);
 
-    // 4. Opt-in (RF-12): el contacto inició la conversación → consentimiento.
+    if (data.direccion === 'saliente') {
+      await this.registrarSaliente(tenant, conversacion, data, enviadoEn, esNueva);
+      return;
+    }
+
+    await this.registrarEntrante(tenant, contacto, conversacion, data, enviadoEn, esNueva);
+  }
+
+  // -------------------------------------------------------------------------
+  // Mensajes del cliente
+  // -------------------------------------------------------------------------
+
+  private async registrarEntrante(
+    tenant: Tenant,
+    contacto: Contact,
+    conversacion: Conversation,
+    data: InboundMessageJob,
+    enviadoEn: Date,
+    esNueva: boolean,
+  ): Promise<void> {
+    const tenantId = tenant.id;
+
+    // Opt-in (RF-12): el contacto inició la conversación → consentimiento.
     await this.prisma.contactConsent.upsert({
-      where: { contactId: contact.id },
+      where: { contactId: contacto.id },
       create: {
         tenantId,
-        contactId: contact.id,
+        contactId: contacto.id,
         status: ConsentStatus.GRANTED,
         source: 'mensaje entrante',
         grantedAt: new Date(),
@@ -88,72 +110,139 @@ export class InboundMessageProcessor extends WorkerHost {
       update: {},
     });
 
-    // 5. Conversación abierta del contacto (o crear una).
-    let conversation = await this.prisma.conversation.findFirst({
-      where: { tenantId, contactId: contact.id, status: ConversationStatus.OPEN },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!conversation) {
-      conversation = await this.prisma.conversation.create({
-        data: { tenantId, contactId: contact.id },
-      });
-    }
-
-    const sentAt = this.toDate(data.timestamp);
-
-    // 6. Persistir el mensaje entrante.
     await this.prisma.message.create({
       data: {
         tenantId,
-        conversationId: conversation.id,
+        conversationId: conversacion.id,
         direction: MessageDirection.INBOUND,
         sender: MessageSender.CONTACT,
-        whatsappMessageId: data.waMessageId,
-        type: data.type,
-        content: this.pii.encrypt(data.text),
-        createdAt: sentAt,
+        whatsappMessageId: data.externalMessageId,
+        type: data.tipo,
+        content: this.pii.encrypt(data.texto),
+        createdAt: enviadoEn,
       },
     });
 
-    // 7. Actualizar marcas de tiempo (RF-10: ventana de 24h se mide desde aquí)
-    //    e incrementar el contador de sin leer del equipo. `followUpCount` se
-    //    resetea: el contacto respondió, se rompe la racha de silencio que
-    //    dispara el seguimiento automático (ver ConversationFollowUpService).
+    // Marcas de tiempo (RF-10: la ventana de 24h se mide desde aquí) y contador
+    // de sin leer. `followUpCount` se resetea: el contacto respondió, se rompe la
+    // racha de silencio que dispara el seguimiento automático.
     await this.prisma.conversation.update({
-      where: { id: conversation.id },
+      where: { id: conversacion.id },
       data: {
-        lastInboundAt: sentAt,
-        lastMessageAt: sentAt,
+        lastInboundAt: enviadoEn,
+        lastMessageAt: enviadoEn,
         unreadCount: { increment: 1 },
         followUpCount: 0,
       },
     });
 
+    this.avisar(tenantId, conversacion.id, 'entrante', esNueva);
     this.logger.log(
-      `Mensaje ${data.waMessageId} de ${data.from} persistido (tenant ${tenantId})`,
+      `Mensaje ${data.externalMessageId} de ${data.contactPhone} persistido (tenant ${tenantId})`,
     );
 
-    // 8. Handoff automático (RF-11): si el cliente pide una persona, pasar la
-    //    conversación a un humano y NO responder con IA (un agente la retoma en
-    //    la bandeja). Solo aplica si aún la maneja la IA.
+    // Handoff automático (RF-11): si el cliente pide una persona, la conversación
+    // pasa a un humano y la IA no responde por encima.
     if (
-      conversation.handledBy === ConversationHandler.AI &&
-      requestsHumanAgent(data.text)
+      conversacion.handledBy === ConversationHandler.AI &&
+      requestsHumanAgent(data.texto)
     ) {
       await this.prisma.conversation.update({
-        where: { id: conversation.id },
+        where: { id: conversacion.id },
         data: { handledBy: ConversationHandler.HUMAN },
       });
+      this.avisar(tenantId, conversacion.id, 'entrante', false);
       this.logger.log(
-        `Conversación ${conversation.id} escalada a humano (solicitud del cliente)`,
+        `Conversación ${conversacion.id} escalada a humano (solicitud del cliente)`,
       );
       return;
     }
 
-    // 9. Respuesta de IA (solo si la conversación la maneja la IA — RF-11 handoff).
-    if (conversation.handledBy === ConversationHandler.AI && this.ai.isEnabled()) {
-      await this.respondWithAi(tenant, contact, conversation.id, sentAt);
+    if (conversacion.handledBy === ConversationHandler.AI && this.ai.isEnabled()) {
+      await this.respondWithAi(tenant, contacto, conversacion.id, enviadoEn);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Mensajes que salen del negocio sin pasar por el panel
+  // -------------------------------------------------------------------------
+
+  /**
+   * El dueño contestó desde el WhatsApp de su móvil.
+   *
+   * Se guarda como saliente de una persona (no de la IA) y la conversación pasa
+   * a manos humanas: alguien ya está atendiendo por otro medio, y que la IA
+   * siguiera respondiendo dejaría dos voces contestando al mismo cliente.
+   *
+   * No toca `unreadCount` ni `lastInboundAt`: nadie del equipo tiene nada nuevo
+   * que leer, y la ventana de servicio se mide desde el cliente, no desde aquí.
+   */
+  private async registrarSaliente(
+    tenant: Tenant,
+    conversacion: Conversation,
+    data: InboundMessageJob,
+    enviadoEn: Date,
+    esNueva: boolean,
+  ): Promise<void> {
+    await this.prisma.message.create({
+      data: {
+        tenantId: tenant.id,
+        conversationId: conversacion.id,
+        direction: MessageDirection.OUTBOUND,
+        sender: MessageSender.HUMAN,
+        whatsappMessageId: data.externalMessageId,
+        type: data.tipo,
+        content: this.pii.encrypt(data.texto),
+        createdAt: enviadoEn,
+      },
+    });
+
+    await this.prisma.conversation.update({
+      where: { id: conversacion.id },
+      data: { lastMessageAt: enviadoEn, handledBy: ConversationHandler.HUMAN },
+    });
+
+    this.avisar(tenant.id, conversacion.id, 'saliente', esNueva);
+    this.logger.log(
+      `Mensaje saliente ${data.externalMessageId} registrado desde el teléfono del negocio`,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Piezas compartidas
+  // -------------------------------------------------------------------------
+
+  private async upsertContacto(tenantId: string, data: InboundMessageJob): Promise<Contact> {
+    return this.prisma.contact.upsert({
+      where: { tenantId_phone: { tenantId, phone: data.contactPhone } },
+      create: { tenantId, phone: data.contactPhone, name: data.contactName },
+      update: data.contactName ? { name: data.contactName } : {},
+    });
+  }
+
+  private async conversacionAbierta(
+    tenantId: string,
+    contactId: string,
+  ): Promise<{ conversacion: Conversation; esNueva: boolean }> {
+    const abierta = await this.prisma.conversation.findFirst({
+      where: { tenantId, contactId, status: ConversationStatus.OPEN },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (abierta) return { conversacion: abierta, esNueva: false };
+
+    const creada = await this.prisma.conversation.create({ data: { tenantId, contactId } });
+    return { conversacion: creada, esNueva: true };
+  }
+
+  /** Avisa al panel para que la bandeja se mueva sola. */
+  private avisar(
+    tenantId: string,
+    conversationId: string,
+    direccion: 'entrante' | 'saliente',
+    nueva: boolean,
+  ): void {
+    this.realtime.emitirATenant(tenantId, { tipo: 'mensaje', conversationId, direccion });
+    this.realtime.emitirATenant(tenantId, { tipo: 'conversacion', conversationId, nueva });
   }
 
   /**
@@ -161,8 +250,8 @@ export class InboundMessageProcessor extends WorkerHost {
    * reintentar en bucle una falla persistente del modelo); quedan logueados.
    */
   private async respondWithAi(
-    tenant: { id: string; name: string; whatsappPhoneNumberId: string | null },
-    contact: { id: string; name: string | null; phone: string },
+    tenant: Tenant,
+    contact: Contact,
     conversationId: string,
     lastInboundAt: Date,
   ): Promise<void> {
@@ -187,10 +276,8 @@ export class InboundMessageProcessor extends WorkerHost {
 
       const history = await this.loadHistory(conversationId);
       const reply = await this.ai.respond(ctx, history);
-
       if (!reply.text) return;
 
-      // Persistir la respuesta como mensaje saliente de la IA.
       const persisted = await this.prisma.message.create({
         data: {
           tenantId: tenant.id,
@@ -205,61 +292,28 @@ export class InboundMessageProcessor extends WorkerHost {
         where: { id: conversationId },
         data: { lastMessageAt: new Date() },
       });
+      this.avisar(tenant.id, conversationId, 'saliente', false);
 
       this.logger.log(
         `IA respondió en conversación ${conversationId} (${reply.actions.length} acción/es)`,
       );
 
-      // Enviar la respuesta al cliente vía Meta Cloud API (RF-10).
-      await this.sendReply(tenant, contact.phone, conversationId, persisted.id, reply.text, lastInboundAt);
-    } catch (err) {
-      this.logger.error(`Fallo generando respuesta de IA: ${(err as Error).message}`);
-    }
-  }
-
-  /**
-   * Envía la respuesta ya persistida al cliente por la Meta Cloud API. La respuesta
-   * queda guardada aunque el envío no sea posible (sin credenciales, ventana de 24h
-   * cerrada o error de Meta): así siempre es visible en la bandeja. Al enviarse con
-   * éxito se guarda el wamid devuelto por Meta (para futuro seguimiento de estado).
-   */
-  private async sendReply(
-    tenant: { id: string; whatsappPhoneNumberId: string | null },
-    to: string,
-    conversationId: string,
-    messageId: string,
-    text: string,
-    lastInboundAt: Date,
-  ): Promise<void> {
-    if (!this.sender.isEnabled()) {
-      return; // sin credenciales de Meta (local/mock): respuesta persistida, no enviada
-    }
-    if (!tenant.whatsappPhoneNumberId) {
-      this.logger.warn(`Tenant ${tenant.id} sin whatsappPhoneNumberId; respuesta no enviada`);
-      return;
-    }
-    // RF-10: fuera de la ventana de 24h Meta exige plantilla pre-aprobada (diferido).
-    if (!isWithinServiceWindow(lastInboundAt)) {
-      this.logger.warn(
-        `Ventana de 24h cerrada (conversación ${conversationId}); se requiere plantilla, envío omitido`,
-      );
-      return;
-    }
-
-    try {
-      const { messageId: wamid } = await this.sender.sendText({
-        phoneNumberId: tenant.whatsappPhoneNumberId,
-        to,
-        text,
+      // La respuesta queda guardada aunque no se pueda entregar (canal caído,
+      // ventana cerrada): así siempre es visible en la bandeja.
+      const envio = await this.outbound.enviarTexto({
+        tenantId: tenant.id,
+        to: contact.phone,
+        text: reply.text,
+        lastInboundAt,
       });
-      if (wamid) {
+      if (envio.externalMessageId) {
         await this.prisma.message.update({
-          where: { id: messageId },
-          data: { whatsappMessageId: wamid },
+          where: { id: persisted.id },
+          data: { whatsappMessageId: envio.externalMessageId },
         });
       }
     } catch (err) {
-      this.logger.error(`Fallo enviando respuesta a Meta: ${(err as Error).message}`);
+      this.logger.error(`Fallo generando respuesta de IA: ${(err as Error).message}`);
     }
   }
 
@@ -270,20 +324,9 @@ export class InboundMessageProcessor extends WorkerHost {
       orderBy: { createdAt: 'desc' },
       take: HISTORY_LIMIT,
     });
-    return messages
-      .reverse()
-      .map((m) => ({
-        role:
-          m.direction === MessageDirection.INBOUND
-            ? ('user' as const)
-            : ('assistant' as const),
-        text: this.pii.decrypt(m.content),
-      }));
-  }
-
-  /** El timestamp de Meta viene en segundos epoch (string). */
-  private toDate(timestamp: string): Date {
-    const seconds = Number(timestamp);
-    return Number.isFinite(seconds) ? new Date(seconds * 1000) : new Date();
+    return messages.reverse().map((m) => ({
+      role: m.direction === MessageDirection.INBOUND ? ('user' as const) : ('assistant' as const),
+      text: this.pii.decrypt(m.content),
+    }));
   }
 }

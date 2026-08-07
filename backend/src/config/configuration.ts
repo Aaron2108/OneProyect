@@ -17,12 +17,27 @@ export interface AppConfig {
     expiresIn: string;
   };
   whatsapp: {
+    // Qué proveedor transporta los mensajes: 'evolution' (puente del MVP) o
+    // 'meta' (Cloud API oficial). Cambiar esto es TODO lo que hará falta para
+    // migrar — ver src/whatsapp/providers/whatsapp-provider.interface.ts.
+    provider: string;
     verifyToken: string;
     accessToken: string;
     phoneNumberId: string;
     appSecret: string;
     apiBaseUrl: string;
     graphApiVersion: string;
+  };
+  evolution: {
+    baseUrl: string;
+    apiKey: string;
+    // Origen público de ESTE backend: Evolution necesita una URL a la que llegar,
+    // y en local no vale http://localhost (corre en otro contenedor o máquina).
+    publicUrl: string;
+    // Secreto que Evolution devuelve en cada webhook. Evolution no firma sus
+    // payloads como Meta, así que este token compartido es lo único que separa
+    // un evento legítimo de cualquiera que descubra la ruta. Ver SECURITY.md.
+    webhookToken: string;
   };
   ai: {
     provider: string;
@@ -89,6 +104,7 @@ export default (): AppConfig => ({
     expiresIn: process.env.JWT_EXPIRES_IN ?? '1d',
   },
   whatsapp: {
+    provider: process.env.WHATSAPP_PROVIDER ?? 'evolution',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ?? '',
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN ?? '',
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
@@ -96,6 +112,14 @@ export default (): AppConfig => ({
     // Endpoint de la Meta Cloud API (envío saliente).
     apiBaseUrl: process.env.WHATSAPP_API_BASE_URL ?? 'https://graph.facebook.com',
     graphApiVersion: process.env.WHATSAPP_GRAPH_API_VERSION ?? 'v21.0',
+  },
+  evolution: {
+    baseUrl: process.env.EVOLUTION_API_URL ?? '',
+    apiKey: process.env.EVOLUTION_API_KEY ?? '',
+    // Se cae a la del panel solo como último recurso; en despliegue real son
+    // orígenes distintos (el panel es estático, esto es la API).
+    publicUrl: process.env.BACKEND_PUBLIC_URL ?? '',
+    webhookToken: process.env.EVOLUTION_WEBHOOK_TOKEN ?? '',
   },
   ai: {
     // 'anthropic' (real) | 'nvidia' (real, gratuito, solo pruebas) | 'mock'

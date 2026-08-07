@@ -6,12 +6,19 @@
 
 **Tipo**: API REST (NestJS), consumida por el panel web del equipo de cada tenant. No se expone GraphQL en el MVP.
 
-**Webhook de entrada (Meta Cloud API)**:
+**Webhooks de entrada (uno por proveedor de WhatsApp)**:
+
+Hay un controlador por proveedor porque autenticar el webhook es lo único que no se puede abstraer: Meta firma el cuerpo con HMAC y Evolution no firma nada. A partir de ahí, los dos caminos traducen a los mismos eventos de dominio y entran por la misma ingesta (ver `DECISIONS.md`, 2026-08-07).
 
 | Endpoint | Método | Propósito |
 |---|---|---|
+| `/webhooks/whatsapp/evolution` | `POST` | Eventos de Evolution API (proveedor activo del MVP): mensajes entrantes y salientes, estado de la sesión y renovación del QR. Autenticado con un token compartido en `Authorization: Bearer` — obligatorio: sin `EVOLUTION_WEBHOOK_TOKEN` la ruta queda cerrada. |
 | `/webhooks/whatsapp` | `GET` | Verificación del webhook exigida por Meta al registrar la integración (challenge token). |
-| `/webhooks/whatsapp` | `POST` | Recepción de eventos entrantes (mensajes, estados de entrega). Responde 200 de inmediato y encola el procesamiento real (ver `ARCHITECTURE.md` §2) — nunca hacer el trabajo de IA de forma síncrona aquí. |
+| `/webhooks/whatsapp` | `POST` | Recepción de eventos de la Cloud API de Meta. Firma HMAC `X-Hub-Signature-256`. |
+
+Ambos responden 200 de inmediato y encolan el procesamiento real (ver `ARCHITECTURE.md` §2) — nunca hacer el trabajo de IA de forma síncrona aquí.
+
+**Canal de tiempo real (WebSocket)**: namespace `/realtime` (socket.io). Autenticado con el mismo JWT, en el handshake (`auth.token`); cada conexión entra solo en la sala de su tenant. Emite avisos flacos (`{ tipo: 'mensaje' | 'conversacion' | 'canal', … }`) que dicen qué cambió, no el contenido nuevo: el panel recarga lo afectado por la API REST.
 
 **Autenticación (implementado ✅):**
 
@@ -36,7 +43,8 @@
 | Handoff humano (RF-11) | `POST /conversations/:id/handoff` · `/handback` · `/close` · `/reopen` | ✅ `handoff`→HUMAN (silencia la IA), `handback`→AI. |
 | Equipo (usuarios) | `GET/POST /users` | ✅ Lista el equipo del tenant; invitar es **solo OWNER** (`@Roles(OWNER)`). |
 | Respuestas rápidas | `GET/POST /quick-replies`, `PATCH/DELETE /quick-replies/:id` | ✅ Plantillas de mensaje compartidas por el equipo. |
-| Mensajes salientes manuales | `POST /conversations/:id/messages` | ✅ El humano responde directo; persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y envía por Meta (ventana 24h). |
+| Mensajes salientes manuales | `POST /conversations/:id/messages` | ✅ El humano responde directo; persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y envía por el canal vinculado (`WhatsappOutboundService`, agnóstico del proveedor). El mensaje queda guardado aunque no se pueda entregar. |
+| Canales | `GET /channels/whatsapp`, `POST /channels/whatsapp/connect`, `POST /channels/whatsapp/reconnect`, `DELETE /channels/whatsapp` | ✅ Vínculo con WhatsApp: estado, alta de sesión (devuelve el QR), reconexión y baja. Ver el estado lo puede cualquiera del equipo; conectar/desconectar es **solo OWNER**. Nunca expone el identificador de sesión ni la credencial del proveedor. |
 | Citas | `GET/POST /appointments`, `GET/PATCH /appointments/:id` | ✅ CRUD con scope de tenant (la IA también las crea vía tool-calling). `GET` admite `contactId`, `from`/`to` (rango de fechas, para la vista de calendario) e incluye el contacto (`id`/`name`/`phone`). |
 | Recordatorios | `GET/POST /reminders`, `GET/PATCH /reminders/:id` | ✅ CRUD con scope de tenant. Envío programado (worker por `remindAt`) ⏳. |
 | Métricas | `GET /metrics/overview?from=&to=` | ✅ Resumen agregado por tenant y **período** (conversaciones, mensajes, tasa de automatización IA vs humano, citas, recordatorios, actividad diaria). |

@@ -428,3 +428,41 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **El servicio nuevo construye su propio cliente de Anthropic** en vez de compartir el de `AiService`. Son dos líneas de configuración repetidas; la alternativa —un tercer servicio que solo sostiene el cliente— añadía una indirección que no paga lo que cuesta leerla.
 
 **Resultado**: `ai.service.ts` queda en 468 líneas y ningún archivo del backend supera el límite. La cobertura sube: los resúmenes tenían dos casos y ahora tienen quince, incluidos los que faltaban —que sin origen no se impute el gasto a nadie, y que el modo simulado no apunte consumo que nunca ocurrió.
+
+## 2026-08-07 — Evolution API como puente, detrás de una abstracción de proveedor
+
+**Decisión**: el MVP sale con [Evolution API](https://github.com/evolution-foundation/evolution-api) como transporte de WhatsApp, pero **ningún módulo fuera de `src/whatsapp/providers/` sabe que existe**. Todo el sistema consume la interfaz `WhatsAppProvider`; `EvolutionProvider` y `MetaProvider` la implementan y `WHATSAPP_PROVIDER` elige cuál está activo.
+
+**Motivo**: la Cloud API oficial de Meta exige verificación del negocio y aprobación previa del número, y ese trámite no puede bloquear el arranque del producto. Evolution levanta una sesión contra un WhatsApp normal vinculándola por QR, como WhatsApp Web. Es un puente explícito, no el destino: es no oficial, la sesión se cae y hay que revincularla.
+
+**La abstracción se escribe con dos implementaciones desde el primer día, no con una.** Una interfaz con un solo implementador no está probada, está supuesta. Tener `MetaProvider` desde ya obligó a que la interfaz fuera de verdad neutral — y sacó a la luz que la vinculación por QR no es universal (de ahí `vinculaConQr`) y que la ventana de servicio de 24 h es una regla **de Meta**, no de WhatsApp: aplicarla con Evolution bloquearía envíos perfectamente válidos.
+
+**Qué NO cruza la frontera**: `instanceName`, `apikey`, `remoteJid`, `wamid`, `phone_number_id`. Hacia fuera solo hay `externalId` (identificador opaco de sesión) y `credential` (secreto opaco). El job que se encola dejó de hablar de `phoneNumberId`/`waMessageId` por lo mismo: esa fuga era justo lo que habría obligado a reescribir el worker el día de la migración.
+
+**Lo que sí es irreductiblemente propio de cada proveedor es autenticar su webhook**, y por eso hay un controlador por proveedor: Meta firma el cuerpo con HMAC; Evolution no firma nada y se le configura una cabecera `Authorization` con un secreto compartido (`EVOLUTION_WEBHOOK_TOKEN`), obligatorio — sin él la ruta queda cerrada en vez de abierta. A partir de `interpretarWebhook` los dos caminos son el mismo código.
+
+**Tres consumidores dejan de hablar con Meta directamente**: la bandeja (`ConversationsService`), el worker de entrada y los recordatorios pasan todos por `WhatsappOutboundService`. `WhatsappSenderService` deja de exportarse desde su módulo: era la puerta por la que se colaba el acoplamiento, y cerrarla es el punto del cambio.
+
+**Se procesan también los mensajes que salen del teléfono del negocio** (`fromMe`). Si el dueño contesta desde su móvil, ese mensaje existe para el cliente y tiene que existir en la bandeja; sin él, el equipo lee media conversación y vuelve a preguntar lo que ya se respondió. Se guardan como `OUTBOUND/HUMAN` y pasan la conversación a manos humanas, para que la IA no conteste por encima de una persona que ya está atendiendo.
+
+**Alcance deliberado**: solo lo que alimenta la Bandeja. Un mensaje sin texto (sticker, ubicación, audio suelto) se descarta en vez de guardar una burbuja vacía; los grupos y los estados de WhatsApp se ignoran. Adjuntos, campañas y automatizaciones quedan fuera.
+
+## 2026-08-07 — Tiempo real por WebSocket, con avisos flacos
+
+**Decisión**: el panel abre un WebSocket (socket.io, namespace `/realtime`) autenticado con el mismo JWT que la API, en el handshake. Cada conexión entra en la sala de **su** tenant y en ninguna más.
+
+**Los eventos dicen QUÉ cambió, no el contenido nuevo**: `{ tipo: 'mensaje', conversationId }`, no el mensaje entero. El panel recarga lo afectado por la API de siempre. El precio es una petición extra; a cambio hay una sola forma de serializar una conversación —la del controlador— en vez de dos que se desincronizan en cuanto una crece un campo, y por el socket viajan identificadores en lugar de contenido cifrado de conversaciones.
+
+**El `tenantId` de la sala sale del token verificado, nunca del cliente.** Es el mismo principio que rige toda la API, y aquí pesa más: un socket vive minutos u horas, no una petición.
+
+**Un solo socket para todo el panel**, compartido por las pantallas que lo necesiten y cerrado al salir de la sesión: son eventos del negocio entero, no de una vista.
+
+## 2026-08-07 — "Canales" como sección propia, no dentro de la Bandeja
+
+**Decisión**: conectar WhatsApp vive en `/canales`, una sección nueva al final del menú, no en un diálogo de la Bandeja.
+
+**Motivo**: la Bandeja es donde se atienden conversaciones; la gestión de conexiones es configuración que se toca el primer día y casi nunca más. Mezclarlas obligaría a rediseñar la Bandeja en cuanto entre el segundo canal. Instagram, Messenger, Telegram y email aparecen ya como "próximamente": dicen a qué aspira esto y evitan que alguien los busque por el resto del panel.
+
+**La pantalla no sabe qué proveedor hay detrás**: el bloque del QR depende de `vinculaConQr`, no del nombre del proveedor. Cuando se migre a Meta —donde el número se da de alta fuera del panel— esta pantalla ya está preparada.
+
+**Se sondea el estado mientras hay un QR en pantalla**, además de escuchar el webhook. El backend aprovecha ese sondeo para preguntarle al proveedor si ya se escaneó y para renovar el código caducado, así que la vinculación se completa sola incluso cuando el proveedor no consigue alcanzar al servidor — el caso normal en desarrollo, donde Evolution no puede llegar a `localhost`.

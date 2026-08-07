@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConsentStatus, Reminder, ReminderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
-import { isWithinServiceWindow } from '../whatsapp/whatsapp-window.util';
+import { WhatsappOutboundService } from '../whatsapp/whatsapp-outbound.service';
 import {
   CLAIM_LEASE_MS,
   DEFER_RETRY_MS,
@@ -16,7 +15,6 @@ import {
 /** Recordatorio con las relaciones que necesita el despacho. */
 export type DueReminder = Reminder & {
   contact: { phone: string; consent: { status: ConsentStatus } | null };
-  tenant: { whatsappPhoneNumberId: string | null };
 };
 
 /** Resultado del intento de despacho de un recordatorio (para logging/tests). */
@@ -41,7 +39,7 @@ export type DispatchOutcome =
  *   cancelan tras `MAX_SEND_ATTEMPTS` o al expirar.
  * - **Consentimiento (RF-12)** y **ventana de 24h (RF-10)** antes de enviar.
  *
- * El estado pasa a SENT solo cuando Meta acepta el envío.
+ * El estado pasa a SENT solo cuando el proveedor del canal acepta el envío.
  */
 @Injectable()
 export class ReminderDispatchService {
@@ -49,7 +47,7 @@ export class ReminderDispatchService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sender: WhatsappSenderService,
+    private readonly outbound: WhatsappOutboundService,
   ) {}
 
   /** Procesa los recordatorios PENDING elegibles cuya hora ya llegó. */
@@ -63,8 +61,9 @@ export class ReminderDispatchService {
       orderBy: { remindAt: 'asc' },
       take: DISPATCH_BATCH,
       include: {
+        // El número por el que sale el mensaje ya no se resuelve aquí: lo hace
+        // la abstracción del canal a partir del tenant.
         contact: { select: { phone: true, consent: { select: { status: true } } } },
-        tenant: { select: { whatsappPhoneNumberId: true } },
       },
     })) as unknown as DueReminder[];
 
@@ -114,16 +113,32 @@ export class ReminderDispatchService {
       return 'cancelled-no-consent';
     }
 
-    // Necesita número del tenant y credenciales de Meta para poder enviar.
-    const phoneNumberId = reminder.tenant.whatsappPhoneNumberId;
-    if (!phoneNumberId || !this.sender.isEnabled()) {
+    // El envío pasa por la abstracción del canal: es ella quien sabe si hay
+    // sesión viva y si el proveedor activo impone ventana de servicio. Este
+    // servicio solo decide qué hacer con cada desenlace.
+    const lastInboundAt = await this.latestInboundAt(reminder.tenantId, reminder.contactId);
+    const envio = await this.outbound.enviarTexto({
+      tenantId: reminder.tenantId,
+      to: reminder.contact.phone,
+      text: reminder.message,
+      lastInboundAt,
+    });
+
+    if (envio.enviado) {
+      await this.markSent(reminder.id);
+      this.logger.log(`Recordatorio ${reminder.id} enviado a ${reminder.contact.phone}`);
+      return 'sent';
+    }
+
+    // Sin canal vinculado no es culpa del recordatorio: se reintenta más tarde,
+    // porque el dueño puede estar a punto de conectar WhatsApp.
+    if (envio.motivo === 'canal-desconectado') {
       await this.deferUntil(reminder.id, now, DEFER_RETRY_MS);
       return 'deferred-no-config';
     }
 
-    // RF-10: fuera de la ventana de 24h se requiere plantilla pre-aprobada.
-    const lastInboundAt = await this.latestInboundAt(reminder.tenantId, reminder.contactId);
-    if (!isWithinServiceWindow(lastInboundAt, now)) {
+    // RF-10: fuera de la ventana de 24h Meta exige plantilla pre-aprobada.
+    if (envio.motivo === 'ventana-cerrada') {
       if (this.isExpired(reminder, now)) {
         await this.cancel(reminder.id);
         this.logger.warn(
@@ -135,22 +150,8 @@ export class ReminderDispatchService {
       return 'deferred-needs-template';
     }
 
-    // Dentro de la ventana: se puede enviar texto libre.
-    try {
-      await this.sender.sendText({
-        phoneNumberId,
-        to: reminder.contact.phone,
-        text: reminder.message,
-      });
-      await this.markSent(reminder.id);
-      this.logger.log(`Recordatorio ${reminder.id} enviado a ${reminder.contact.phone}`);
-      return 'sent';
-    } catch (err) {
-      this.logger.error(
-        `Fallo enviando recordatorio ${reminder.id}: ${(err as Error).message}`,
-      );
-      return this.handleSendFailure(reminder, now);
-    }
+    this.logger.error(`Fallo enviando el recordatorio ${reminder.id}`);
+    return this.handleSendFailure(reminder, now);
   }
 
   /** Backoff exponencial y cancelación tras demasiados intentos o expiración. */

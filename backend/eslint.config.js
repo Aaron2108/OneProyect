@@ -26,6 +26,7 @@ module.exports = [
         clearInterval: 'readonly',
         fetch: 'readonly',
         AbortController: 'readonly',
+        AbortSignal: 'readonly',
         Response: 'readonly',
         URLSearchParams: 'readonly',
         TextDecoder: 'readonly',

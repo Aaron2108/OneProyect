@@ -1,22 +1,31 @@
 import { ConfigService } from '@nestjs/config';
-import { Queue } from 'bullmq';
+import { MetaProvider } from '../../src/whatsapp/providers/meta.provider';
+import { WhatsappIngestService } from '../../src/whatsapp/whatsapp-ingest.service';
+import { WhatsappSenderService } from '../../src/whatsapp/whatsapp-sender.service';
 import { WhatsappService } from '../../src/whatsapp/whatsapp.service';
 import { WhatsAppWebhookBody } from '../../src/whatsapp/whatsapp.types';
 
-describe('WhatsappService', () => {
+/**
+ * Lo que queda aquí es lo específico de Meta: la verificación del registro del
+ * webhook. La traducción del payload se prueba en `meta.provider.spec.ts` y el
+ * reparto de eventos en `whatsapp-ingest.service.spec.ts` — ese reparto ya no
+ * depende del proveedor, y probarlo tres veces no lo hace más cierto.
+ */
+describe('WhatsappService (webhook de Meta)', () => {
   let service: WhatsappService;
-  let queue: { add: jest.Mock };
+  let ingerir: jest.Mock;
 
   const config = {
     get: (key: string) =>
-      ({ 'whatsapp.verifyToken': 'verify123', 'whatsapp.appSecret': 'secret' })[
-        key
-      ],
+      ({ 'whatsapp.verifyToken': 'verify123', 'whatsapp.appSecret': 'secret' })[key],
   } as unknown as ConfigService;
 
   beforeEach(() => {
-    queue = { add: jest.fn().mockResolvedValue(undefined) };
-    service = new WhatsappService(config, queue as unknown as Queue);
+    ingerir = jest.fn().mockResolvedValue(1);
+    const meta = new MetaProvider({ isEnabled: () => true } as unknown as WhatsappSenderService);
+    service = new WhatsappService(config, meta, {
+      ingerir,
+    } as unknown as WhatsappIngestService);
   });
 
   describe('verifyWebhook', () => {
@@ -67,20 +76,24 @@ describe('WhatsappService', () => {
       ],
     });
 
-    it('encola un job por cada mensaje entrante', async () => {
-      const count = await service.enqueueInbound(buildBody(true));
-      expect(count).toBe(1);
-      expect(queue.add).toHaveBeenCalledTimes(1);
-      const [, job, opts] = queue.add.mock.calls[0];
-      expect(job.text).toBe('Hola');
-      expect(job.waMessageId).toBe('wamid.ABC');
-      expect(opts.jobId).toBe('PN1_wamid.ABC'); // dedup de reenvíos (sin ":")
+    it('traduce el mensaje y lo entrega a la ingesta común', async () => {
+      await service.enqueueInbound(buildBody(true));
+      expect(ingerir).toHaveBeenCalledWith([
+        expect.objectContaining({
+          clase: 'mensaje',
+          externalId: 'PN1',
+          externalMessageId: 'wamid.ABC',
+          direccion: 'entrante',
+          contactPhone: '5215500000000',
+          contactName: 'Ana',
+          texto: 'Hola',
+        }),
+      ]);
     });
 
     it('ignora eventos de estado (sin mensaje) — guarda NFR', async () => {
-      const count = await service.enqueueInbound(buildBody(false));
-      expect(count).toBe(0);
-      expect(queue.add).not.toHaveBeenCalled();
+      await service.enqueueInbound(buildBody(false));
+      expect(ingerir).toHaveBeenCalledWith([]);
     });
   });
 });

@@ -13,8 +13,8 @@ import { HistoryTurn } from '../ai/ai.types';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toCsv } from '../common/csv.util';
-import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
-import { isWithinServiceWindow } from '../whatsapp/whatsapp-window.util';
+import { RealtimeService } from '../realtime/realtime.service';
+import { WhatsappOutboundService } from '../whatsapp/whatsapp-outbound.service';
 import { ListConversationsDto } from './dto/list-conversations.dto';
 
 /** Tope de filas en una exportación (evita respuestas enormes). */
@@ -39,10 +39,11 @@ export class ConversationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sender: WhatsappSenderService,
+    private readonly outbound: WhatsappOutboundService,
     private readonly pii: PiiCryptoService,
     private readonly ai: AiWriterService,
     private readonly contextMemory: AiContextMemoryService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -258,46 +259,39 @@ export class ConversationsService {
       data: { handledBy: ConversationHandler.HUMAN, lastMessageAt: new Date() },
     });
 
-    await this.deliver(conversation.tenant.whatsappPhoneNumberId, conversation.contact.phone, conversation.lastInboundAt, message, id, text);
+    await this.deliver(tenantId, conversation.contact.phone, conversation.lastInboundAt, message, text);
+
+    // El resto del equipo ve el mensaje al instante, sin recargar. Se avisa
+    // aunque la entrega falle: el mensaje existe en la conversación igualmente.
+    this.realtime.emitirATenant(tenantId, { tipo: 'mensaje', conversationId: id, direccion: 'saliente' });
+    this.realtime.emitirATenant(tenantId, { tipo: 'conversacion', conversationId: id, nueva: false });
+
     return { ...message, content: text };
   }
 
-  /** Envía el mensaje ya persistido al cliente por Meta (si es posible). `text` es el texto plano (message.content ya está cifrado). */
+  /**
+   * Entrega al cliente el mensaje ya persistido. `text` es el texto plano
+   * (`message.content` ya está cifrado).
+   *
+   * Pasa por la abstracción del canal, así que no sabe —ni le importa— qué
+   * proveedor lo transporta. Si no se puede entregar (canal sin vincular,
+   * ventana de servicio cerrada, proveedor caído), el mensaje se queda guardado
+   * y visible en la bandeja: perder la entrega es malo, perder el registro de lo
+   * que el equipo escribió lo es más.
+   */
   private async deliver(
-    phoneNumberId: string | null,
+    tenantId: string,
     to: string,
     lastInboundAt: Date | null,
     message: Message,
-    conversationId: string,
     text: string,
   ): Promise<void> {
-    if (!this.sender.isEnabled()) {
-      return; // sin credenciales de Meta (local): mensaje persistido, no enviado
-    }
-    if (!phoneNumberId) {
-      this.logger.warn(`Tenant sin whatsappPhoneNumberId; mensaje ${message.id} no enviado`);
-      return;
-    }
-    if (!isWithinServiceWindow(lastInboundAt)) {
-      this.logger.warn(
-        `Ventana de 24h cerrada (conversación ${conversationId}); se requiere plantilla, envío omitido`,
-      );
-      return;
-    }
-    try {
-      const { messageId: wamid } = await this.sender.sendText({
-        phoneNumberId,
-        to,
-        text,
+    const envio = await this.outbound.enviarTexto({ tenantId, to, text, lastInboundAt });
+    if (envio.externalMessageId) {
+      await this.prisma.message.update({
+        where: { id: message.id },
+        data: { whatsappMessageId: envio.externalMessageId },
       });
-      if (wamid) {
-        await this.prisma.message.update({
-          where: { id: message.id },
-          data: { whatsappMessageId: wamid },
-        });
-      }
-    } catch (err) {
-      this.logger.error(`Fallo enviando mensaje manual a Meta: ${(err as Error).message}`);
     }
   }
 

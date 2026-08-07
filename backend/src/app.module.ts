@@ -22,6 +22,7 @@ import { BusinessProfileModule } from './business-profile/business-profile.modul
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { AiContextModule } from './ai-context/ai-context.module';
 import { ProductsModule } from './products/products.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ProductsModule } from './products/products.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     CommonModule,
+    RealtimeModule,
     HealthModule,
     AuthModule,
     UsersModule,

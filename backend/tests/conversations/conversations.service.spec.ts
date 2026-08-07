@@ -9,14 +9,19 @@ import { AiContextMemoryService } from '../../src/ai/ai-context-memory.service';
 import { AiWriterService } from '../../src/ai/ai-writer.service';
 import { ConversationsService } from '../../src/conversations/conversations.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { WhatsappSenderService } from '../../src/whatsapp/whatsapp-sender.service';
+import { RealtimeService } from '../../src/realtime/realtime.service';
+import { WhatsappOutboundService } from '../../src/whatsapp/whatsapp-outbound.service';
 import { makeTestPiiCrypto } from '../helpers/pii-crypto.stub';
 
 describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
-  const senderDisabled = {
-    isEnabled: () => false,
-    sendText: jest.fn(),
-  } as unknown as WhatsappSenderService;
+  /** Canal sin vincular: el mensaje se guarda pero no sale. */
+  const canalCaido = {
+    enviarTexto: jest
+      .fn()
+      .mockResolvedValue({ enviado: false, externalMessageId: null, motivo: 'canal-desconectado' }),
+  } as unknown as WhatsappOutboundService;
+
+  const realtimeMudo = { emitirATenant: jest.fn() } as unknown as RealtimeService;
 
   const aiDisabled = { summarize: jest.fn().mockResolvedValue('') } as unknown as AiWriterService;
   const contextMemoryDisabled = {
@@ -30,11 +35,18 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
 
   function makeService(
     prisma: Record<string, unknown>,
-    sender: WhatsappSenderService = senderDisabled,
+    outbound: WhatsappOutboundService = canalCaido,
     ai: AiWriterService = aiDisabled,
     contextMemory: AiContextMemoryService = contextMemoryDisabled,
   ): ConversationsService {
-    return new ConversationsService(makePrisma(prisma), sender, makeTestPiiCrypto(), ai, contextMemory);
+    return new ConversationsService(
+      makePrisma(prisma),
+      outbound,
+      makeTestPiiCrypto(),
+      ai,
+      contextMemory,
+      realtimeMudo,
+    );
   }
 
   describe('resumen para el equipo', () => {
@@ -65,7 +77,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
       });
       const service = makeService(
         { conversation: { findFirst: jest.fn().mockResolvedValue(conv()), update } },
-        senderDisabled,
+        canalCaido,
         aiConResumen(),
       );
 
@@ -90,7 +102,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
             update: jest.fn(),
           },
         },
-        senderDisabled,
+        canalCaido,
         ai,
       );
 
@@ -117,7 +129,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
             }),
           },
         },
-        senderDisabled,
+        canalCaido,
         ai,
       );
 
@@ -142,7 +154,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
             }),
           },
         },
-        senderDisabled,
+        canalCaido,
         ai,
       );
 
@@ -185,7 +197,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
             update: jest.fn(),
           },
         },
-        senderDisabled,
+        canalCaido,
         ai,
       );
 
@@ -319,7 +331,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
   });
 
   describe('sendManualMessage', () => {
-    it('persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y NO envía sin credenciales', async () => {
+    it('persiste OUTBOUND/HUMAN, pasa la conversación a HUMAN y sobrevive a un canal caído', async () => {
       const findFirst = jest.fn().mockResolvedValue({
         id: 'cv1',
         lastInboundAt: new Date(),
@@ -328,11 +340,11 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
       });
       const create = jest.fn().mockResolvedValue({ id: 'm1', content: 'hola' });
       const update = jest.fn().mockResolvedValue({});
-      const sendText = jest.fn();
-      const service = makeService(
-        { conversation: { findFirst, update }, message: { create } },
-        { isEnabled: () => false, sendText } as unknown as WhatsappSenderService,
-      );
+      const messageUpdate = jest.fn();
+      const service = makeService({
+        conversation: { findFirst, update },
+        message: { create, update: messageUpdate },
+      });
 
       const msg = await service.sendManualMessage('t1', 'cv1', 'hola');
 
@@ -351,10 +363,11 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
           data: expect.objectContaining({ handledBy: ConversationHandler.HUMAN }),
         }),
       );
-      expect(sendText).not.toHaveBeenCalled(); // sender deshabilitado
+      // Sin canal no hay id del proveedor que guardar, pero el mensaje existe.
+      expect(messageUpdate).not.toHaveBeenCalled();
     });
 
-    it('envía por Meta y guarda el wamid cuando el sender está habilitado', async () => {
+    it('envía por el canal y guarda el id del proveedor', async () => {
       const findFirst = jest.fn().mockResolvedValue({
         id: 'cv1',
         lastInboundAt: new Date(),
@@ -364,19 +377,20 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
       const create = jest.fn().mockResolvedValue({ id: 'm1', content: 'hola' });
       const update = jest.fn().mockResolvedValue({});
       const messageUpdate = jest.fn().mockResolvedValue({});
-      const sendText = jest.fn().mockResolvedValue({ messageId: 'wamid.OUT9' });
+      const enviarTexto = jest
+        .fn()
+        .mockResolvedValue({ enviado: true, externalMessageId: 'wamid.OUT9', motivo: null });
       const service = makeService(
         { conversation: { findFirst, update }, message: { create, update: messageUpdate } },
-        { isEnabled: () => true, sendText } as unknown as WhatsappSenderService,
+        { enviarTexto } as unknown as WhatsappOutboundService,
       );
 
       await service.sendManualMessage('t1', 'cv1', 'hola');
 
-      expect(sendText).toHaveBeenCalledWith({
-        phoneNumberId: 'PN1',
-        to: '5215500000000',
-        text: 'hola',
-      });
+      // El tenant, no un número: quién transporta el mensaje ya no se decide aquí.
+      expect(enviarTexto).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 't1', to: '5215500000000', text: 'hola' }),
+      );
       expect(messageUpdate).toHaveBeenCalledWith({
         where: { id: 'm1' },
         data: { whatsappMessageId: 'wamid.OUT9' },
@@ -408,7 +422,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
       const remember = jest.fn().mockResolvedValue(undefined);
       const service = makeService(
         { conversation: { count, update, findUnique } },
-        senderDisabled,
+        canalCaido,
         { summarize } as unknown as AiWriterService,
         { isEnabled: () => true, remember } as unknown as AiContextMemoryService,
       );
@@ -440,7 +454,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
       const remember = jest.fn();
       const service = makeService(
         { conversation: { count, update, findUnique } },
-        senderDisabled,
+        canalCaido,
         aiDisabled,
         { isEnabled: () => true, remember } as unknown as AiContextMemoryService,
       );
@@ -457,7 +471,7 @@ describe('ConversationsService (handoff RF-11 + aislamiento)', () => {
       const findUnique = jest.fn().mockRejectedValue(new Error('DB caída'));
       const service = makeService(
         { conversation: { count, update, findUnique } },
-        senderDisabled,
+        canalCaido,
         aiDisabled,
         { isEnabled: () => true, remember: jest.fn() } as unknown as AiContextMemoryService,
       );

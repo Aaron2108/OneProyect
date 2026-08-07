@@ -1,24 +1,27 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Queue } from 'bullmq';
-import {
-  PROCESS_INBOUND_MESSAGE,
-  WHATSAPP_INBOUND_QUEUE,
-} from './whatsapp.constants';
+import { MetaProvider } from './providers/meta.provider';
 import {
   timingSafeStringEqual,
   verifyWhatsAppSignature,
 } from './whatsapp-signature.util';
-import { InboundMessageJob, WhatsAppWebhookBody } from './whatsapp.types';
+import { WhatsappIngestService } from './whatsapp-ingest.service';
+import { WhatsAppWebhookBody } from './whatsapp.types';
 
+/**
+ * La parte del webhook de Meta que no se puede abstraer: la verificación de
+ * registro (`hub.*`) y la firma HMAC del cuerpo, que son suyas y de nadie más.
+ *
+ * Traducir el payload ya no se hace aquí sino en `MetaProvider`, y repartir los
+ * eventos tampoco: de eso se encarga `WhatsappIngestService`, el mismo que
+ * atiende a Evolution. Lo que queda es exactamente lo que distingue a Meta.
+ */
 @Injectable()
 export class WhatsappService {
-  private readonly logger = new Logger(WhatsappService.name);
-
   constructor(
     private readonly config: ConfigService,
-    @InjectQueue(WHATSAPP_INBOUND_QUEUE) private readonly inboundQueue: Queue,
+    private readonly meta: MetaProvider,
+    private readonly ingest: WhatsappIngestService,
   ) {}
 
   /**
@@ -44,47 +47,14 @@ export class WhatsappService {
   }
 
   /**
-   * Extrae los mensajes entrantes del payload y los encola para procesamiento
-   * asíncrono. No hace trabajo pesado (IA, BD) aquí: el webhook debe responder
-   * rápido a Meta (ARCHITECTURE.md §2). Los eventos de estado (entregas/lecturas)
-   * se ignoran para no reprocesarlos (guarda NFR).
+   * Traduce el payload de Meta y lo entrega a la ingesta común.
+   *
+   * Se usa `MetaProvider` explícitamente y no el proveedor activo: esta ruta ES
+   * el webhook de Meta, así que quien lo interpreta está decidido de antemano.
+   * Si el negocio no tiene una instancia META registrada, la ingesta descarta
+   * los eventos por sí sola al no encontrar a su dueño.
    */
   async enqueueInbound(body: WhatsAppWebhookBody): Promise<number> {
-    let enqueued = 0;
-    for (const entry of body.entry ?? []) {
-      for (const change of entry.changes ?? []) {
-        const value = change.value;
-        const messages = value?.messages ?? [];
-        if (messages.length === 0) {
-          continue; // statuses u otros eventos sin mensaje entrante
-        }
-        const phoneNumberId = value.metadata?.phone_number_id;
-        const contactName = value.contacts?.[0]?.profile?.name;
-
-        for (const message of messages) {
-          const job: InboundMessageJob = {
-            phoneNumberId,
-            waMessageId: message.id,
-            from: message.from,
-            contactName,
-            type: message.type,
-            text: message.text?.body ?? '',
-            timestamp: message.timestamp,
-          };
-          // jobId = id de Meta → BullMQ deduplica reenvíos del mismo mensaje.
-          // BullMQ no admite ":" en el jobId, por eso el separador es "_".
-          await this.inboundQueue.add(PROCESS_INBOUND_MESSAGE, job, {
-            jobId: `${phoneNumberId}_${message.id}`,
-            removeOnComplete: true,
-            removeOnFail: 100,
-          });
-          enqueued++;
-        }
-      }
-    }
-    if (enqueued > 0) {
-      this.logger.log(`Encolados ${enqueued} mensaje(s) entrante(s) de WhatsApp`);
-    }
-    return enqueued;
+    return this.ingest.ingerir(this.meta.interpretarWebhook(body));
   }
 }

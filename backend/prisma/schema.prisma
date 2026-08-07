@@ -79,6 +79,24 @@ enum KnowledgeExtractionMethod {
   VISION // PDF escaneado transcrito por la visión de Claude (cuesta tokens)
 }
 
+// Qué proveedor transporta los mensajes de WhatsApp de un negocio. Se guarda en
+// la instancia y no solo en configuración porque la migración de EVOLUTION a
+// META no será instantánea para toda la plataforma: durante la transición
+// convivirán negocios en uno y otro, y cada mensaje tiene que saber por dónde
+// salir. Ver docs/DECISIONS.md.
+enum WhatsappProviderKind {
+  EVOLUTION // no oficial (Baileys), vinculado por QR — puente del MVP
+  META // Cloud API oficial, destino final
+}
+
+// Estado del vínculo con WhatsApp, tal como lo ve el panel.
+enum WhatsappConnectionStatus {
+  DISCONNECTED // sin vincular, o desvinculado a propósito
+  QR_PENDING // instancia creada, esperando que alguien escanee el QR
+  CONNECTED // sesión viva: se pueden recibir y enviar mensajes
+  ERROR // el proveedor reportó un fallo (sesión caída, credenciales inválidas)
+}
+
 // ---------------------------------------------------------------------------
 // Modelos
 // ---------------------------------------------------------------------------
@@ -108,8 +126,55 @@ model Tenant {
   knowledgeDocuments        KnowledgeDocument[]
   products                  Product[]
   aiUsage                   AiUsage[]
+  whatsappInstance          WhatsappInstance?
 
   @@map("tenants")
+}
+
+// El vínculo del negocio con WhatsApp, independiente del proveedor que lo
+// transporte (ver WhatsappProviderKind). Es lo que la sección "Canales" del
+// panel enseña y gobierna.
+//
+// Uno por tenant a propósito: un negocio atiende por un número. Cuando haya que
+// soportar varios (o varios canales), esto deja de ser `@unique` y pasa a llevar
+// un discriminador — pero fingir hoy esa multiplicidad complicaría cada consulta
+// sin resolver ningún caso real del MVP.
+model WhatsappInstance {
+  id       String               @id @default(uuid())
+  tenantId String               @unique @map("tenant_id")
+  provider WhatsappProviderKind @default(EVOLUTION)
+  // Identificador de la sesión EN EL PROVEEDOR: el `instanceName` de Evolution
+  // o el `phone_number_id` de Meta. Es la clave por la que un webhook entrante
+  // encuentra a su tenant, así que es único en toda la plataforma: si dos
+  // negocios compartieran identificador, los mensajes de uno entrarían en la
+  // bandeja del otro.
+  externalId  String                   @unique @map("external_id")
+  status      WhatsappConnectionStatus @default(DISCONNECTED)
+  // Número ya vinculado, en E.164 y sin cifrar: es el número público del propio
+  // negocio (no de un cliente final), y el panel tiene que mostrarlo.
+  phoneNumber String?                  @map("phone_number")
+  // Token que el proveedor emite para ESTA instancia (el `hash` de Evolution).
+  // Cifrado en reposo como los de Google Calendar: da acceso a enviar mensajes
+  // en nombre del negocio. Ver SECURITY.md §11.
+  credential  String?
+  // QR vigente (data URI). Vive aquí y no en memoria para que sobreviva a un
+  // reinicio y para que lo vea cualquier instancia del backend detrás del
+  // balanceador — el que atiende el webhook con el QR nuevo casi nunca es el
+  // mismo que atiende el sondeo del panel. Se borra al conectar: es una
+  // credencial de vinculación, no un dato del negocio.
+  qrCode      String?                  @map("qr_code")
+  qrExpiresAt DateTime?                @map("qr_expires_at")
+  // Último fallo reportado por el proveedor, para que el panel pueda explicar
+  // un ERROR en vez de limitarse a pintarlo en rojo.
+  lastError    String?   @map("last_error")
+  connectedAt  DateTime? @map("connected_at")
+  lastStatusAt DateTime  @default(now()) @map("last_status_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_instances")
 }
 
 // Contexto del negocio que el propietario le da a la IA (apartado "Agente IA"

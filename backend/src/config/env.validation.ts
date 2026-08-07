@@ -40,6 +40,13 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   TOKEN_ENCRYPTION_KEY!: string;
+
+  // El proveedor del canal decide por dónde salen y entran TODOS los mensajes.
+  // Un valor mal escrito ('Evolution', 'metaa') caería silenciosamente en el
+  // proveedor por defecto, y eso se descubriría con los mensajes ya perdidos.
+  @IsIn(['evolution', 'meta'])
+  @IsOptional()
+  WHATSAPP_PROVIDER?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {
