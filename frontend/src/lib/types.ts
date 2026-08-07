@@ -252,3 +252,39 @@ export interface TestChatReply {
   text: string;
   simulatedTools: SimulatedTool[];
 }
+
+/** Estado del vínculo con WhatsApp, tal como lo cuenta el backend. */
+export type WhatsappConnectionStatus =
+  | 'DISCONNECTED'
+  | 'QR_PENDING'
+  | 'CONNECTED'
+  | 'ERROR';
+
+/**
+ * El canal de WhatsApp del negocio.
+ *
+ * No dice qué proveedor hay debajo más allá de `vinculaConQr`, y es a propósito:
+ * la pantalla se escribe una sola vez y sigue valiendo cuando la plataforma
+ * migre a la API oficial de Meta.
+ */
+export interface ChannelStatus {
+  /** Si el servidor tiene credenciales para operar el canal. */
+  configurado: boolean;
+  /** Si vincular consiste en escanear un QR. */
+  vinculaConQr: boolean;
+  provider: 'EVOLUTION' | 'META';
+  status: WhatsappConnectionStatus;
+  /** Número del negocio ya vinculado, en E.164. */
+  phoneNumber: string | null;
+  /** QR listo para pintar (data URI). Solo llega mientras hay vinculación viva. */
+  qrCode: string | null;
+  qrExpiresAt: string | null;
+  lastError: string | null;
+  connectedAt: string | null;
+}
+
+/** Lo que el backend avisa por el canal de tiempo real. */
+export type EventoPanel =
+  | { tipo: 'mensaje'; conversationId: string; direccion: 'entrante' | 'saliente' }
+  | { tipo: 'conversacion'; conversationId: string; nueva: boolean }
+  | { tipo: 'canal'; status: WhatsappConnectionStatus };

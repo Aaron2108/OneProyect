@@ -19,6 +19,7 @@ const TeamPage = lazy(() => import('@/features/team/TeamPage').then((m) => ({ de
 const CalendarPage = lazy(() => import('@/features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })));
 const AiAgentPage = lazy(() => import('@/features/ai-agent/AiAgentPage').then((m) => ({ default: m.AiAgentPage })));
 const ProductsPage = lazy(() => import('@/features/products/ProductsPage').then((m) => ({ default: m.ProductsPage })));
+const ChannelsPage = lazy(() => import('@/features/channels/ChannelsPage').then((m) => ({ default: m.ChannelsPage })));
 
 /**
  * Contenedor con scroll de cada sección.
@@ -100,6 +101,7 @@ export function AppShell(): JSX.Element {
                 <Route path="/productos" element={<Desplazable><ProductsPage /></Desplazable>} />
                 <Route path="/agente" element={<Desplazable><AiAgentPage /></Desplazable>} />
                 <Route path="/equipo" element={<Desplazable><TeamPage /></Desplazable>} />
+                <Route path="/canales" element={<Desplazable><ChannelsPage /></Desplazable>} />
                 {/* Cualquier otra cosa cae en la bandeja, que es la pantalla de
                     trabajo. `replace` para no dejar basura en el historial. */}
                 <Route path="*" element={<Navigate to="/bandeja" replace />} />

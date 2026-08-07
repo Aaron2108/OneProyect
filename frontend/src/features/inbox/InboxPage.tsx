@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, downloadFile } from '@/lib/api';
 import { esConversationDetail } from '@/lib/guards';
 import { useToast } from '@/lib/toast-context';
+import { useRealtime } from '@/lib/use-realtime';
 import { useListaPaginada } from '@/lib/use-recurso';
 import type { ConversationDetail, ConversationStatus, ConversationHandler, ConversationSummary } from '@/lib/types';
 import { ContactPanel } from './ContactPanel';
@@ -93,6 +94,45 @@ export function InboxPage(): JSX.Element {
     }
     void recargar();
   }
+
+  // Refresco de fondo: el usuario no lo pidió, así que un fallo no se le
+  // cuenta. Avisarle de un error que no provocó (y que se corrige solo en el
+  // siguiente evento) sería ruido en mitad de su trabajo.
+  const refrescarEnSilencio = useCallback(async (id: string): Promise<void> => {
+    try {
+      const c = await api<unknown>(`/conversations/${id}`);
+      if (!esConversationDetail(c)) return;
+      setConversation((previa) => (previa?.id === id ? c : previa));
+      if (c.unreadCount > 0) {
+        // El hilo está abierto delante de quien lo lee: ya está leído.
+        await api(`/conversations/${id}/read`, { method: 'POST' });
+      }
+    } catch {
+      // Ver arriba.
+    }
+  }, []);
+
+  // `selectedIdRef` en vez de leer `selectedId` dentro del manejador: el hook
+  // guarda el manejador en una ref y no vuelve a suscribirse, así que la
+  // variable capturada sería siempre la del primer render.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+
+  // Mensajes y conversaciones nuevas aparecen solos, sin recargar la página.
+  useRealtime(
+    useCallback(
+      (evento) => {
+        if (evento.tipo === 'canal') return; // lo atiende la sección Canales
+        // La lista se recarga siempre: cambian el orden, el último mensaje y el
+        // contador de sin leer aunque la conversación afectada no esté abierta.
+        void recargar();
+        if (evento.tipo === 'mensaje' && evento.conversationId === selectedIdRef.current) {
+          void refrescarEnSilencio(evento.conversationId);
+        }
+      },
+      [recargar, refrescarEnSilencio],
+    ),
+  );
 
   async function sendMessage(text: string): Promise<void> {
     if (!selectedId) return;

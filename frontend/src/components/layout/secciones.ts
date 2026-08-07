@@ -5,6 +5,7 @@ import {
   LayoutGrid,
   MessageSquare,
   Package,
+  Radio,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,4 +30,7 @@ export const SECCIONES: Array<{ path: string; label: string; icon: LucideIcon }>
   { path: '/productos', label: 'Productos', icon: Package },
   { path: '/agente', label: 'Agente IA', icon: Bot },
   { path: '/equipo', label: 'Equipo', icon: Users },
+  // Al final y no junto a Bandeja: es configuración, se toca el primer día y
+  // casi nunca más. Las secciones de trabajo diario van primero.
+  { path: '/canales', label: 'Canales', icon: Radio },
 ];

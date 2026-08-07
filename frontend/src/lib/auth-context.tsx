@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, clearToken, getToken, setToken, setUnauthorizedHandler } from './api';
+import { cerrarRealtime } from './use-realtime';
 import type { AuthResult, AuthUser } from './types';
 
 const USER_KEY = 'wf_me';
@@ -46,6 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   function logout(): void {
     clearToken();
     localStorage.removeItem(USER_KEY);
+    // El socket se abrió autenticado con el token que acaba de dejar de valer:
+    // dejarlo vivo mantendría al navegador recibiendo la bandeja del negocio
+    // después de salir.
+    cerrarRealtime();
     // Lo guardado por sesión (hoy, la conversación del chat de prueba) se va con
     // el usuario: en un equipo compartido, el siguiente en entrar no tiene por
     // qué encontrarse lo que probó el anterior.

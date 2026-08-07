@@ -22,6 +22,7 @@ const API_PREFIXES = [
   '/knowledge',
   '/ai-context',
   '/products',
+  '/channels',
 ];
 
 export default defineConfig({
@@ -39,9 +40,19 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: Object.fromEntries(
-      API_PREFIXES.map((p) => [p, { target: 'http://localhost:3000', changeOrigin: true }]),
-    ),
+    proxy: {
+      ...Object.fromEntries(
+        API_PREFIXES.map((p) => [p, { target: 'http://localhost:3000', changeOrigin: true }]),
+      ),
+      // El canal de tiempo real. La ruta es `/socket.io` y no `/realtime`:
+      // `/realtime` es el NAMESPACE de socket.io, que viaja dentro del
+      // handshake, no en la URL. Proxear `/realtime` no interceptaba nada y el
+      // socket se quedaba intentando abrirse contra el servidor de desarrollo.
+      //
+      // `ws: true` es imprescindible: sin él Vite reenvía la petición como HTTP
+      // normal y el navegador nunca completa el "upgrade" a WebSocket.
+      '/socket.io': { target: 'http://localhost:3000', ws: true, changeOrigin: true },
+    },
   },
   build: {
     outDir: 'dist',
