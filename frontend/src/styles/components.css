@@ -850,6 +850,32 @@
    que no hay, así que se ve en rojo incluso en reposo. */
 .wf-celda--agotado { color: var(--danger); }
 
+/* ===== Bandeja sin canal conectado ===== */
+/* El trazo del enlace avanza hacia la derecha: la conexión está en camino, no
+   hecha. Como clase y no en línea, para que la media query de movimiento
+   reducido de tokens.css pueda pararla. */
+.rail-enlace {
+  stroke-dasharray: 6 7;
+  animation: enlaceAvanza 1.4s linear infinite;
+}
+@keyframes enlaceAvanza {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
+/* Por debajo de 860px no caben las dos columnas: la lista de conversaciones se
+   oculta y la invitación ocupa la pantalla. Enseñar ahí una lista vacía en vez
+   de lo único que hay que hacer sería dejar al usuario sin salida visible. */
+@media (max-width: 860px) {
+  .inbox-layout.sin-canal > .roster-panel {
+    display: none;
+  }
+  .inbox-layout.sin-canal:not(.is-viewing-thread) > .thread-panel {
+    display: flex;
+  }
+}
+
 /* ===== Scrollbar discreto ===== */
 * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }

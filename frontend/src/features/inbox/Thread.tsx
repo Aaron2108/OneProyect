@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import type { ConversationDetail, ConversationSummaryResult, Message } from '@/lib/types';
+import { BandejaSinCanal } from './BandejaSinCanal';
 import { Composer } from './Composer';
 import { NotesDialog } from './NotesDialog';
 
@@ -15,6 +16,11 @@ function timeShort(d: string): string {
 
 interface ThreadProps {
   conversation: ConversationDetail | null;
+  /**
+   * El negocio no ha vinculado ningún canal y todavía no tiene conversaciones.
+   * Lo decide la bandeja, que es quien conoce las dos mitades del dato.
+   */
+  sinCanal: boolean;
   onBack: () => void;
   onSend: (text: string) => Promise<void>;
   onHandoff: () => Promise<void>;
@@ -138,7 +144,7 @@ function Turn({
 }
 
 export function Thread(props: ThreadProps): JSX.Element {
-  const { conversation: c } = props;
+  const { conversation: c, sinCanal } = props;
   const toast = useToast();
   const [notesOpen, setNotesOpen] = useState(false);
   // Guarda SOLO el resumen recién generado; el resto sale de la conversación.
@@ -183,9 +189,16 @@ export function Thread(props: ThreadProps): JSX.Element {
   if (!c) {
     return (
       <div className="thread-panel thread-canvas">
-        <div className="m-auto">
-          <EmptyState icon={MessageCircle} title="Elige una conversación" description="Selecciona un chat de la izquierda para ver el hilo y responder." />
-        </div>
+        {/* Sin canal y sin conversaciones no hay nada que elegir: pedir que se
+            seleccione un chat de una lista vacía deja al usuario mirando dos
+            huecos sin decirle qué falta. */}
+        {sinCanal ? (
+          <BandejaSinCanal />
+        ) : (
+          <div className="m-auto">
+            <EmptyState icon={MessageCircle} title="Elige una conversación" description="Selecciona un chat de la izquierda para ver el hilo y responder." />
+          </div>
+        )}
       </div>
     );
   }

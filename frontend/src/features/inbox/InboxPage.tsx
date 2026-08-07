@@ -5,7 +5,7 @@ import { esConversationDetail } from '@/lib/guards';
 import { useToast } from '@/lib/toast-context';
 import { useRealtime } from '@/lib/use-realtime';
 import { useListaPaginada } from '@/lib/use-recurso';
-import type { ConversationDetail, ConversationStatus, ConversationHandler, ConversationSummary } from '@/lib/types';
+import type { ChannelStatus, ConversationDetail, ConversationStatus, ConversationHandler, ConversationSummary } from '@/lib/types';
 import { ContactPanel } from './ContactPanel';
 import { Roster } from './Roster';
 import { Thread } from './Thread';
@@ -43,6 +43,35 @@ export function InboxPage(): JSX.Element {
     cargarMas,
     recargar,
   } = useListaPaginada<ConversationSummary>(ruta, 'No se pudieron cargar las conversaciones');
+
+  // Estado del canal, solo para saber si hay que invitar a conectarlo. Se pide
+  // sin ruido: si falla, se asume que hay canal y la bandeja se comporta como
+  // siempre — equivocarse hacia "no molestar" es preferible a plantarle a un
+  // negocio en marcha una pantalla de bienvenida por un fallo de red.
+  const [canalConectado, setCanalConectado] = useState(true);
+  const cargarCanal = useCallback(async (): Promise<void> => {
+    try {
+      const c = await api<ChannelStatus>('/channels/whatsapp');
+      setCanalConectado(c.status === 'CONNECTED');
+    } catch {
+      /* Ver arriba. */
+    }
+  }, []);
+
+  useEffect(() => {
+    void cargarCanal();
+  }, [cargarCanal]);
+
+  /**
+   * Cuándo se enseña la invitación a conectar.
+   *
+   * Hacen falta las tres condiciones. Sin canal PERO con conversaciones, esto
+   * sería falso ("tu primer canal") y taparía trabajo real: ese caso es
+   * reconectar, y se atiende en Canales. Y mientras la lista carga no se sabe
+   * todavía si está vacía, así que enseñarlo ahí produciría un parpadeo de
+   * bienvenida en cada recarga de un negocio que ya trabaja.
+   */
+  const sinCanal = !canalConectado && !cargando && items.length === 0 && !query.trim();
 
   function openConversation(id: string): void {
     setMobileViewingThread(true);
@@ -122,7 +151,13 @@ export function InboxPage(): JSX.Element {
   useRealtime(
     useCallback(
       (evento) => {
-        if (evento.tipo === 'canal') return; // lo atiende la sección Canales
+        // Si el canal se vincula desde otra pestaña (o desde Canales, en esta
+        // misma sesión), la invitación a conectarlo desaparece sola en cuanto
+        // deja de ser cierta.
+        if (evento.tipo === 'canal') {
+          void cargarCanal();
+          return;
+        }
         // La lista se recarga siempre: cambian el orden, el último mensaje y el
         // contador de sin leer aunque la conversación afectada no esté abierta.
         void recargar();
@@ -130,7 +165,7 @@ export function InboxPage(): JSX.Element {
           void refrescarEnSilencio(evento.conversationId);
         }
       },
-      [recargar, refrescarEnSilencio],
+      [recargar, refrescarEnSilencio, cargarCanal],
     ),
   );
 
@@ -162,7 +197,13 @@ export function InboxPage(): JSX.Element {
   }
 
   return (
-    <div className={`inbox-layout ${mobileViewingThread ? 'is-viewing-thread' : ''}`}>
+    // `sin-canal` solo cambia el reparto en móvil, donde no caben las dos
+    // columnas: ahí manda la invitación a conectar y la lista se aparta.
+    <div
+      className={`inbox-layout ${mobileViewingThread ? 'is-viewing-thread' : ''} ${
+        sinCanal ? 'sin-canal' : ''
+      }`}
+    >
       <Roster
         items={items}
         loading={cargando && items.length === 0}
@@ -182,6 +223,7 @@ export function InboxPage(): JSX.Element {
       />
       <Thread
         conversation={conversation}
+        sinCanal={sinCanal}
         onBack={() => {
           setMobileViewingThread(false);
           navigate('/bandeja');
