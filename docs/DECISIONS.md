@@ -558,3 +558,15 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **Principio**: una firma válida prueba que el token lo emitimos nosotros, no que sea de la clase que este punto espera. Con un secreto compartido entre varios tipos de token, cada consumidor tiene que validar la CLASE, no solo la firma. El invariante que todo el sistema daba por seguro —"si hay sesión, hay tenantId"— no estaba comprobado en ninguna parte.
 
 **Al desplegar**: rotar `JWT_SECRET` para invalidar cualquier `google-signup` que un atacante ya tuviera capturado. El arreglo conserva las sesiones activas y no necesita migración.
+
+## 2026-08-08 — Cierre del hardening: rotación de JWT_SECRET y defensa en profundidad por tenant
+
+Cierre de las recomendaciones de la auditoría (run-1/run-2).
+
+**Rotación de `JWT_SECRET`**: se generó uno nuevo en desarrollo (invalida las sesiones y cualquier token de OAuth en vuelo firmado con el anterior) y se documentó en `.env.example` que en producción debe ser un secreto independiente y fuerte, no reutilizado, rotable ante sospecha de filtración. El mismo secreto firma los tokens de sesión y los intermedios de Google; el guard los distingue por `purpose` (ver la decisión de esta misma fecha sobre la fuga entre tenants).
+
+**Defensa en profundidad por tenant (`common/tenant.util.ts`, `assertTenantId`)**: el arreglo del guard ya garantiza que `user.tenantId` es un texto válido en cada petición autenticada; esto lo vuelve a comprobar en la frontera de los servicios de datos, para que un llamador futuro que pase un tenant sin resolver falle en el acto —con un Error 500 claro— en vez de filtrar en silencio como en el run-1. Se aplicó a la superficie de LECTURA por tenant (la que filtra datos si el `where` se cae): contactos, conversaciones, citas, productos, métricas, perfil de negocio y el estado/gestión del canal.
+
+**Por qué una aserción y no un middleware de Prisma**: Prisma 6 eliminó `$use`, y `$extends` devuelve un cliente nuevo que habría obligado a cambiar la inyección en decenas de servicios —justo el refactor que la petición pedía evitar—. La aserción en la frontera del servicio es explícita, testeable y no toca la arquitectura. Cumple al pie de la letra "los servicios deben validar tenant" y "los helpers deben exigir tenantId".
+
+**No se tocaron** las consultas `$queryRaw` de RAG/memoria (recuperación vectorial y de contexto): usan `tenantId` como parámetro ligado, que se liga como NULL y no coincide con nada —no sufren el "drop de filtro" de Prisma— y son best-effort. Ni los workers de fondo, que consultan cross-tenant a propósito (omiten la clave, no la ponen en undefined).

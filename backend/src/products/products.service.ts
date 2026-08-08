@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Product } from '@prisma/client';
 import { parseCsv } from '../common/csv.util';
+import { assertTenantId } from '../common/tenant.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ListProductsDto } from './dto/list-products.dto';
@@ -33,6 +34,7 @@ export class ProductsService {
     tenantId: string,
     opts: ListProductsDto,
   ): Promise<{ items: Product[]; nextCursor: string | null }> {
+    assertTenantId(tenantId);
     const limit = opts.limit ?? 25;
     // `searchText` ya está en minúsculas y sin tildes, así que basta con
     // normalizar la consulta igual: "Pantalón" y "pantalon" caen en lo mismo.
@@ -58,6 +60,7 @@ export class ProductsService {
    * contra la BD, nunca desde el prompt — el stock cambia entre mensajes.
    */
   async searchForAi(tenantId: string, query: string, limit = 5): Promise<Product[]> {
+    assertTenantId(tenantId);
     const terminos = buildSearchTerms(query);
     // Sin términos útiles la pregunta no es "¿tienen X?" sino "¿qué tienen?".
     // Devolver vacío hacía que el agente respondiera que no hay nada; lo que
@@ -151,6 +154,7 @@ export class ProductsService {
   }
 
   async get(tenantId: string, id: string): Promise<Product> {
+    assertTenantId(tenantId);
     const product = await this.prisma.product.findFirst({ where: { id, tenantId } });
     if (!product) throw new NotFoundException('Producto no encontrado');
     return product;

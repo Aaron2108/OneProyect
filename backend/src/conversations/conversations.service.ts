@@ -10,6 +10,7 @@ import {
 import { AiContextMemoryService } from '../ai/ai-context-memory.service';
 import { AiWriterService } from '../ai/ai-writer.service';
 import { HistoryTurn } from '../ai/ai.types';
+import { assertTenantId } from '../common/tenant.util';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toCsv } from '../common/csv.util';
@@ -53,6 +54,7 @@ export class ConversationsService {
    * recorre las filas saltadas.
    */
   async list(tenantId: string, filters: ListConversationsDto) {
+    assertTenantId(tenantId);
     const limit = filters.limit ?? 25;
     const q = filters.q?.trim();
     const items = await this.prisma.conversation.findMany({
@@ -84,6 +86,7 @@ export class ConversationsService {
 
   /** Exporta las conversaciones del tenant a CSV. */
   async exportCsv(tenantId: string): Promise<string> {
+    assertTenantId(tenantId);
     const convs = await this.prisma.conversation.findMany({
       where: { tenantId },
       orderBy: { lastMessageAt: 'desc' },
@@ -106,6 +109,7 @@ export class ConversationsService {
 
   /** Detalle de una conversación con su hilo de mensajes y el contador de notas. */
   async get(tenantId: string, id: string) {
+    assertTenantId(tenantId);
     const conversation = await this.prisma.conversation.findFirst({
       where: { id, tenantId },
       include: {
@@ -217,6 +221,7 @@ export class ConversationsService {
   }
 
   private async assertExists(tenantId: string, id: string): Promise<void> {
+    assertTenantId(tenantId);
     const owned = await this.prisma.conversation.count({ where: { id, tenantId } });
     if (owned === 0) {
       throw new NotFoundException('Conversación no encontrada');
@@ -234,6 +239,7 @@ export class ConversationsService {
     id: string,
     text: string,
   ): Promise<Message> {
+    assertTenantId(tenantId);
     const conversation = await this.prisma.conversation.findFirst({
       where: { id, tenantId },
       include: { contact: { select: { phone: true } }, tenant: { select: { whatsappPhoneNumberId: true } } },
@@ -297,6 +303,7 @@ export class ConversationsService {
 
   /** Marca la conversación como leída (pone el contador de sin leer a 0). */
   async markRead(tenantId: string, id: string): Promise<Conversation> {
+    assertTenantId(tenantId);
     const owned = await this.prisma.conversation.count({ where: { id, tenantId } });
     if (owned === 0) {
       throw new NotFoundException('Conversación no encontrada');

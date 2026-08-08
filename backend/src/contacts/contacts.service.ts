@@ -6,6 +6,7 @@ import {
 import { Contact } from '@prisma/client';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertTenantId } from '../common/tenant.util';
 import { toCsv } from '../common/csv.util';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { ListContactsDto } from './dto/list-contacts.dto';
@@ -36,6 +37,7 @@ export class ContactsService {
     tenantId: string,
     opts: ListContactsDto,
   ): Promise<{ items: Contact[]; nextCursor: string | null }> {
+    assertTenantId(tenantId);
     const limit = opts.limit ?? 25;
     const q = opts.q?.trim();
     const items = await this.prisma.contact.findMany({
@@ -60,6 +62,7 @@ export class ContactsService {
 
   /** Exporta los contactos del tenant a CSV. */
   async exportCsv(tenantId: string): Promise<string> {
+    assertTenantId(tenantId);
     const contacts = await this.prisma.contact.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
@@ -72,6 +75,7 @@ export class ContactsService {
   }
 
   async get(tenantId: string, id: string): Promise<Contact> {
+    assertTenantId(tenantId);
     const contact = await this.prisma.contact.findFirst({
       where: { id, tenantId },
     });

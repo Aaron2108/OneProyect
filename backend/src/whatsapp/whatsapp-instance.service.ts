@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WhatsappConnectionStatus, WhatsappInstance } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { assertTenantId } from '../common/tenant.util';
 import { PiiCryptoService } from '../common/pii-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -54,6 +55,7 @@ export class WhatsappInstanceService {
    * quedaría en "Esperando escaneo" para siempre.
    */
   async obtenerEstado(tenantId: string): Promise<ChannelStatusDto> {
+    assertTenantId(tenantId);
     let instancia = await this.prisma.whatsappInstance.findUnique({ where: { tenantId } });
 
     if (instancia?.status === WhatsappConnectionStatus.QR_PENDING) {
@@ -90,6 +92,7 @@ export class WhatsappInstanceService {
    * puede seguir recibiendo mensajes que ya no llegarían a ninguna bandeja.
    */
   async conectar(tenantId: string): Promise<ChannelStatusDto> {
+    assertTenantId(tenantId);
     const previa = await this.prisma.whatsappInstance.findUnique({ where: { tenantId } });
     if (previa) {
       await this.eliminarEnProveedor(previa);
@@ -142,6 +145,7 @@ export class WhatsappInstanceService {
    * ella (o si el proveedor ya no la conoce) se empieza de cero.
    */
   async reconectar(tenantId: string): Promise<ChannelStatusDto> {
+    assertTenantId(tenantId);
     const instancia = await this.prisma.whatsappInstance.findUnique({ where: { tenantId } });
     if (!instancia) {
       return this.conectar(tenantId);
@@ -184,6 +188,7 @@ export class WhatsappInstanceService {
    * para quien está intentando entender por qué no le entran mensajes.
    */
   async desconectar(tenantId: string): Promise<ChannelStatusDto> {
+    assertTenantId(tenantId);
     const instancia = await this.prisma.whatsappInstance.findUnique({ where: { tenantId } });
     if (!instancia) {
       return this.aDto(null);

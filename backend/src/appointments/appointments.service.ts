@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Appointment } from '@prisma/client';
 import { GoogleCalendarSyncService } from '../google-calendar/google-calendar-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertTenantId } from '../common/tenant.util';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { ListAppointmentsDto } from './dto/list-appointments.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -27,6 +28,7 @@ export class AppointmentsService {
 
   /** Lista de citas del tenant, opcionalmente por contacto y/o rango de fechas (vista de calendario). */
   list(tenantId: string, filters: ListAppointmentsDto): Promise<AppointmentWithContact[]> {
+    assertTenantId(tenantId);
     return this.prisma.appointment.findMany({
       where: {
         tenantId,
@@ -42,6 +44,7 @@ export class AppointmentsService {
   }
 
   async get(tenantId: string, id: string): Promise<Appointment> {
+    assertTenantId(tenantId);
     const appointment = await this.prisma.appointment.findFirst({
       where: { id, tenantId },
     });
@@ -90,6 +93,7 @@ export class AppointmentsService {
     tenantId: string,
     contactId: string,
   ): Promise<void> {
+    assertTenantId(tenantId);
     const count = await this.prisma.contact.count({
       where: { id: contactId, tenantId },
     });

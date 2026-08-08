@@ -8,6 +8,7 @@ import {
   ReminderStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertTenantId } from '../common/tenant.util';
 
 /** Un punto de la serie de actividad diaria. */
 export interface ActivityPoint {
@@ -88,6 +89,7 @@ export class MetricsService {
     tenantId: string,
     range: { from?: Date; to?: Date } = {},
   ): Promise<MetricsOverview> {
+    assertTenantId(tenantId);
     const until = range.to ?? new Date();
     const since = new Date(range.from ?? new Date(until.getTime() - (ACTIVITY_DAYS - 1) * DAY_MS));
     since.setUTCHours(0, 0, 0, 0); // límites de día en UTC (coherente con date_trunc y toISOString)

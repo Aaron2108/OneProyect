@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { isValidTimeZone } from '../ai/ai-datetime.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertTenantId } from '../common/tenant.util';
 import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
 
 export interface BusinessProfileDto {
@@ -26,6 +27,7 @@ export class BusinessProfileService {
   constructor(private readonly prisma: PrismaService) {}
 
   async get(tenantId: string): Promise<BusinessProfileDto> {
+    assertTenantId(tenantId);
     const [profile, tenant] = await Promise.all([
       this.prisma.businessProfile.findUnique({ where: { tenantId } }),
       this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { timeZone: true } }),
@@ -35,6 +37,7 @@ export class BusinessProfileService {
 
   /** Nombre de la empresa — lo necesita el system prompt de la IA. */
   async tenantName(tenantId: string): Promise<string> {
+    assertTenantId(tenantId);
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { name: true },
@@ -49,6 +52,7 @@ export class BusinessProfileService {
    * eligió nada".
    */
   async timeZoneOf(tenantId: string): Promise<string | null> {
+    assertTenantId(tenantId);
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { timeZone: true },
@@ -92,6 +96,7 @@ export class BusinessProfileService {
    * cual, igual que hace con los recuerdos de `AiContextMemoryService`.
    */
   async describe(tenantId: string): Promise<string[]> {
+    assertTenantId(tenantId);
     const profile = await this.prisma.businessProfile.findUnique({ where: { tenantId } });
     if (!profile) return [];
     const lines: string[] = [];
