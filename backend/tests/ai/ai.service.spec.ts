@@ -329,6 +329,35 @@ describe('AiService', () => {
     // El cliente leía "Escale a una persona del equipo porque no está claro en
     // los datos del negocio": el modelo narraba su regla interna en vez de
     // hablarle. Al otro lado hay un cliente, no un registro de depuración.
+    // Un cliente escribió una obscenidad y el agente le siguió el juego con
+    // doble sentido y emojis, en el WhatsApp de una barbería. La broma la paga
+    // el dueño, no el modelo.
+    it('no le sigue el juego a una provocación ni usa doble sentido', () => {
+      expect(prompt()).toMatch(/no lo sigas ni respondas en ese tono/i);
+      expect(prompt()).toMatch(/nunca uses lenguaje sexual, vulgar ni de doble sentido/i);
+      expect(prompt()).toMatch(/aunque el cliente lo use primero/i);
+    });
+
+    // Le llegó a un cliente "¿quieres интереar algo?" —cirílico dentro de una
+    // palabra española— y un "no tienes citas agendadas currently".
+    it('exige español y prohíbe mezclar idiomas', () => {
+      expect(prompt()).toMatch(/responde SOLO en español/i);
+      expect(prompt()).toMatch(/no mezcles palabras de otros idiomas ni alfabetos/i);
+    });
+
+    // El negocio pedía un tono "chevere, amigable"; sin esta aclaración, eso se
+    // leía como permiso para seguirle la broma a cualquiera.
+    it('el tono del negocio no levanta las reglas de conducta', () => {
+      const conTono = new AiService(
+        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
+      ).buildSystemPrompt(
+        { tenantId: 't', tenantName: 'E', contactId: 'c', contactName: 'Ana', contactPhone: '1', conversationId: 'cv' },
+        [],
+        ['Tono/estilo con el que debes responder: chevere, peruana, amigable'],
+      );
+      expect(conTono).toMatch(/cambia CÓMO hablas, no lo que puedes decir/i);
+    });
+
     it('le prohibe contarle al cliente que está escalando', () => {
       expect(prompt()).toMatch(/no se lo anuncies ni le expliques tus reglas/i);
     });

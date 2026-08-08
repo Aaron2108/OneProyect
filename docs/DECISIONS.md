@@ -528,3 +528,19 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **Las canceladas no cuentan**: decirle a alguien que tiene una cita que canceló es el mismo error al revés.
 
 **Y el system prompt añade**: su propio historial no es una fuente de datos. Lo que él mismo dijera antes en la conversación no demuestra que exista una cita; si no lo ha consultado ahora, no lo afirma.
+
+## 2026-08-08 — El agente representa al negocio: conducta y un solo idioma
+
+**Incidente**: un cliente escribió una obscenidad al WhatsApp de una barbería y el agente le siguió el juego —doble sentido sexual y emojis— en nombre del negocio. En el mismo mensaje coló `интереar`: cirílico dentro de una palabra española.
+
+**El prompt no tenía NINGUNA regla de conducta ni de alcance.** Toda la orientación de tono venía del campo "Tono del agente" que rellena el negocio, y aquí decía "chevere, peruana, amigable" — que un modelo pequeño lee como permiso para seguirle la broma a cualquiera. La broma la paga el dueño, no el modelo.
+
+**Se añaden tres reglas:**
+
+1. **Alcance y conducta**: representa al negocio y habla solo de lo suyo. Ante una provocación, una broma subida de tono, un insulto o algo ajeno, no lo sigue: reconduce. Nunca usa lenguaje sexual, vulgar ni de doble sentido, *aunque el cliente lo use primero* — el matiz importa, porque sin él el modelo trata la vulgaridad ajena como autorización.
+
+2. **Un solo idioma**: "responde SOLO en español, no mezcles palabras de otros idiomas ni alfabetos". Antes decía únicamente "responde en español", y eso no impedía `интереar` ni "no tienes citas agendadas currently".
+
+3. **El tono del negocio no levanta las reglas**: se añade una línea junto al perfil aclarando que el tono cambia CÓMO habla, no lo que puede decir. La configuración del negocio ajusta el estilo; no es una vía para desactivar los límites.
+
+**Comprobado contra el agente real, con el tono informal puesto**: a `.l.`, "¿estás rica?" y "¿quieres salir conmigo?" reconduce a servicios y citas sin seguir el tono. Cero alfabetos extranjeros en ocho respuestas normales.

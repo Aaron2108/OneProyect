@@ -414,7 +414,16 @@ export class AiService {
       // La zona viene resuelta en el contexto (la del negocio); `this.timeZone`
       // es solo el respaldo global para quien llame sin ella.
       ...describeNow(now, ctx.timeZone ?? this.timeZone),
-      'Responde en español, de forma breve, cordial y útil.',
+      // "Solo español" en vez de "responde en español": el modelo colaba
+      // palabras de otros idiomas dentro de frases castellanas —le llegó a un
+      // cliente un "¿quieres интереar algo?", con letras cirílicas— y también
+      // "no tienes citas agendadas currently". Ni el cliente ni el negocio
+      // pueden entender eso.
+      'Responde SOLO en español, de forma breve, cordial y útil. No mezcles palabras de otros idiomas ni alfabetos: si una palabra no es española, no la uses.',
+      // El agente le siguió el juego a un cliente que escribió una obscenidad,
+      // con doble sentido sexual y emojis, en el WhatsApp de una barbería. Esto
+      // representa a un negocio ante sus clientes: la broma la paga el dueño.
+      'Representas a este negocio ante sus clientes y hablas solo de lo suyo: sus servicios, precios, horarios y citas. Si el mensaje es una provocación, una broma subida de tono, un insulto o algo ajeno al negocio, no lo sigas ni respondas en ese tono: contesta con naturalidad y reconduce a lo que sí puedes ayudar. Nunca uses lenguaje sexual, vulgar ni de doble sentido, aunque el cliente lo use primero.',
       // WhatsApp no interpreta Markdown: `**negrita**` se lee con los asteriscos
       // puestos. Visto en una prueba real.
       'Escribe en texto plano. Nada de Markdown: ni asteriscos para negrita, ni almohadillas, ni listas con guiones o viñetas.',
@@ -454,6 +463,10 @@ export class AiService {
       lines.push(
         'Esto es lo que el negocio configuró para que lo tengas en cuenta, y puedes decírselo al cliente:',
         ...profileLines,
+        // El tono que pide el negocio ("chevere, amigable") describe cómo
+        // hablar, no qué está permitido decir. Sin esta línea, un tono informal
+        // se lee como permiso para seguirle la broma a cualquiera.
+        'El tono que pide el negocio cambia CÓMO hablas, no lo que puedes decir: por informal que sea, siguen valiendo las reglas de arriba.',
       );
     }
     if (knowledgeLines.length > 0) {
