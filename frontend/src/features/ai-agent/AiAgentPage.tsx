@@ -7,6 +7,7 @@ import {
   Cpu,
   FileText,
   Globe,
+  MapPin,
   Play,
   RefreshCw,
   Save,
@@ -94,16 +95,50 @@ const EMPTY_FORM: FormState = {
 };
 
 /**
- * Zonas horarias que ofrece el desplegable. Se piden al navegador en vez de
- * mantener una lista a mano: así está siempre completa y al día. Si el navegador
- * no lo soporta, queda al menos la suya detectada, para no dejar el campo vacío.
+ * Zonas horarias del desplegable, con la del equipo separada del resto.
+ *
+ * La lista se le pide al navegador en vez de mantenerla a mano: así está siempre
+ * completa y al día. Y la detectada sale aparte para poder ofrecerla la primera:
+ * son más de cuatrocientas entradas y quien configura su negocio casi siempre
+ * está EN el negocio, así que la que busca suele ser justo esa.
+ *
+ * `detectada` se excluye de `resto` a propósito: repetirla dejaría dos opciones
+ * con el mismo valor en el desplegable.
  */
-function timeZoneOptions(): string[] {
-  const propia = Intl.DateTimeFormat().resolvedOptions().timeZone;
+function timeZoneOptions(): { detectada: string | null; resto: string[] } {
+  let detectada: string | null = null;
+  try {
+    detectada = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    // Navegador sin datos de zonas: se sigue sin sugerencia, no es un error.
+  }
   const soportadas = (
     Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
   ).supportedValuesOf?.('timeZone');
-  return soportadas?.length ? soportadas : [propia].filter(Boolean);
+  const todas = soportadas?.length ? soportadas : [detectada].filter((z): z is string => !!z);
+  return { detectada, resto: todas.filter((z) => z !== detectada) };
+}
+
+/**
+ * Qué hora es ahora mismo en esa zona.
+ *
+ * Es la comprobación que convierte el nombre de la zona en algo verificable:
+ * "America/Lima" no le dice a nadie si es la correcta, pero "allí son las 14:32"
+ * se contrasta mirando el reloj. Una zona mal puesta no se nota hasta que las
+ * citas salen corridas, y para entonces ya hay clientes esperando a otra hora.
+ */
+function horaEnZona(zona: string): string | null {
+  try {
+    return new Date().toLocaleTimeString('es', {
+      timeZone: zona,
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    // Zona guardada que este navegador no reconoce: mejor no enseñar nada que
+    // enseñar la hora local haciéndola pasar por la de allí.
+    return null;
+  }
 }
 
 /** Una fila de la tarjeta de estado: icono, qué se mide y cómo está. */
@@ -147,7 +182,7 @@ export function AiAgentPage(): JSX.Element {
   // panel de contexto no siga mostrando un estado viejo.
   const [contextKey, setContextKey] = useState(0);
   // La lista es larga y no cambia: se calcula una vez, no en cada render.
-  const [zonas] = useState(timeZoneOptions);
+  const [{ detectada, resto: zonas }] = useState(timeZoneOptions);
   // Lo que los dos bloques de abajo reportan hacia arriba para la tarjeta de
   // estado. Siguen cargando sus propios datos: esto es solo el resumen, así que
   // la cabecera puede decir cómo está el agente sin repetir sus peticiones.
@@ -420,16 +455,45 @@ export function AiAgentPage(): JSX.Element {
                     onChange={(e) => setForm((prev) => ({ ...prev, timeZone: e.target.value }))}
                     disabled={!isOwner}
                   >
-                    <option value="">Usar la del servidor</option>
+                    {/* La del equipo, arriba del todo: es la que busca casi
+                        todo el mundo y la lista tiene cuatrocientas entradas. */}
+                    {detectada && <option value={detectada}>{detectada} · la de tu equipo</option>}
+                    {/* Se dice qué hace de verdad. "Usar la del servidor" sonaba
+                        a una opción más, cuando es quedarse sin configurar: el
+                        servidor puede estar en otro continente. */}
+                    <option value="">Sin definir — se usará la del servidor</option>
                     {zonas.map((z) => (
                       <option key={z} value={z}>
                         {z}
                       </option>
                     ))}
                   </Select>
+
+                  {/* Atajo de un clic cuando aún no hay nada elegido. El
+                      desplegable ya la ofrece arriba, pero ahí hay que abrirlo
+                      para descubrirla. */}
+                  {isOwner && !form.timeZone && detectada && (
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, timeZone: detectada }))}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-xs border border-line-strong px-2.5 py-1.5 text-[12px] font-semibold text-ink-soft transition-colors duration-fast hover:border-brand/60 hover:bg-brand-tint hover:text-brand"
+                    >
+                      <MapPin size={13} strokeWidth={2} aria-hidden="true" />
+                      Usar {detectada}, la de este equipo
+                    </button>
+                  )}
+
                   <div className="mt-1.5 text-[11.5px] text-ink-faint">
                     En qué horario agenda la IA. Si dice una hora, será esta: sin la zona correcta las
                     citas quedan corridas.
+                    {/* La hora de allí es lo que hace comprobable la elección:
+                        el nombre de la zona no se puede contrastar con nada. */}
+                    {form.timeZone && horaEnZona(form.timeZone) && (
+                      <>
+                        {' '}
+                        Ahí son ahora las <b className="text-ink-soft">{horaEnZona(form.timeZone)}</b>.
+                      </>
+                    )}
                   </div>
                 </Field>
                 {CAMPOS_NEGOCIO.map((f) => campo(f, 4))}
