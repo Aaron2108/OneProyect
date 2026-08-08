@@ -480,3 +480,19 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **El error se traduce antes de enseñarlo**: `invalid_grant` no le dice nada a nadie y suena a fallo del programa cuando normalmente es que alguien retiró el permiso.
 
 **El botón sube además lo pendiente**, acotado al tenant y saltándose el backoff: quien lo pulsa acaba de arreglar algo y espera que sus citas suban ahora, no dentro de seis horas ni compitiendo por el lote con el resto de la plataforma. Si la conexión no responde no se intenta subir nada — cada fallo gastaría uno de los intentos que tiene la cita antes de abandonarse.
+
+## 2026-08-08 — Un catálogo vacío no es un negocio sin nada que ofrecer
+
+**Problema**: una barbería con sus cortes y precios escritos en el perfil, y ningún producto dado de alta, preguntaba "¿qué cortes tienes y cuáles son los precios?" y el agente contestaba *"escalo porque no tengo acceso al catálogo"*. La pregunta más común de ese negocio, con la respuesta delante, derivada a una persona.
+
+**Tres causas, las tres en el texto que lee el modelo:**
+
+1. La lista de motivos para escalar decía *"…o se trate de dinero, condiciones o compromisos que el negocio no dejó por escrito"*. El calificador va al final y se pega mal: un modelo pequeño lee "se trate de dinero" → un precio es dinero → escalo. Se quita ese motivo y se añade la regla en positivo: **lo que SÍ está escrito en la información del negocio se responde directamente**, y escalar por dinero solo aplica a importes que no figuren ahí.
+
+2. La herramienta del catálogo decía *"úsala SIEMPRE… nunca respondas de memoria"*, sin acotar a qué. Ahora se acota a los **productos registrados**, y dice explícitamente que los servicios y precios del perfil no están ahí y no necesitan la herramienta.
+
+3. Con el catálogo vacío, el resultado de la herramienta era *"dile que lo confirme con el equipo"* — una orden directa que pisaba el perfil. Ahora dice que un catálogo vacío **no** significa que el negocio no ofrezca nada, y que mire la información del negocio antes de derivar.
+
+**Se comprobó que las salvaguardas siguen**: por un producto no declarado (shampoo) ofrece confirmar en vez de inventar; por devoluciones no declaradas escala con la herramienta. Lo declarado se responde, lo no declarado no se improvisa — que era el equilibrio buscado desde el principio.
+
+**Además, el agente dejaba ver sus reglas**: le decía al cliente *"Escale a una persona del equipo porque no está claro en los datos del negocio"*. Al otro lado hay un cliente, no un registro de depuración; ahora se le prohíbe anunciar que escala y se le pide decir con naturalidad que lo confirma con el equipo.

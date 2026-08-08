@@ -63,8 +63,13 @@ export const AI_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: TOOL_CHECK_PRODUCT,
+    // "Nunca respondas de memoria" se acotó a los productos REGISTRADOS. Antes
+    // era absoluto, y con el catálogo vacío el agente derivaba al equipo una
+    // pregunta por precios que el negocio tenía escrita en su información —el
+    // caso más común, porque muchos negocios de servicios (una barbería, un
+    // taller) ponen su lista ahí y no dan de alta productos.
     description:
-      'Consulta el catálogo del negocio: si un producto existe, a qué precio y cuánto stock queda. Úsala SIEMPRE que el cliente pregunte por disponibilidad, precio o existencias — nunca respondas de memoria, porque el stock cambia. Si pregunta en general qué se vende, llámala con `consulta` vacía y devuelve el catálogo.',
+      'Consulta el catálogo de PRODUCTOS REGISTRADOS del negocio: si uno existe, a qué precio y cuánto stock queda. Úsala cuando el cliente pregunte por disponibilidad o existencias de un artículo concreto — el stock cambia y no debes responderlo de memoria. Si pregunta en general qué se vende, llámala con `consulta` vacía. Ojo: los servicios y precios que el negocio haya escrito en su información NO están aquí, y para esos no hace falta esta herramienta: respóndelos directamente.',
     input_schema: {
       type: 'object',
       properties: {
@@ -275,9 +280,15 @@ export class AiToolExecutorService {
     if (encontrados.length === 0) {
       // Importa distinguir "no lo tenemos" de "no lo encontré": el modelo debe
       // ofrecer confirmar con una persona, no afirmar que no existe.
+      //
+      // Y antes de mandar a nadie al equipo, el modelo tiene que mirar la
+      // información del negocio. Este mensaje decía "dile que lo confirme con
+      // el equipo" a secas, y el agente derivaba la pregunta por precios de una
+      // barbería que tenía su lista de cortes escrita en el perfil: un catálogo
+      // de productos vacío no significa que el negocio no haya declarado nada.
       return consulta
-        ? `No hay ningún producto que coincida con "${consulta}" en el catálogo. Puede que no lo vendamos o que esté guardado con otro nombre: ofrécele confirmarlo con el equipo.`
-        : 'El catálogo del negocio está vacío. No afirmes que no vendemos nada: dile que lo confirme con el equipo.';
+        ? `No hay ningún producto registrado que coincida con "${consulta}". Antes de derivar: si eso aparece en la información del negocio, respóndelo desde ahí. Si tampoco está, puede que no lo vendan o que esté guardado con otro nombre — ofrécele confirmarlo con el equipo.`
+        : 'No hay productos registrados en el sistema. Eso NO significa que el negocio no venda nada: si su información incluye servicios o precios, respóndelos desde ahí. Solo si tampoco están, dile que lo confirme con el equipo.';
     }
 
     const lineas = encontrados.map((p) => {

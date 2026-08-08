@@ -303,7 +303,23 @@ describe('AiToolExecutorService', () => {
     it('con el catálogo vacío no afirma que no se vende nada', async () => {
       products.searchForAi.mockResolvedValue([]);
       const result = await executor.execute('consultar_producto', {}, ctx);
-      expect(result).toMatch(/no afirmes que no vendemos nada/i);
+      expect(result).toMatch(/NO significa que el negocio no venda nada/i);
+    });
+
+    // Visto con una barbería real: tenía sus cortes y precios escritos en el
+    // perfil y ningún producto dado de alta, y el agente derivaba al equipo la
+    // pregunta por precios. Un catálogo vacío no es un negocio sin nada que
+    // ofrecer; antes de derivar hay que mirar la información del negocio.
+    it('con el catálogo vacío manda mirar la información del negocio antes de derivar', async () => {
+      products.searchForAi.mockResolvedValue([]);
+
+      const general = await executor.execute('consultar_producto', {}, ctx);
+      expect(general).toMatch(/si su información incluye servicios o precios, respóndelos desde ahí/i);
+      expect(general).toMatch(/solo si tampoco están/i);
+
+      const concreta = await executor.execute('consultar_producto', { consulta: 'tinte' }, ctx);
+      expect(concreta).toMatch(/antes de derivar/i);
+      expect(concreta).toContain('tinte');
     });
   });
 

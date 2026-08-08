@@ -426,13 +426,26 @@ export class AiService {
       'No inventes información del negocio que no conozcas.',
       // Sin esto el modelo prefiere improvisar antes que reconocer que no sabe:
       // en una prueba real se inventó una moneda que el negocio nunca declaró.
-      'Si no puedes responder con seguridad, escala la conversación a una persona del equipo en vez de improvisar. Escala cuando: te falte un dato que no está en la información del negocio, el cliente reclame o esté molesto, pida algo que tú no puedes hacer, o se trate de dinero, condiciones o compromisos que el negocio no dejó por escrito.',
+      'Si no puedes responder con seguridad, escala la conversación a una persona del equipo en vez de improvisar. Escala cuando: te falte un dato que no está en la información del negocio, el cliente reclame o esté molesto, o pida algo que tú no puedes hacer.',
       // El contrapeso importa tanto como la instrucción: un agente que escala
       // todo le devuelve al dueño el trabajo que venía a quitarle.
       'No escales por costumbre ni por cortesía: si la información que tienes alcanza para responder, responde tú. Escalar todo deja al negocio sin asistente.',
+      // Regla positiva y explícita. Antes la lista de motivos para escalar
+      // incluía "o se trate de dinero", y un modelo pequeño lo leía como "los
+      // precios son dinero, luego escalo" — con la lista de precios delante. El
+      // negocio escribió esos precios PARA que se digan; callarlos convierte al
+      // agente en un contestador que deriva la pregunta más común del negocio.
+      'Lo que SÍ está escrito en la información del negocio —precios, servicios, horarios, políticas— es información que el negocio te dio para que la uses: respóndela directamente, tal como está, sin escalar y sin pedir confirmación. Escalar por hablar de dinero solo aplica a importes, descuentos o condiciones que NO figuren ahí.',
+      // El cliente leía "Escale a una persona del equipo porque no está claro en
+      // los datos del negocio": el modelo le contaba su regla interna en vez de
+      // hablarle. Al otro lado hay un cliente, no un registro de depuración.
+      'Al escalar, no se lo anuncies ni le expliques tus reglas: nada de "escalo", "según los datos que tengo" ni "no aparece en el catálogo". Dile con naturalidad que lo confirmas con alguien del equipo y que le responden enseguida.',
     ];
     if (profileLines.length > 0) {
-      lines.push('Esto es lo que el negocio configuró para que lo tengas en cuenta:', ...profileLines);
+      lines.push(
+        'Esto es lo que el negocio configuró para que lo tengas en cuenta, y puedes decírselo al cliente:',
+        ...profileLines,
+      );
     }
     if (knowledgeLines.length > 0) {
       lines.push(...knowledgeLines);

@@ -315,6 +315,36 @@ describe('AiService', () => {
       expect(prompt()).toMatch(/si la información que tienes alcanza.*responde tú/i);
     });
 
+    // Visto con un negocio real: con la lista de cortes y sus precios en el
+    // perfil, a "¿qué cortes tienes y a qué precio?" el agente contestaba
+    // "escalo porque no tengo acceso al catálogo". La lista de motivos para
+    // escalar decía "o se trate de dinero", y un modelo pequeño lo leía como
+    // que cualquier precio había que derivarlo.
+    it('no escala por hablar de dinero si el precio está declarado', () => {
+      expect(prompt()).not.toMatch(/o se trate de dinero, condiciones o compromisos/i);
+      expect(prompt()).toMatch(/precios.*respóndela directamente|respóndela directamente/i);
+      expect(prompt()).toMatch(/solo aplica a importes, descuentos o condiciones que NO figuren/i);
+    });
+
+    // El cliente leía "Escale a una persona del equipo porque no está claro en
+    // los datos del negocio": el modelo narraba su regla interna en vez de
+    // hablarle. Al otro lado hay un cliente, no un registro de depuración.
+    it('le prohibe contarle al cliente que está escalando', () => {
+      expect(prompt()).toMatch(/no se lo anuncies ni le expliques tus reglas/i);
+    });
+
+    it('presenta el perfil del negocio como algo que se le puede decir al cliente', () => {
+      const conPerfil = new AiService(
+        makeConfig('sk-ant-test'), {} as PrismaService, tools, noMemory, noProfile, noKnowledge, noNvidia, noUsage,
+      ).buildSystemPrompt(
+        { tenantId: 't', tenantName: 'E', contactId: 'c', contactName: 'Ana', contactPhone: '1', conversationId: 'cv' },
+        [],
+        ['Servicios/productos que ofrece el negocio: Corte clásico 20 soles'],
+      );
+      expect(conPerfil).toMatch(/puedes decírselo al cliente/i);
+      expect(conPerfil).toContain('Corte clásico 20 soles');
+    });
+
     it('le prohibe prometer lo que el negocio no declaro', () => {
       // Ofrecia "gestionar el reembolso" de un negocio que nunca lo prometio.
       expect(prompt()).toMatch(/no prometas nada en nombre del negocio/i);
