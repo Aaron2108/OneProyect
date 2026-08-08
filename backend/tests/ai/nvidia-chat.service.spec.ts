@@ -304,4 +304,71 @@ describe('NvidiaChatService (proveedor de pruebas compatible con OpenAI)', () =>
       'sin mensaje',
     );
   });
+
+  /**
+   * Incidente real: el modelo escribió `<TOOLCALL>[{…create_appointment…}]` como
+   * texto en vez de emitirlo por la API. No se agendó nada, el cliente vio el
+   * JSON en crudo y el agente le confirmó una cita que no existía.
+   */
+  describe('llamadas que el modelo escribe como texto', () => {
+    it('las ejecuta de verdad y no le enseña el JSON al cliente', async () => {
+      const service = new NvidiaChatService(config);
+      const calls = mockFetch([
+        assistantMessage(
+          'Perfecto.\n<TOOLCALL>[{"name": "create_appointment", "arguments": {"title": "Corte", "scheduled_at": "2026-08-07T22:00:00-05:00"}}]</TOOLCALL>',
+        ),
+        assistantMessage('Listo, te esperamos a las 10 de la noche.'),
+      ]);
+      const run = jest.fn().mockResolvedValue('Cita creada con id ap-1');
+
+      const reply = await service.respond('sistema', history, run);
+
+      // La herramienta se ejecutó con los argumentos rescatados.
+      expect(run).toHaveBeenCalledWith('create_appointment', {
+        title: 'Corte',
+        scheduled_at: '2026-08-07T22:00:00-05:00',
+      });
+      expect(reply.actions).toContain('create_appointment');
+      // Y el cliente nunca ve el bloque.
+      expect(reply.text).not.toMatch(/TOOLCALL/i);
+      expect(reply.text).toBe('Listo, te esperamos a las 10 de la noche.');
+      // Tampoco se le reenvía al modelo su propio JSON, para que no lo repita.
+      const segundoEnvio = calls[1].body.messages;
+      expect(JSON.stringify(segundoEnvio)).not.toMatch(/<TOOLCALL>/i);
+    });
+
+    it('con el JSON cortado no inventa la cita y obliga a repetir la llamada', async () => {
+      const service = new NvidiaChatService(config);
+      mockFetch([
+        // Truncado por el límite de tokens: falta cerrar la fecha y el corchete.
+        assistantMessage('<TOOLCALL>[{"name": "create_appointment", "arguments": {"scheduled_at": "2026-08-07T22:00:00'),
+        assistantMessage('Perdona, ¿me confirmas la hora?'),
+      ]);
+      const run = jest.fn();
+
+      const reply = await service.respond('sistema', history, run);
+
+      // Adivinar la fecha truncada agendaría a una hora que nadie pidió.
+      expect(run).not.toHaveBeenCalled();
+      expect(reply.actions).toHaveLength(0);
+      expect(reply.text).not.toMatch(/TOOLCALL/i);
+      expect(reply.text).toBe('Perdona, ¿me confirmas la hora?');
+    });
+
+    it('si la API sí emite tool_calls, esas mandan', async () => {
+      const service = new NvidiaChatService(config);
+      mockFetch([
+        assistantMessage('<TOOLCALL>[{"name": "otra", "arguments": {}}]', [
+          { id: 'c1', name: 'create_appointment', arguments: '{"title":"Corte"}' },
+        ]),
+        assistantMessage('Hecho.'),
+      ]);
+      const run = jest.fn().mockResolvedValue('ok');
+
+      await service.respond('sistema', history, run);
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith('create_appointment', { title: 'Corte' });
+    });
+  });
 });

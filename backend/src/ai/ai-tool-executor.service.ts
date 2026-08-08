@@ -28,6 +28,11 @@ import { ConversationContext } from './ai.types';
 export const AI_TOOLS: Anthropic.Tool[] = [
   {
     name: TOOL_CREATE_APPOINTMENT,
+    // Se probó a añadir aquí "hasta que esto responda el cliente NO tiene cita".
+    // Contraproducente y medido: con esa frase el modelo pasó de agendar 4 de
+    // cada 5 veces a 0 de 8 — leyó la advertencia como un motivo para no llamar
+    // a la herramienta. La descripción se queda diciendo CUÁNDO usarla, y la
+    // prohibición de confirmar sin ejecutar vive en el system prompt.
     description:
       'Programa una cita para el contacto actual de la conversación. Úsala cuando el cliente pida agendar o confirmar una cita con fecha y hora concretas.',
     input_schema: {

@@ -97,6 +97,66 @@ function stripReasoning(text: string): string {
     .trim();
 }
 
+/**
+ * Estos modelos a veces ESCRIBEN la llamada a la herramienta en vez de emitirla
+ * por la API, en la forma `<TOOLCALL>[{"name": …, "arguments": {…}}]`.
+ *
+ * Visto en producción y con consecuencias serias: el agente escribió el
+ * `create_appointment` como texto, así que no se ejecutó nada, el cliente vio el
+ * JSON en crudo en su WhatsApp y —peor— el modelo siguió como si la cita
+ * existiera y le confirmó una hora que no estaba agendada en ninguna parte.
+ *
+ * Se rescatan esas llamadas para ejecutarlas de verdad, y en todo caso el texto
+ * se retira del mensaje: aunque no se pueda interpretar, un cliente no puede
+ * leer las tripas del sistema.
+ */
+export function extraerLlamadasEnTexto(texto: string): {
+  /** Llamadas recuperadas, ya en el formato que usa el bucle. */
+  llamadas: OpenAiToolCall[];
+  /** El mensaje sin el bloque de la llamada. */
+  limpio: string;
+  /** true si había un intento de llamada, se pudiera interpretar o no. */
+  huboIntento: boolean;
+} {
+  // El cierre es opcional a propósito: cuando la respuesta se corta por el
+  // límite de tokens, la etiqueta final no llega — y ese caso es justo el que
+  // no puede acabar enseñándole el JSON al cliente.
+  const bloque = /<TOOLCALL>([\s\S]*?)(?:<\/TOOLCALL>|$)/i;
+  const encontrado = bloque.exec(texto);
+  if (!encontrado) return { llamadas: [], limpio: texto, huboIntento: false };
+
+  const limpio = texto.replace(bloque, '').trim();
+  const llamadas: OpenAiToolCall[] = [];
+
+  try {
+    const parsed: unknown = JSON.parse((encontrado[1] ?? '').trim());
+    const lista = Array.isArray(parsed) ? parsed : [parsed];
+    lista.forEach((item, i) => {
+      if (!item || typeof item !== 'object') return;
+      const { name, arguments: args } = item as { name?: unknown; arguments?: unknown };
+      if (typeof name !== 'string' || !name) return;
+      llamadas.push({
+        // Id sintético: el proveedor solo lo usa para casar la respuesta de la
+        // herramienta con su llamada, y aquí las emparejamos nosotros.
+        id: `texto-${i}`,
+        type: 'function',
+        function: {
+          name,
+          // El bucle espera los argumentos como texto JSON, igual que la API.
+          arguments: JSON.stringify(args ?? {}),
+        },
+      });
+    });
+  } catch {
+    // JSON cortado o mal formado. NO se intenta adivinar lo que faltaba: aquí se
+    // agendan citas, y completar a ojo una fecha truncada agendaría a una hora
+    // que el cliente nunca pidió. Se devuelve el intento sin llamadas para que
+    // quien llama obligue al modelo a repetirla bien.
+  }
+
+  return { llamadas, limpio, huboIntento: true };
+}
+
 /** Los argumentos llegan como string JSON; si no es un objeto válido, null. */
 function parseToolArguments(raw: string): Record<string, unknown> | null {
   try {
@@ -154,18 +214,43 @@ export class NvidiaChatService {
 
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
       const message = await this.complete(messages, usage);
-      replyText = stripReasoning(message.content ?? '');
+      const crudo = message.content ?? '';
 
-      const toolCalls = message.tool_calls ?? [];
+      // Rescate de las llamadas que el modelo escribe como texto en vez de
+      // emitirlas por la API. `limpio` es el mensaje ya sin ese bloque: pase lo
+      // que pase con la llamada, eso no puede llegarle al cliente.
+      const enTexto = extraerLlamadasEnTexto(crudo);
+      replyText = stripReasoning(enTexto.limpio);
+
+      const porApi = message.tool_calls ?? [];
+      const toolCalls = porApi.length > 0 ? porApi : enTexto.llamadas;
+
       if (toolCalls.length === 0) {
+        // Había un intento de llamada que no se pudo interpretar (JSON cortado,
+        // normalmente). Cortar aquí es lo que provocó el incidente: el modelo
+        // se quedaba con "ya llamé a la herramienta" y le confirmaba al cliente
+        // una cita que no existía. Se le devuelve el error y se le obliga a
+        // repetirla bien.
+        if (enTexto.huboIntento) {
+          this.logger.warn('El modelo escribió la llamada como texto y no se pudo interpretar');
+          messages.push({ role: 'assistant', content: crudo });
+          messages.push({
+            role: 'user',
+            content:
+              'Esa llamada a la herramienta no se ejecutó: llegó como texto y estaba incompleta. NO le digas al cliente que ya está hecho. Vuelve a intentarlo usando el mecanismo de herramientas.',
+          });
+          continue;
+        }
         break; // respuesta final
       }
 
       // El turno del asistente debe conservar los tool_calls: el proveedor
       // rechaza un mensaje `tool` que no responda a una llamada previa.
       messages.push({
+        // El contenido va limpio: si la llamada venía escrita en el texto, no
+        // se reenvía al modelo su propio JSON para que no lo repita.
         role: 'assistant',
-        content: message.content ?? '',
+        content: enTexto.limpio,
         tool_calls: toolCalls,
       });
 

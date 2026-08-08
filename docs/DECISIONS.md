@@ -496,3 +496,17 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **Se comprobó que las salvaguardas siguen**: por un producto no declarado (shampoo) ofrece confirmar en vez de inventar; por devoluciones no declaradas escala con la herramienta. Lo declarado se responde, lo no declarado no se improvisa — que era el equilibrio buscado desde el principio.
 
 **Además, el agente dejaba ver sus reglas**: le decía al cliente *"Escale a una persona del equipo porque no está claro en los datos del negocio"*. Al otro lado hay un cliente, no un registro de depuración; ahora se le prohíbe anunciar que escala y se le pide decir con naturalidad que lo confirma con el equipo.
+
+## 2026-08-08 — Rescatar las llamadas que el modelo escribe como texto
+
+**Incidente**: el agente le respondió a un cliente con `<TOOLCALL>[{"name": "create_appointment", …` en crudo. La cita no se creó —el modelo escribió la llamada en el texto en vez de emitirla por la API de herramientas—, el cliente vio las tripas del sistema y, dos mensajes después, el agente le confirmó que su cita "está registrada". Un cliente presentándose a una cita que no existe es el peor fallo posible de este producto.
+
+**Decisión**: `NvidiaChatService` reconoce el bloque `<TOOLCALL>` en el contenido, lo interpreta y ejecuta esas llamadas como si hubieran llegado por la API. En todo caso el bloque se retira del mensaje antes de que salga: se pueda interpretar o no, un cliente no puede leer eso.
+
+**Si el JSON llega cortado no se adivina lo que falta.** Aquí se agendan citas: completar a ojo una fecha truncada agendaría a una hora que el cliente nunca pidió. Se le devuelve el error al modelo y se le obliga a repetir la llamada, en vez de cerrar el turno — cerrarlo es lo que dejaba al modelo creyendo que ya había agendado.
+
+**Y el system prompt le prohíbe dar por hecho lo que no ejecutó**: nunca decir que una cita, un recordatorio o un cambio quedó hecho sin confirmación de la herramienta. Vale para cualquier proveedor, no solo para este.
+
+**Lo que NO se puede arreglar desde aquí**: la fiabilidad con la que `nvidia-nemotron-nano-9b-v2` decide llamar a una herramienta. Medido sobre el mismo caso y sin cambios relevantes de código: 4 de 5 en un momento, 0 de 6 poco después; y peticiones directas que funcionaban dejaron de funcionar minutos más tarde sin tocar nada. No es el prompt ni la forma de la conversación —se descartaron por medición— sino el modelo gratuito de pruebas. La vía real es `AI_PROVIDER=anthropic`.
+
+**Nota de método**: durante el diagnóstico se atribuyó la caída primero a un añadido en la descripción de la herramienta y después a que la hora pedida ya había pasado. Las dos hipótesis se descartaron midiendo tras revertir. Queda anotado porque el error de atribución era plausible en ambos casos: con un modelo tan variable, una sola tanda de pruebas no distingue una causa de una coincidencia.

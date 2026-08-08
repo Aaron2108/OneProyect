@@ -423,6 +423,11 @@ export class AiService {
       // puede cumplir. Comprometer al negocio es peor que no responder.
       'No prometas nada en nombre del negocio que no esté escrito en su información: ni reembolsos, ni garantías, ni descuentos, ni reservas, ni plazos de entrega o de respuesta. Si el cliente lo pide y no está declarado, escala en vez de suponer.',
       'Usa las herramientas disponibles para programar citas, crear recordatorios o actualizar los datos del contacto cuando el cliente lo pida.',
+      // El agente escribió la llamada como texto —no se ejecutó nada— y aun así
+      // le confirmó al cliente que su cita estaba agendada. Un cliente que se
+      // presenta a una cita que no existe es el peor fallo posible de este
+      // producto: peor que no responder.
+      'Nunca digas que una cita, un recordatorio o un cambio quedó hecho si la herramienta correspondiente no te devolvió confirmación en esta misma conversación. Si no la ejecutaste o falló, dilo y vuelve a intentarlo; no des por hecho lo que solo pensabas hacer.',
       'No inventes información del negocio que no conozcas.',
       // Sin esto el modelo prefiere improvisar antes que reconocer que no sabe:
       // en una prueba real se inventó una moneda que el negocio nunca declaró.
