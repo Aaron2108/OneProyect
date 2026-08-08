@@ -112,6 +112,9 @@ export class AuthService {
   /** Público: lo usa también `GoogleAuthService` tras autenticar/crear la cuenta con Google. */
   async issueToken(user: User): Promise<AuthResult> {
     const payload: JwtPayload = {
+      // Marca explícita de token de sesión: el guard la exige para no aceptar
+      // los tokens de OAuth, firmados con el mismo secreto pero sin tenant.
+      purpose: 'access',
       sub: user.id,
       tenantId: user.tenantId,
       email: user.email,

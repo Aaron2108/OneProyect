@@ -6,6 +6,14 @@ export interface JwtPayload {
   tenantId: string;
   email: string;
   role: UserRole;
+  /**
+   * Marca de token de sesión. La validan el guard HTTP y el gateway de tiempo
+   * real para no confundirlo con los tokens de OAuth (`google-login`,
+   * `google-signup`), que se firman con el mismo secreto pero no dan sesión.
+   * Opcional en el tipo por los tokens ya emitidos sin ella (ver
+   * access-token.util.ts).
+   */
+  purpose?: 'access';
 }
 
 /**

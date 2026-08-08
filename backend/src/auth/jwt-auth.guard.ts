@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { toAuthContext } from './access-token.util';
 import { AuthContext, JwtPayload } from './auth.types';
 
 /**
@@ -28,12 +29,11 @@ export class JwtAuthGuard implements CanActivate {
     const token = header.slice('Bearer '.length).trim();
     try {
       const payload = await this.jwt.verifyAsync<JwtPayload>(token);
-      const user: AuthContext = {
-        userId: payload.sub,
-        tenantId: payload.tenantId,
-        email: payload.email,
-        role: payload.role,
-      };
+      // No basta con que la firma sea válida: `toAuthContext` exige que sea un
+      // token de SESIÓN. Sin esto, un token de otro propósito firmado con el
+      // mismo secreto (el `google-signup`, sin `tenantId`) pasaba y su
+      // `tenantId` undefined desactivaba el filtro por tenant en Prisma.
+      const user = toAuthContext(payload);
       (request as Request & { user: AuthContext }).user = user;
       return true;
     } catch {

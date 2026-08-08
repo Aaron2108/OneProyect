@@ -544,3 +544,17 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 3. **El tono del negocio no levanta las reglas**: se añade una línea junto al perfil aclarando que el tono cambia CÓMO habla, no lo que puede decir. La configuración del negocio ajusta el estilo; no es una vía para desactivar los límites.
 
 **Comprobado contra el agente real, con el tono informal puesto**: a `.l.`, "¿estás rica?" y "¿quieres salir conmigo?" reconduce a servicios y citas sin seguir el tono. Cero alfabetos extranjeros en ocho respuestas normales.
+
+## 2026-08-08 — Fuga entre tenants: el guard aceptaba tokens que no eran de sesión
+
+**Hallazgo de la auditoría de seguridad (CRÍTICO), confirmado con exploit y corregido.**
+
+**El fallo**: `JwtAuthGuard` daba por bueno cualquier JWT con firma válida y adjuntaba su payload tal cual. Pero WhatsFlow firma con el MISMO `JWT_SECRET` tres tokens distintos: el de sesión (`sub`/`tenantId`/`role`) y los dos de OAuth con Google (`google-login` y `google-signup`), que NO llevan `tenantId`. El `google-signup` se le entrega en la URL a cualquiera que empiece un alta con Google con un email nuevo — sin cuenta previa en la plataforma.
+
+**Por qué era crítico**: usado como Bearer, ese token pasaba el guard con `tenantId === undefined`. Prisma trata `undefined` en un `where` como "sin filtro", así que `findMany({ where: { tenantId: undefined } })` devolvía filas de TODOS los negocios. `RolesGuard` no frena las rutas de solo lectura (no exigen rol). Resultado: lectura y escritura de contactos, conversaciones (contenido descifrado por la API), notas, citas, productos y métricas de cualquier tenant, sin autenticación previa. Probado: un token volcó contactos de dos negocios distintos (HTTP 200 → 401 tras el arreglo).
+
+**La corrección**: `auth/access-token.util.ts` con `toAuthContext()`, la barrera que faltaba. Un token vale como sesión solo si su `purpose` es `access` (o está ausente, por compatibilidad con las sesiones ya emitidas) Y trae `sub`, `tenantId`, `email` y un `role` válido. El guard HTTP y el gateway de tiempo real —que tenía el mismo fallo, unía a la sala `tenant:undefined`— pasan por ahí en vez de fiarse de la firma. El token de sesión se emite ahora con `purpose: 'access'` como marca positiva.
+
+**Principio**: una firma válida prueba que el token lo emitimos nosotros, no que sea de la clase que este punto espera. Con un secreto compartido entre varios tipos de token, cada consumidor tiene que validar la CLASE, no solo la firma. El invariante que todo el sistema daba por seguro —"si hay sesión, hay tenantId"— no estaba comprobado en ninguna parte.
+
+**Al desplegar**: rotar `JWT_SECRET` para invalidar cualquier `google-signup` que un atacante ya tuviera capturado. El arreglo conserva las sesiones activas y no necesita migración.

@@ -6,6 +6,7 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import type { Namespace, Socket } from 'socket.io';
+import { toAuthContext } from '../auth/access-token.util';
 import { JwtPayload } from '../auth/auth.types';
 import { RealtimeService, salaDeTenant } from './realtime.service';
 
@@ -57,7 +58,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection {
     }
     try {
       const payload = await this.jwt.verifyAsync<JwtPayload>(token);
-      await socket.join(salaDeTenant(payload.tenantId));
+      // Mismo blindaje que el guard HTTP: solo un token de SESIÓN une a una
+      // sala. Un token sin `tenantId` uniría a la sala `tenant:undefined`.
+      const { tenantId } = toAuthContext(payload);
+      await socket.join(salaDeTenant(tenantId));
     } catch {
       // Token caducado o falso: fuera. El panel lo reintenta tras renovar sesión.
       socket.disconnect(true);
