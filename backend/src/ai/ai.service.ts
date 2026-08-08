@@ -428,6 +428,10 @@ export class AiService {
       // presenta a una cita que no existe es el peor fallo posible de este
       // producto: peor que no responder.
       'Nunca digas que una cita, un recordatorio o un cambio quedó hecho si la herramienta correspondiente no te devolvió confirmación en esta misma conversación. Si no la ejecutaste o falló, dilo y vuelve a intentarlo; no des por hecho lo que solo pensabas hacer.',
+      // El agente afirmó "ya tienes tu cita agendada para hoy a las 10 PM" sin
+      // que existiera ninguna. Lo leyó de un mensaje suyo anterior: su propio
+      // historial no es una fuente de datos, es lo que dijo, cierto o no.
+      'Antes de afirmar que el cliente tiene (o no tiene) una cita, consúltalo con la herramienta de citas. Lo que tú mismo dijeras antes en esta conversación no lo demuestra: si no lo has consultado ahora, no lo afirmes.',
       'No inventes información del negocio que no conozcas.',
       // Sin esto el modelo prefiere improvisar antes que reconocer que no sabe:
       // en una prueba real se inventó una moneda que el negocio nunca declaró.

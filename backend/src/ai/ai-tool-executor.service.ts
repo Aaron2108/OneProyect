@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConversationHandler } from '@prisma/client';
+import { AppointmentStatus, ConversationHandler } from '@prisma/client';
 import type Anthropic from '@anthropic-ai/sdk';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { PiiCryptoService } from '../common/pii-crypto.service';
@@ -10,11 +10,13 @@ import { ProductsService } from '../products/products.service';
 import {
   AI_AUTHOR_ID,
   AI_AUTHOR_NAME,
+  APPOINTMENT_LIST_LIMIT,
   PRODUCT_SEARCH_LIMIT,
   TOOL_CHECK_PRODUCT,
   TOOL_CREATE_APPOINTMENT,
   TOOL_CREATE_REMINDER,
   TOOL_ESCALATE_TO_HUMAN,
+  TOOL_LIST_APPOINTMENTS,
   TOOL_UPDATE_CONTACT,
 } from './ai.constants';
 import { ConversationContext } from './ai.types';
@@ -47,6 +49,25 @@ export const AI_TOOLS: Anthropic.Tool[] = [
         notes: { type: 'string', description: 'Notas opcionales' },
       },
       required: ['title', 'scheduled_at'],
+    },
+  },
+  {
+    name: TOOL_LIST_APPOINTMENTS,
+    // Sin esta herramienta el agente no tenía NINGUNA forma de saber si el
+    // cliente ya tenía cita, y ante "¿tengo cita?" se la inventaba: llegó a
+    // afirmar una cita a las 10 de la noche que no existía en ninguna parte.
+    // Crear citas sin poder leerlas era el hueco de fondo.
+    description:
+      'Consulta las citas del contacto actual con el negocio. Úsala SIEMPRE que el cliente pregunte si tiene cita, cuándo es, o quiera cambiarla o cancelarla — nunca respondas eso de memoria ni des por hecho que tiene una. Devuelve las próximas citas y, si lo pides, también las pasadas.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        incluir_pasadas: {
+          type: 'boolean',
+          description:
+            'true para incluir también las citas ya pasadas. Por defecto solo devuelve las próximas.',
+        },
+      },
     },
   },
   {
@@ -156,6 +177,8 @@ export class AiToolExecutorService {
       switch (toolName) {
         case TOOL_CREATE_APPOINTMENT:
           return await this.createAppointment(input, ctx);
+        case TOOL_LIST_APPOINTMENTS:
+          return await this.listAppointments(input, ctx);
         case TOOL_CREATE_REMINDER:
           return await this.createReminder(input, ctx);
         case TOOL_UPDATE_CONTACT:
@@ -364,6 +387,51 @@ export class AiToolExecutorService {
     // WhatsApp. La fecha va en la zona del negocio, no en UTC, por lo mismo.
     this.logger.log(`Cita ${appt.id} creada por la IA (tenant ${ctx.tenantId})`);
     return this.describeWithoutExecuting(TOOL_CREATE_APPOINTMENT, input, ctx.timeZone);
+  }
+
+  /**
+   * Las citas del contacto, para que el agente pueda responder "¿tengo cita?"
+   * con la verdad en vez de con una suposición.
+   *
+   * Acotado por tenant Y por contacto desde el contexto de confianza: el modelo
+   * no elige de quién son las citas que lee, así que ningún prompt puede
+   * hacerle enseñar la agenda de otro cliente.
+   */
+  private async listAppointments(
+    input: Record<string, unknown>,
+    ctx: ConversationContext,
+  ): Promise<string> {
+    const zona = resolveTimeZone(ctx.timeZone, this.fallbackTimeZone);
+    const incluirPasadas = input.incluir_pasadas === true;
+    const ahora = new Date();
+
+    const citas = await this.prisma.appointment.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        contactId: ctx.contactId,
+        // Una cita cancelada no es una cita: decirle al cliente que la tiene
+        // sería el mismo error, al revés.
+        status: { not: AppointmentStatus.CANCELLED },
+        ...(incluirPasadas ? {} : { scheduledAt: { gte: ahora } }),
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: APPOINTMENT_LIST_LIMIT,
+    });
+
+    if (citas.length === 0) {
+      // Explícito: sin esto el modelo rellena el hueco con lo que le suene del
+      // historial, que es exactamente lo que produjo la cita fantasma.
+      return incluirPasadas
+        ? 'Este contacto no tiene ninguna cita registrada. NO le digas que tiene una.'
+        : 'Este contacto no tiene ninguna cita próxima. NO le digas que tiene una; si quiere, ofrécele agendarla.';
+    }
+
+    const lineas = citas.map((c) => {
+      const cuando = formatBusinessDateTime(c.scheduledAt, zona);
+      const pasada = c.scheduledAt < ahora ? ' (ya pasó)' : '';
+      return `- ${c.title}: ${cuando}${pasada}`;
+    });
+    return `Citas de este contacto:\n${lineas.join('\n')}`;
   }
 
   private async createReminder(

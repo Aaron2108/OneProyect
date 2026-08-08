@@ -13,6 +13,7 @@ describe('AiToolExecutorService', () => {
     contact: { update: jest.Mock };
     conversation: { updateMany: jest.Mock };
     conversationNote: { create: jest.Mock };
+    appointment: { findMany: jest.Mock };
   };
   let appointments: { create: jest.Mock };
   let products: { searchForAi: jest.Mock; countActive: jest.Mock };
@@ -32,6 +33,7 @@ describe('AiToolExecutorService', () => {
       contact: { update: jest.fn().mockResolvedValue({}) },
       conversation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       conversationNote: { create: jest.fn().mockResolvedValue({ id: 'nota-1' }) },
+      appointment: { findMany: jest.fn().mockResolvedValue([]) },
     };
     appointments = { create: jest.fn().mockResolvedValue({ id: 'appt-1' }) };
     products = {
@@ -320,6 +322,62 @@ describe('AiToolExecutorService', () => {
       const concreta = await executor.execute('consultar_producto', { consulta: 'tinte' }, ctx);
       expect(concreta).toMatch(/antes de derivar/i);
       expect(concreta).toContain('tinte');
+    });
+  });
+
+  /**
+   * Incidente real: a "¿puedo citar para hoy?" el agente respondió "sí, ya
+   * tienes tu cita agendada para hoy a las 10 PM" — una cita que no existía en
+   * ninguna parte. No tenía forma de consultarlas: podía crearlas y no leerlas,
+   * así que solo le quedaba suponer.
+   */
+  describe('consultar_citas', () => {
+    it('solo mira las citas de ESE contacto y ESE tenant', async () => {
+      await executor.execute('consultar_citas', {}, ctx);
+
+      const where = prisma.appointment.findMany.mock.calls[0][0].where;
+      // Ninguno de los dos sale de la entrada del modelo: un prompt no puede
+      // hacerle enseñar la agenda de otro cliente.
+      expect(where.tenantId).toBe('tenant-1');
+      expect(where.contactId).toBe('contact-1');
+    });
+
+    it('sin citas lo dice explícitamente y prohíbe inventarlas', async () => {
+      prisma.appointment.findMany.mockResolvedValue([]);
+
+      const r = await executor.execute('consultar_citas', {}, ctx);
+
+      expect(r).toMatch(/no tiene ninguna cita próxima/i);
+      // Sin esta orden el modelo rellena el hueco con lo que le suene del
+      // historial, que es lo que produjo la cita fantasma.
+      expect(r).toMatch(/NO le digas que tiene una/i);
+    });
+
+    it('lista las citas con la fecha en la zona del negocio', async () => {
+      prisma.appointment.findMany.mockResolvedValue([
+        { title: 'Corte degradado', scheduledAt: new Date('2026-08-08T17:00:00Z') },
+      ]);
+
+      const r = await executor.execute('consultar_citas', {}, ctx);
+
+      expect(r).toContain('Corte degradado');
+      // 17:00 UTC son las 12:00 en Lima: en UTC el cliente leería otra hora.
+      expect(r).toContain('12:00');
+    });
+
+    it('por defecto excluye las pasadas y las canceladas', async () => {
+      await executor.execute('consultar_citas', {}, ctx);
+      const where = prisma.appointment.findMany.mock.calls[0][0].where;
+      expect(where.scheduledAt?.gte).toBeInstanceOf(Date);
+      // Una cita cancelada no es una cita: decir que la tiene es el mismo
+      // error, al revés.
+      expect(where.status).toEqual({ not: 'CANCELLED' });
+    });
+
+    it('con incluir_pasadas devuelve también el historial', async () => {
+      await executor.execute('consultar_citas', { incluir_pasadas: true }, ctx);
+      const where = prisma.appointment.findMany.mock.calls[0][0].where;
+      expect(where.scheduledAt).toBeUndefined();
     });
   });
 

@@ -510,3 +510,21 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **Lo que NO se puede arreglar desde aquí**: la fiabilidad con la que `nvidia-nemotron-nano-9b-v2` decide llamar a una herramienta. Medido sobre el mismo caso y sin cambios relevantes de código: 4 de 5 en un momento, 0 de 6 poco después; y peticiones directas que funcionaban dejaron de funcionar minutos más tarde sin tocar nada. No es el prompt ni la forma de la conversación —se descartaron por medición— sino el modelo gratuito de pruebas. La vía real es `AI_PROVIDER=anthropic`.
 
 **Nota de método**: durante el diagnóstico se atribuyó la caída primero a un añadido en la descripción de la herramienta y después a que la hora pedida ya había pasado. Las dos hipótesis se descartaron midiendo tras revertir. Queda anotado porque el error de atribución era plausible en ambos casos: con un modelo tan variable, una sola tanda de pruebas no distingue una causa de una coincidencia.
+
+## 2026-08-08 — El agente podía crear citas pero no leerlas
+
+**Incidente**: a "¿puedo citar para hoy?" el agente respondió *"sí, ya tienes tu cita agendada para hoy a las 10 PM"*. Esa cita no existía en ninguna parte.
+
+**Causa de fondo, y no era el prompt**: de las cinco herramientas del agente, tres escribían (cita, recordatorio, contacto) y dos consultaban (catálogo, escalar). **Ninguna leía citas.** Ante "¿tengo cita?" el modelo no tenía forma de saberlo, así que rellenaba el hueco con lo que le sonaba de su propio historial — y su historial incluía una confirmación fantasma anterior. Pedirle en el prompt que no inventara no arreglaba nada: sin datos, la única alternativa a inventar era no responder.
+
+**Decisión**: se añade `consultar_citas`, de solo lectura. Devuelve las próximas citas del contacto (y las pasadas si se piden), en la zona horaria del negocio.
+
+**Acotada por tenant Y por contacto desde el contexto de confianza**, como el resto: el modelo no elige de quién son las citas que lee, así que ningún texto del cliente puede hacerle enseñar la agenda de otro.
+
+**Se ejecuta de verdad en el chat de prueba**, no se simula. Simularla habría devuelto citas inventadas justo en la pantalla donde el dueño va a comprobar que su agente ya no las inventa.
+
+**Sin citas, el resultado lo dice explícitamente y prohíbe suponer** ("NO le digas que tiene una"). Un resultado vacío y mudo es exactamente el hueco que el modelo rellena solo.
+
+**Las canceladas no cuentan**: decirle a alguien que tiene una cita que canceló es el mismo error al revés.
+
+**Y el system prompt añade**: su propio historial no es una fuente de datos. Lo que él mismo dijera antes en la conversación no demuestra que exista una cita; si no lo ha consultado ahora, no lo afirma.

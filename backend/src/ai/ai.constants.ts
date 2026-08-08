@@ -1,5 +1,6 @@
 /** Nombres de las herramientas (tool-calling) que la IA puede invocar. */
 export const TOOL_CREATE_APPOINTMENT = 'create_appointment';
+export const TOOL_LIST_APPOINTMENTS = 'consultar_citas';
 export const TOOL_CREATE_REMINDER = 'create_reminder';
 export const TOOL_UPDATE_CONTACT = 'update_contact';
 export const TOOL_CHECK_PRODUCT = 'consultar_producto';
@@ -16,13 +17,22 @@ export const AI_AUTHOR_NAME = 'Agente IA';
 /** Cuántos productos devuelve una consulta del catálogo (cabe en el prompt). */
 export const PRODUCT_SEARCH_LIMIT = 5;
 
+/** Cuántas citas del contacto se le pasan al modelo de una vez. */
+export const APPOINTMENT_LIST_LIMIT = 10;
+
 /**
  * Herramientas que solo consultan y no modifican nada. En el chat de prueba del
  * panel se ejecutan DE VERDAD: simularlas devolvería productos inventados y el
  * dueño no podría comprobar si su agente responde bien sobre el catálogo. Las
  * que sí escriben (citas, recordatorios, contacto) se siguen simulando.
  */
-export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([TOOL_CHECK_PRODUCT]);
+export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  TOOL_CHECK_PRODUCT,
+  // Consultar las citas del contacto tampoco cambia nada, y simularla sería
+  // contraproducente: el dueño probaría el agente y vería citas inventadas
+  // justo en el punto donde el problema ERA que se las inventaba.
+  TOOL_LIST_APPOINTMENTS,
+]);
 
 /** Máximo de iteraciones del bucle de tool-calling (guarda anti-bucle infinito). */
 export const MAX_TOOL_ITERATIONS = 5;
