@@ -49,9 +49,25 @@ export class GoogleCalendarSyncService {
   }
 
   /** Revisa los reintentos vencidos y los reprocesa (llamado por el worker periódico). */
-  async retryDue(now: Date = new Date()): Promise<{ succeeded: number; failed: number }> {
+  /**
+   * @param tenantId Acota los reintentos a un negocio. Lo usa la comprobación
+   *   manual desde el panel: quien pulsa "Sincronizar ahora" espera que suban
+   *   SUS citas, no que se procese la cola de toda la plataforma —y desde luego
+   *   no quiere que un tope de lote gastado por otro negocio le deje las suyas
+   *   sin subir—. El tick periódico sigue llamándolo sin filtro.
+   * @param forzar Ignora el backoff. Una espera de horas tiene sentido cuando
+   *   reintenta sola una máquina; no cuando hay una persona delante pulsando un
+   *   botón porque acaba de arreglar el problema.
+   */
+  async retryDue(
+    now: Date = new Date(),
+    opciones: { tenantId?: string; forzar?: boolean } = {},
+  ): Promise<{ succeeded: number; failed: number }> {
     const candidates = await this.prisma.googleCalendarSyncJob.findMany({
-      where: { nextAttemptAt: { lte: now } },
+      where: {
+        ...(opciones.tenantId ? { tenantId: opciones.tenantId } : {}),
+        ...(opciones.forzar ? {} : { nextAttemptAt: { lte: now } }),
+      },
       orderBy: { nextAttemptAt: 'asc' },
       take: RETRY_BATCH,
     });
@@ -60,8 +76,15 @@ export class GoogleCalendarSyncService {
     let failed = 0;
     for (const job of candidates) {
       // Claim atómico: evita que otra instancia/tick reprocese el mismo job.
+      // Con `forzar` el filtro por vencimiento se cae —el job puede tener el
+      // siguiente intento a horas vista— pero el claim sigue siendo atómico
+      // sobre `updatedAt`, así que dos comprobaciones simultáneas no duplican
+      // el evento en Google.
       const claim = await this.prisma.googleCalendarSyncJob.updateMany({
-        where: { id: job.id, nextAttemptAt: { lte: now } },
+        where: {
+          id: job.id,
+          ...(opciones.forzar ? { updatedAt: job.updatedAt } : { nextAttemptAt: { lte: now } }),
+        },
         data: { nextAttemptAt: new Date(now.getTime() + CLAIM_LEASE_MS) },
       });
       if (claim.count === 0) continue;

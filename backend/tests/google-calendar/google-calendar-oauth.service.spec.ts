@@ -152,10 +152,13 @@ describe('GoogleCalendarOauthService', () => {
       } as unknown as PrismaService;
     }
 
-    const integracion = (refreshToken: string) => ({
+    const integracion = (refreshToken: string, extra: Record<string, unknown> = {}) => ({
       googleAccountEmail: 'negocio@example.com',
       createdAt: new Date('2026-07-01T10:00:00Z'),
       refreshToken,
+      lastCheckedAt: null,
+      lastCheckError: null,
+      ...extra,
     });
 
     it('sin integración no pide reconexión ni cuenta reintentos', async () => {
@@ -178,6 +181,42 @@ describe('GoogleCalendarOauthService', () => {
       expect(status.connected).toBe(true);
       expect(status.googleAccountEmail).toBe('negocio@example.com');
       expect(status.needsReconnect).toBe(false);
+      // Nunca comprobado contra Google: "conectado" es solo lo que dice la fila.
+      expect(status.lastCheckedAt).toBeNull();
+    });
+
+    // El caso que trajo este cambio: los tokens se descifran perfectamente, pero
+    // el permiso se retiró desde la cuenta de Google. Sin esto el panel decía
+    // "Conectado" mientras las citas no llegaban a ningún sitio.
+    it('pide reconectar si la última comprobación contra Google falló', async () => {
+      const prisma = makePrisma(
+        integracion(encryptSecret('RT-valido', TOKEN_KEY), {
+          lastCheckedAt: new Date('2026-08-07T12:00:00Z'),
+          lastCheckError: 'Google ya no acepta el permiso guardado.',
+        }),
+      );
+      const service = new GoogleCalendarOauthService(makeConfig(), prisma, {} as JwtService);
+
+      const status = await service.getStatus('t1');
+
+      expect(status.connected).toBe(true);
+      expect(status.needsReconnect).toBe(true);
+      expect(status.lastCheckError).toContain('permiso guardado');
+      expect(status.lastCheckedAt).toBe('2026-08-07T12:00:00.000Z');
+    });
+
+    // `undefined` no es `null`: comparar contra null pedía reconectar cuentas
+    // sanas cuyo registro no traía todavía el campo.
+    it('un campo de error ausente no cuenta como fallo', async () => {
+      const sinCampo = integracion(encryptSecret('RT-valido', TOKEN_KEY));
+      delete (sinCampo as Record<string, unknown>).lastCheckError;
+      const service = new GoogleCalendarOauthService(
+        makeConfig(),
+        makePrisma(sinCampo),
+        {} as JwtService,
+      );
+
+      expect((await service.getStatus('t1')).needsReconnect).toBe(false);
     });
 
     // El caso que motivó el cambio: las citas dejaron de llegar a Google porque

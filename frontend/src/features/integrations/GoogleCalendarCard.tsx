@@ -1,11 +1,22 @@
-import { CalendarCheck2, TriangleAlert } from 'lucide-react';
+import { CalendarCheck2, RefreshCw, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { Button } from '@/components/ui/Button';
-import type { GoogleCalendarStatus } from '@/lib/types';
+import type { GoogleCalendarCheck, GoogleCalendarStatus } from '@/lib/types';
+
+/** "hace 3 minutos", "ayer" — una fecha completa aquí es ruido. */
+function haceCuanto(iso: string): string {
+  const minutos = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutos < 1) return 'hace un momento';
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `hace ${horas} h`;
+  const dias = Math.round(horas / 24);
+  return dias === 1 ? 'ayer' : `hace ${dias} días`;
+}
 
 /**
  * Conexión de Google Calendar del negocio (Fase 3, ver docs/ROADMAP.md).
@@ -88,6 +99,38 @@ export function GoogleCalendarCard(): JSX.Element | null {
     }
   }
 
+  /**
+   * Pregunta a Google si la conexión sirve y sube lo que quedara pendiente.
+   *
+   * Es lo que convierte "conectado" en algo comprobado: hasta ahora la tarjeta
+   * solo sabía que había una cuenta guardada, y si alguien retiraba el permiso
+   * desde Google seguía diciendo que todo iba bien.
+   */
+  async function comprobar(): Promise<void> {
+    setBusy(true);
+    try {
+      const r = await api<GoogleCalendarCheck>('/integrations/google-calendar/check', {
+        method: 'POST',
+      });
+      setStatus(r.status);
+      if (!r.ok) {
+        toast.show('Google rechazó la conexión guardada', 'error');
+      } else if (r.sincronizadas > 0) {
+        toast.show(
+          r.sincronizadas === 1
+            ? 'Conexión correcta. Se envió 1 cita pendiente.'
+            : `Conexión correcta. Se enviaron ${r.sincronizadas} citas pendientes.`,
+        );
+      } else {
+        toast.show('Conexión correcta. No había nada pendiente.');
+      }
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'No se pudo comprobar la conexión', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Conectado pero sin credenciales utilizables: la cuenta sigue guardada y el
   // panel decía "conectado", mientras las citas no llegaban a Google. Se avisa
   // aparte de "no conectado" porque la acción es distinta — reconectar, no
@@ -109,29 +152,49 @@ export function GoogleCalendarCard(): JSX.Element | null {
             <CalendarCheck2 size={18} strokeWidth={2} aria-hidden="true" />
           )}
         </div>
-        <div className="flex-1">
+        <div className="min-w-[220px] flex-1">
           <div className="text-[14.5px] font-semibold">Google Calendar</div>
           <p className="text-[13px] text-ink-soft">
             {caducado
-              ? `La conexión con ${status?.googleAccountEmail} caducó: las citas nuevas no se están enviando a Google. Vuelve a conectar la cuenta.`
+              ? `${status?.lastCheckError ?? 'La conexión con Google caducó.'} Las citas no se están enviando: vuelve a conectar la cuenta ${status?.googleAccountEmail}.`
               : status?.connected
                 ? `Conectado como ${status.googleAccountEmail}. Las citas se reflejan como eventos.`
                 : 'Conecta el calendario del negocio para reflejar las citas automáticamente.'}
           </p>
+          {/* Que haya una cuenta guardada no prueba que Google la siga
+              aceptando. Se dice cuándo se comprobó de verdad —o que no se ha
+              comprobado nunca— en vez de dejar "conectado" a secas, que es lo
+              que hacía creer que todo iba bien mientras no llegaba nada. */}
+          {status?.connected && !caducado && (
+            <p className="mt-1 text-[12px] text-ink-faint">
+              {status.lastCheckedAt
+                ? `Conexión comprobada ${haceCuanto(status.lastCheckedAt)}.`
+                : 'Todavía sin comprobar desde que se conectó.'}
+            </p>
+          )}
         </div>
-        {caducado ? (
-          <Button variant="brand" disabled={busy} onClick={connect}>
-            Reconectar
-          </Button>
-        ) : status?.connected ? (
-          <Button variant="danger" disabled={busy} onClick={disconnect}>
-            Desconectar
-          </Button>
-        ) : (
-          <Button variant="sec" disabled={busy} onClick={connect}>
-            Conectar
-          </Button>
-        )}
+
+        <div className="flex flex-wrap gap-2">
+          {status?.connected && (
+            <Button variant="sec" disabled={busy} onClick={comprobar}>
+              <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
+              Sincronizar ahora
+            </Button>
+          )}
+          {caducado ? (
+            <Button variant="brand" disabled={busy} onClick={connect}>
+              Reconectar
+            </Button>
+          ) : status?.connected ? (
+            <Button variant="danger" disabled={busy} onClick={disconnect}>
+              Desconectar
+            </Button>
+          ) : (
+            <Button variant="sec" disabled={busy} onClick={connect}>
+              Conectar
+            </Button>
+          )}
+        </div>
       </div>
 
       {fallosPendientes > 0 && (

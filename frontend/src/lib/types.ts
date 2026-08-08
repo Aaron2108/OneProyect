@@ -139,6 +139,21 @@ export interface GoogleCalendarStatus {
   pendingSyncCount: number;
   /** Último error de sincronización que reportó el servidor. */
   lastSyncError: string | null;
+  /**
+   * Cuándo se confirmó por última vez contra Google que la conexión sirve.
+   * Nulo = nunca desde que se conectó, así que "conectado" es solo lo que dice
+   * el dato guardado, no algo comprobado.
+   */
+  lastCheckedAt: string | null;
+  /** Por qué falló la última comprobación, si falló. */
+  lastCheckError: string | null;
+}
+
+/** Respuesta de comprobar la conexión y empujar lo pendiente. */
+export interface GoogleCalendarCheck {
+  status: GoogleCalendarStatus;
+  ok: boolean;
+  sincronizadas: number;
 }
 
 export interface ActivityPoint {

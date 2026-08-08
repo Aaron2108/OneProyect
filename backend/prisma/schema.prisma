@@ -211,8 +211,15 @@ model GoogleCalendarIntegration {
   refreshToken         String   @map("refresh_token") // cifrado
   accessTokenExpiresAt DateTime @map("access_token_expires_at")
   connectedByUserId    String   @map("connected_by_user_id")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  // Última vez que se confirmó CONTRA GOOGLE que la conexión sigue viva, y qué
+  // pasó si no. Que las credenciales guardadas se puedan descifrar no prueba
+  // nada: el usuario puede haber revocado el acceso desde su cuenta de Google y
+  // aquí seguiría figurando todo correcto mientras las citas no llegan. Nulo =
+  // nunca se ha comprobado desde que se conectó.
+  lastCheckedAt        DateTime? @map("last_checked_at")
+  lastCheckError       String?   @map("last_check_error")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

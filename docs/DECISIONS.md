@@ -466,3 +466,17 @@ Próxima decisión pendiente de registrar: proveedor definitivo de hosting/PaaS 
 **La pantalla no sabe qué proveedor hay detrás**: el bloque del QR depende de `vinculaConQr`, no del nombre del proveedor. Cuando se migre a Meta —donde el número se da de alta fuera del panel— esta pantalla ya está preparada.
 
 **Se sondea el estado mientras hay un QR en pantalla**, además de escuchar el webhook. El backend aprovecha ese sondeo para preguntarle al proveedor si ya se escaneó y para renovar el código caducado, así que la vinculación se completa sola incluso cuando el proveedor no consigue alcanzar al servidor — el caso normal en desarrollo, donde Evolution no puede llegar a `localhost`.
+
+## 2026-08-08 — "Conectado" pasa a significar comprobado, no guardado
+
+**Problema**: el panel anunciaba Google Calendar como conectado mientras las citas no llegaban a ningún sitio. `getStatus` solo comprobaba que el refresh token guardado **descifrara**, y eso no dice nada sobre si Google lo sigue aceptando: basta con que alguien retire el acceso a WhatsFlow desde su cuenta de Google —o cambie la contraseña— para que el token quede muerto y aquí siga figurando todo correcto. Verificado en la cuenta del propietario: los tokens descifraban sin problema y Google respondía `invalid_grant — Token has been expired or revoked`.
+
+**Decisión**: se añade `POST /integrations/google-calendar/check`, que fuerza un refresco del access token contra Google **aunque el guardado no haya caducado** —lo que se quiere probar es el refresh token, que es la credencial de larga duración y la única que puede revocarse sin aviso— y después lee el calendario de destino, porque un token válido para una cuenta que ya no tiene ese calendario tampoco sirve.
+
+**El resultado se persiste** (`lastCheckedAt`, `lastCheckError` en `GoogleCalendarIntegration`): sin guardarlo, el diagnóstico se perdería al recargar y la tarjeta volvería a mentir. `needsReconnect` pasa a ser cierto por dos motivos —credenciales ilegibles **o** última comprobación fallida—, y se evalúa por contenido y no contra `null`: un campo ausente también significa "sin error", y compararlo con `null` pedía reconectar cuentas sanas.
+
+**La tarjeta dice cuándo se comprobó**, o que no se ha comprobado nunca desde que se conectó. "Conectado" a secas era exactamente la afirmación que no se podía sostener.
+
+**El error se traduce antes de enseñarlo**: `invalid_grant` no le dice nada a nadie y suena a fallo del programa cuando normalmente es que alguien retiró el permiso.
+
+**El botón sube además lo pendiente**, acotado al tenant y saltándose el backoff: quien lo pulsa acaba de arreglar algo y espera que sus citas suban ahora, no dentro de seis horas ni compitiendo por el lote con el resto de la plataforma. Si la conexión no responde no se intenta subir nada — cada fallo gastaría uno de los intentos que tiene la cita antes de abandonarse.
